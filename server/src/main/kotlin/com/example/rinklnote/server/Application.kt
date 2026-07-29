@@ -4,6 +4,7 @@ import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.DefaultNLUService
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.services.nlu.LLMParserConfig
@@ -53,9 +54,16 @@ fun Application.module() {
         ?: environment.config.propertyOrNull("deepseek.model")?.getString()
         ?: "deepseek-chat"
 
+    val llmParser = LLMParser(LLMParserConfig(apiKey = deepseekApiKey, baseUrl = deepseekBaseUrl, model = deepseekModel))
+
     val nluService = DefaultNLUService(
         ruleBasedParser = RuleBasedParser(),
-        llmParser = LLMParser(LLMParserConfig(apiKey = deepseekApiKey, baseUrl = deepseekBaseUrl, model = deepseekModel)),
+        llmParser = llmParser,
+        billService = billService
+    )
+
+    val insightService = InsightService(
+        llmParser = llmParser,
         billService = billService
     )
 
@@ -65,5 +73,6 @@ fun Application.module() {
         correctionRoutes()
         keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService, nluService)
+        insightRoutes(insightService)
     }
 }

@@ -1,0 +1,57 @@
+package com.example.rinklnote.server.routes
+
+import com.example.rinklnote.server.services.insight.InsightService
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class QueryRequest(val query: String)
+
+fun Route.insightRoutes(insightService: InsightService) {
+    authenticate("auth-jwt") {
+        route("/api/insights") {
+            get("/monthly") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val month = call.request.queryParameters["month"]
+                    ?: java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"))
+
+                val result = insightService.monthlySummary(userId, month)
+                call.respond(result)
+            }
+
+            get("/anomaly") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val result = insightService.anomalyCheck(userId)
+                call.respond(result)
+            }
+
+            post("/query") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized)
+
+                val body = call.receive<QueryRequest>()
+                if (body.query.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to "查询内容不能为空"))
+                    return@post
+                }
+
+                val result = insightService.naturalQuery(userId, body.query)
+                call.respond(result)
+            }
+        }
+    }
+}
