@@ -16,12 +16,12 @@ class LearningService(
     fun start(scope: CoroutineScope) {
         scope.launch {
             while (isActive) {
-                delay(intervalMinutes * 60 * 1000)
                 try {
                     processCorrections()
                 } catch (e: Exception) {
                     log.warn("LearningService processCorrections failed: ${e.message}")
                 }
+                delay(intervalMinutes * 60 * 1000)
             }
         }
     }
@@ -41,11 +41,18 @@ class LearningService(
 
         for ((userId, records) in byUser) {
             val corrections = records.map {
-                "'${it[CorrectionLogTable.originalText]}': ${it[CorrectionLogTable.originalCategory]} → ${it[CorrectionLogTable.correctedCategory]}"
+                "'${it[CorrectionLogTable.originalText]}': ${it[CorrectionLogTable.originalCategory]} -> ${it[CorrectionLogTable.correctedCategory]}"
+            }
+
+            val categories = transaction {
+                com.example.rinklnote.server.tables.CategoriesTable.selectAll().map { it[com.example.rinklnote.server.tables.CategoriesTable.name] }
             }
 
             val context = """
-根据以下用户修正记录，提炼出关键词→分类的映射规则。
+根据以下用户修正记录，提炼出关键词->分类的映射规则。
+
+有效分类列表（必须从以下分类中选择，不要创建新分类）:
+${categories.joinToString(", ")}
 
 修正记录:
 ${corrections.joinToString("\n")}
@@ -56,15 +63,12 @@ ${corrections.joinToString("\n")}
 注意:
 1. 关键词应是用户输入文本中能唯一标识分类的词语（2-4字）
 2. 不要为输入文本中没有的词语创建关键词
-3. 如果修正记录不足以提炼可靠规则，返回空列表
+3. categoryName 必须从上述有效分类列表中选取
+4. 如果修正记录不足以提炼可靠规则，返回空列表
 """.trimIndent()
 
-            val categories = transaction {
-                com.example.rinklnote.server.tables.CategoriesTable.selectAll().map { it[com.example.rinklnote.server.tables.CategoriesTable.name] }
-            }
-
             val result = llmParser.chat(
-                "你是一个关键词规则提炼助手。对每条修正记录，提取关键词→分类的映射。你必须返回 JSON: {\"rules\": [{\"keyword\": \"词\", \"categoryName\": \"分类\"}]}",
+                "你是一个关键词规则提炼助手。对每条修正记录，提取关键词->分类的映射。你必须返回 JSON: {\"rules\": [{\"keyword\": \"词\", \"categoryName\": \"分类\"}]}",
                 context
             )
 
