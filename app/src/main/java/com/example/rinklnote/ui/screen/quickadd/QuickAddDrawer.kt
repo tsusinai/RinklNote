@@ -1,0 +1,494 @@
+package com.example.rinklnote.ui.screen.quickadd
+
+import android.os.Build
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.blur
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.R
+import com.example.rinklnote.data.db.entity.Account
+import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.viewmodel.QuickAddEvent
+import com.example.rinklnote.ui.viewmodel.QuickAddState
+import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+
+private fun categoryIconRes(name: String): Int = when (name) {
+    "三餐" -> R.drawable.ic_category_meals
+    "日用" -> R.drawable.ic_category_daily
+    "交通" -> R.drawable.ic_category_transport
+    "学习" -> R.drawable.ic_category_study
+    "运动" -> R.drawable.ic_category_sports
+    "娱乐" -> R.drawable.ic_category_entertainment
+    "网购" -> R.drawable.ic_category_shopping
+    else -> R.drawable.ic_category_meals
+}
+
+private fun accountIconRes(name: String): Int = when (name) {
+    "微信" -> R.drawable.ic_wechat
+    "支付宝" -> R.drawable.ic_alipay
+    "默认" -> R.drawable.ic_default_account
+    else -> R.drawable.ic_default_account
+}
+
+@Composable
+fun QuickAddDrawer(
+    isVisible: Boolean,
+    confirmed: Boolean = false,
+    viewModel: QuickAddViewModel,
+    onDismiss: () -> Unit,
+    onFinalConfirm: () -> Unit = {},
+    onBillAdded: () -> Unit,
+    onVoiceInput: () -> Unit = {},
+    onAmountTap: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    BackHandler(enabled = isVisible) { onDismiss() }
+
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = slideInHorizontally(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            initialOffsetX = { it }
+        ),
+        exit = slideOutHorizontally(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            targetOffsetX = { it }
+        ),
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() }
+        ) {
+            // Drawer panel
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(236.dp)
+                    .shadow(4.dp)
+                    .clip(RoundedCornerShape(topStart = 15.dp, bottomStart = 15.dp))
+                    .background(MaterialTheme.colorScheme.background)
+                    .clickable(enabled = false) {} // consume click
+                    .pointerInput(Unit) {
+                        var dragOffset = 0f
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (dragOffset > 60) onDismiss()
+                                dragOffset = 0f
+                            },
+                            onDragCancel = { dragOffset = 0f },
+                            onHorizontalDrag = { _, dragAmount ->
+                                dragOffset += dragAmount
+                            },
+                            onDragStart = { dragOffset = 0f }
+                        )
+                    }
+            ) {
+                DrawerContent(
+                    viewModel = viewModel,
+                    confirmed = confirmed,
+                    onFinalConfirm = onFinalConfirm,
+                    onDismiss = onDismiss,
+                    onBillAdded = onBillAdded,
+                    onVoiceInput = onVoiceInput,
+                    onAmountTap = onAmountTap
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerContent(
+    viewModel: QuickAddViewModel,
+    confirmed: Boolean,
+    onFinalConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    onBillAdded: () -> Unit,
+    onVoiceInput: () -> Unit,
+    onAmountTap: () -> Unit
+) {
+    // Collect state once — children read from snapshot, no duplicate subscriptions
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Top bar
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Icon(
+                painter = painterResource(R.drawable.ic_register),
+                contentDescription = "登记",
+                modifier = Modifier.size(30.dp),
+                tint = Color.Unspecified
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.subCategories, state.selectedSubCategory, viewModel)
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AccountSection(state.accounts, state.selectedAccount, viewModel)
+
+        Spacer(modifier = Modifier.height(17.dp))
+
+        // Count area — CountBefore or CountAfter
+        if (confirmed) {
+            CountAfter(state, onFinalConfirm, onAmountTap)
+        } else {
+            CountBefore(state, onAmountTap)
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // AI Voice button
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .shadow(4.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onVoiceInput() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_ai),
+                    contentDescription = "语音记账",
+                    modifier = Modifier.size(28.dp),
+                    tint = Color.Unspecified
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategorySection(
+    categories: List<Category>,
+    selectedCategory: Category?,
+    showSubCategories: Boolean,
+    subCategories: List<SubCategory>,
+    selectedSubCategory: SubCategory?,
+    viewModel: QuickAddViewModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("标签栏", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text("长按呼出二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        categories.forEach { category ->
+            CategoryRow(
+                category = category,
+                isSelected = selectedCategory?.id == category.id,
+                onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
+                onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
+            )
+        }
+        if (showSubCategories && subCategories.isNotEmpty()) {
+            SubCategoryPopup(
+                subCategories = subCategories,
+                selected = selectedSubCategory,
+                onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) },
+                onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSubCategories) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CategoryRow(
+    category: Category,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painter = painterResource(categoryIconRes(category.name)),
+                contentDescription = category.name,
+                modifier = Modifier.size(24.dp),
+                tint = Color.Unspecified
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(category.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+        }
+        // Radio dot
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                .then(
+                    if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    else Modifier
+                )
+        )
+    }
+}
+
+@Composable
+private fun SubCategoryPopup(
+    subCategories: List<SubCategory>,
+    selected: SubCategory?,
+    onSelect: (SubCategory?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(8.dp)
+    ) {
+        subCategories.forEach { sub ->
+            TextButton(onClick = { onSelect(sub) }, modifier = Modifier.fillMaxWidth()) {
+                Text(sub.name, fontSize = 14.sp, color = if (selected?.id == sub.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountSection(
+    accounts: List<Account>,
+    selectedAccount: Account?,
+    viewModel: QuickAddViewModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("账户选择", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Icon(
+                painter = painterResource(R.drawable.ic_eye_hide),
+                contentDescription = "隐藏",
+                modifier = Modifier.size(15.dp),
+                tint = Color.Unspecified
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        accounts.forEach { account ->
+            AccountRow(
+                account = account,
+                isSelected = selectedAccount?.id == account.id,
+                onClick = { viewModel.onEvent(QuickAddEvent.SelectAccount(account)) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountRow(account: Account, isSelected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painter = painterResource(accountIconRes(account.name)),
+                contentDescription = account.name,
+                modifier = Modifier.size(23.dp),
+                tint = Color.Unspecified
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("***", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                    .then(
+                        if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                        else Modifier
+                    )
+            )
+        }
+    }
+}
+
+@Composable
+private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
+    val isExpense = state.billType == "EXPENSE"
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .height(36.dp)
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable { onAmountTap() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = state.amount.ifEmpty { "0.00" },
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Normal,
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+        )
+    }
+}
+
+@Composable
+private fun CountAfter(state: QuickAddState, onConfirm: () -> Unit, onAmountTap: () -> Unit) {
+    val checkScale = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        checkScale.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // Amount box — clickable to re-edit
+        Box(
+            modifier = Modifier
+                .weight(130f / 199f)
+                .height(36.dp)
+                .shadow(4.dp, RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(15.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .clickable {
+                    onAmountTap()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = state.amount.ifEmpty { "0.00" },
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+        // Check box — clickable confirm button
+        Box(
+            modifier = Modifier
+                .weight(65f / 199f)
+                .height(36.dp)
+                .graphicsLayer { scaleX = checkScale.value; scaleY = checkScale.value }
+                .shadow(4.dp, RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(15.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .clickable { onConfirm() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "√",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Normal,
+                color = IncomeGreen
+            )
+        }
+    }
+}
