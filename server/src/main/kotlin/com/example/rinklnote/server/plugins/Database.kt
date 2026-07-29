@@ -29,7 +29,7 @@ fun Application.configureDatabase() {
     Database.connect(HikariDataSource(config))
 
     transaction {
-        SchemaUtils.create(UsersTable, CategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable)
+        SchemaUtils.create(UsersTable, CategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable)
     }
 
     val billService = BillService()
