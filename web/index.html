@@ -298,8 +298,9 @@ function renderBills(pg) {
             originalText:b.remark||'',originalCategory:origCat,correctedCategory:e.target.value
           })});
           // Update bill
+          const newCat = S.cats.find(c => c.name === e.target.value);
           await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
-            amount:b.amount,billType:b.billType,categoryId:0,categoryName:e.target.value,
+            amount:b.amount,billType:b.billType,categoryId:(newCat?newCat.id:b.categoryId),categoryName:e.target.value,
             accountId:b.accountId,remark:b.remark
           })});
           S.msg='分类已更新';loadData();render();
@@ -474,6 +475,7 @@ function renderSettings(pg) {
       if(!kwInput.value||!kwCat.value){S.msg='请填写完整';render();return;}
       const r=await api('/api/keywords',{method:'POST',body:JSON.stringify({keyword:kwInput.value,categoryName:kwCat.value})});
       S.msg=r.id?'关键词已保存':(r.message||'失败');
+      await loadKeywords();
       render();
     }},'添加'));
     pg.appendChild(kwGrid);
