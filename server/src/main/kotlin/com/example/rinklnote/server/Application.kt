@@ -8,7 +8,11 @@ import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.DefaultNLUService
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.services.nlu.LLMParserConfig
+import com.example.rinklnote.server.services.nlu.LearningService
 import com.example.rinklnote.server.services.nlu.RuleBasedParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -62,9 +66,20 @@ fun Application.module() {
         billService = billService
     )
 
+    // Learning service
+    val learningIntervalMin = System.getenv("LEARNING_INTERVAL_MIN")?.toLongOrNull()
+        ?: environment.config.propertyOrNull("learning.intervalMin")?.getString()?.toLongOrNull()
+        ?: 60
+    val anomalyThreshold = System.getenv("ANOMALY_THRESHOLD")?.toDoubleOrNull()
+        ?: environment.config.propertyOrNull("anomaly.threshold")?.getString()?.toDoubleOrNull()
+        ?: 1.5
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    LearningService(llmParser, learningIntervalMin, log).start(appScope)
+
     val insightService = InsightService(
         llmParser = llmParser,
-        billService = billService
+        billService = billService,
+        anomalyThreshold = anomalyThreshold
     )
 
     routing {
