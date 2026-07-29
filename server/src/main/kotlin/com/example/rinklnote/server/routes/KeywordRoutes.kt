@@ -9,8 +9,6 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDateTime
@@ -100,10 +98,8 @@ fun Route.keywordRoutes() {
                     ?: return@delete call.respond(HttpStatusCode.BadRequest)
 
                 val deleted = transaction {
-                    VoiceKeywordsTable.deleteWhere(limit = null, offset = null) { sb: ISqlExpressionBuilder ->
-                        sb.run {
-                            (VoiceKeywordsTable.id eq keywordId) and (VoiceKeywordsTable.userId eq currentUserId)
-                        }
+                    VoiceKeywordsTable.deleteWhere {
+                        Op.build { (VoiceKeywordsTable.id eq keywordId) and (VoiceKeywordsTable.userId eq currentUserId) }
                     }
                 }
                 if (deleted > 0) {

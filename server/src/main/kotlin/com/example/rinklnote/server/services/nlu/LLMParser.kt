@@ -63,10 +63,9 @@ class LLMParser(private val config: LLMParserConfig) {
 2. 如果没有明确关键词，根据语义推断最合适的分类
 3. 如果完全无法判断，选择"三餐"作为默认分类
 4. 提取金额之外的描述性文字作为 remark（不要包含金额数字）
-5. 如果输入中有类似子分类的信息（如"午餐"算三餐的子分类），填到 subCategoryName
 
 你必须返回一个 JSON 对象:
-{"categoryName": "分类名", "subCategoryName": "子分类名或null", "remark": "备注文字或null"}
+{"categoryName": "分类名", "remark": "备注文字或null"}
 """.trimIndent()
     }
 
@@ -102,6 +101,7 @@ class LLMParser(private val config: LLMParserConfig) {
             val json = Json { ignoreUnknownKeys = true; isLenient = true }
             json.decodeFromString<LLMParseResult>(content)
         } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }
@@ -129,6 +129,7 @@ class LLMParser(private val config: LLMParserConfig) {
 
             response.choices?.firstOrNull()?.message?.content
         } catch (e: Exception) {
+            e.printStackTrace()
             null
         }
     }

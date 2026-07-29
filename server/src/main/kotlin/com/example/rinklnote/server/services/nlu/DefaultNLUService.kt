@@ -2,7 +2,6 @@ package com.example.rinklnote.server.services.nlu
 
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.UserKeyword
-import com.example.rinklnote.server.services.VoiceParser
 import com.example.rinklnote.server.services.VoiceResult
 import com.example.rinklnote.server.tables.VoiceKeywordsTable
 import org.jetbrains.exposed.sql.SortOrder

@@ -58,7 +58,11 @@ fun Application.module() {
         ?: environment.config.propertyOrNull("deepseek.model")?.getString()
         ?: "deepseek-chat"
 
-    val llmParser = LLMParser(LLMParserConfig(apiKey = deepseekApiKey, baseUrl = deepseekBaseUrl, model = deepseekModel))
+    val llmTimeoutMs = System.getenv("LLM_TIMEOUT_MS")?.toLongOrNull()
+        ?: environment.config.propertyOrNull("deepseek.timeoutMs")?.getString()?.toLongOrNull()
+        ?: 10000L
+
+    val llmParser = LLMParser(LLMParserConfig(apiKey = deepseekApiKey, baseUrl = deepseekBaseUrl, model = deepseekModel, timeoutMs = llmTimeoutMs))
 
     val nluService = DefaultNLUService(
         ruleBasedParser = RuleBasedParser(),
