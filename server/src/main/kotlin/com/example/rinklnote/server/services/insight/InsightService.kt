@@ -6,7 +6,6 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Serializable
 data class MonthlySummaryResponse(
@@ -106,7 +105,7 @@ class InsightService(
             val pct = ((todayExpense / dailyAvg - 1) * 100).toInt()
             alerts.add(AnomalyAlert(
                 level = "WARN",
-                message = "今天餐饮支出 ¥${"%.2f".format(todayExpense)}，超出日均 ¥${"%.2f".format(dailyAvg)} 的 $pct%",
+                message = "今天支出 ¥${"%.2f".format(todayExpense)}，超出日均 ¥${"%.2f".format(dailyAvg)} 的 $pct%",
                 type = "DAILY_SPIKE"
             ))
         }
@@ -119,7 +118,6 @@ class InsightService(
         val categories = transaction { billService.getCategories().map { it.name } }
 
         // Brief summary for LLM context
-        val now = System.currentTimeMillis()
         val monthStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .withDayOfMonth(1).atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli()
         val monthBills = bills.filter { it.date >= monthStart }
@@ -131,8 +129,8 @@ class InsightService(
 当前可用分类: ${categories.joinToString("、")}
 当月总支出: ¥${"%.2f".format(totalExpense)}
 
-请根据问题类型返回查询参数（你可以假设你有数据）:
-1. 如果是查金额→返回 {"action":"total","filters":{"category":"分类名","timeRange":"本月/上月/本年"}}
+请根据问题类型直接回答（你可以假设你有数据）:
+1. 如果是查金额→直接算出金额回答
 2. 如果是问建议→直接回答
 3. 否则→返回最合适的回答
 
