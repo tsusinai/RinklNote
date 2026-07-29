@@ -42,6 +42,7 @@ fun Application.module() {
     routing {
         authRoutes(userService)
         billRoutes(billService)
+        keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService)
     }
 }
