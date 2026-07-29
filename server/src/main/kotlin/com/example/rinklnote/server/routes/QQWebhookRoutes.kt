@@ -2,7 +2,7 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.UserService
-import com.example.rinklnote.server.services.VoiceParser
+import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.*
@@ -16,7 +16,7 @@ import java.security.MessageDigest
 @Serializable
 data class WebhookReply(val reply: String)
 
-fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billService: BillService) {
+fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billService: BillService, nluService: NLUService) {
     route("/api/qq") {
         post("/webhook") {
             try {
@@ -55,7 +55,7 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
                         WebhookReply("未绑定账号，请先在App中绑定QQ号")
                     )
 
-                val result = VoiceParser.parse(text)
+                val result = nluService.parse(text, user.id)
 
                 if (result.amount == null || result.amount <= 0) {
                     return@post call.respond(

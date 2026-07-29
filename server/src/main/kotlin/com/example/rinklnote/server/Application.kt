@@ -4,6 +4,10 @@ import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.nlu.DefaultNLUService
+import com.example.rinklnote.server.services.nlu.LLMParser
+import com.example.rinklnote.server.services.nlu.LLMParserConfig
+import com.example.rinklnote.server.services.nlu.RuleBasedParser
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -39,11 +43,27 @@ fun Application.module() {
     val userService = UserService(jwtSecret, jwtIssuer, jwtAudience)
     val billService = BillService()
 
+    val deepseekApiKey = System.getenv("DEEPSEEK_API_KEY")
+        ?: environment.config.propertyOrNull("deepseek.apiKey")?.getString()
+        ?: throw IllegalStateException("DeepSeek API key not configured. Set DEEPSEEK_API_KEY env var.")
+    val deepseekBaseUrl = System.getenv("DEEPSEEK_BASE_URL")
+        ?: environment.config.propertyOrNull("deepseek.baseUrl")?.getString()
+        ?: "https://api.deepseek.com"
+    val deepseekModel = System.getenv("DEEPSEEK_MODEL")
+        ?: environment.config.propertyOrNull("deepseek.model")?.getString()
+        ?: "deepseek-chat"
+
+    val nluService = DefaultNLUService(
+        ruleBasedParser = RuleBasedParser(),
+        llmParser = LLMParser(LLMParserConfig(apiKey = deepseekApiKey, baseUrl = deepseekBaseUrl, model = deepseekModel)),
+        billService = billService
+    )
+
     routing {
         authRoutes(userService)
         billRoutes(billService)
         correctionRoutes()
         keywordRoutes()
-        qqWebhookRoutes(webhookSecret, userService, billService)
+        qqWebhookRoutes(webhookSecret, userService, billService, nluService)
     }
 }
