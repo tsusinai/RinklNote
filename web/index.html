@@ -76,7 +76,7 @@ td { padding: 12px; border-bottom: 1px solid #f3f4f6; }
 // ── State ──
 const API = '';
 const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
-  bills: [], cats: [], accts: [], msg: '', loading: false,
+  bills: [], cats: [], accts: [], keywords: [], msg: '', loading: false,
   // add form
   billType: 'EXPENSE', amount: '', catId: '', acctId: '', remark: '',
   // bills filter
@@ -287,7 +287,32 @@ function renderBills(pg) {
   f.forEach(b => {
     const tr = h('tr');
     tr.append(h('td',null, fmtDate(b.date)));
-    tr.append(h('td',null, b.categoryName));
+    const catCell = h('td',null);
+    const catSpan = h('span',{style:'cursor:pointer;border-bottom:1px dashed var(--muted)',onclick:()=>{
+      // Show quick category selector
+      const origCat = b.categoryName;
+      const sel = h('select',{style:'font-size:12px;padding:4px',onchange:async(e)=>{
+        if(e.target.value && e.target.value!==origCat){
+          // Record correction
+          await api('/api/corrections',{method:'POST',body:JSON.stringify({
+            originalText:b.remark||'',originalCategory:origCat,correctedCategory:e.target.value
+          })});
+          // Update bill
+          await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
+            amount:b.amount,billType:b.billType,categoryId:0,categoryName:e.target.value,
+            accountId:b.accountId,remark:b.remark
+          })});
+          S.msg='分类已更新';loadData();render();
+        }
+      }});
+      sel.append(h('option',{value:''},'修改分类'));
+      S.cats.filter(c=>c.billType===b.billType).forEach(c=>{
+        sel.append(h('option',{value:c.name,selected:c.name===b.categoryName},c.name));
+      });
+      catCell.innerHTML='';catCell.appendChild(sel);
+    }}, b.categoryName));
+    catCell.appendChild(catSpan);
+    tr.appendChild(catCell);
     tr.append(h('td',{className:'amount',style:'text-align:right;font-weight:700;color:'+(b.billType==='EXPENSE'?'var(--expense)':'var(--income)')}, (b.billType==='EXPENSE'?'-':'')+'¥'+b.amount.toFixed(2)));
     tr.append(h('td',{style:'color:var(--muted)'}, b.remark||'-'));
     const tagCls = b.source==='QQ'?'tag tag-qq':b.source==='WEB'?'tag tag-web':'tag tag-app';
@@ -434,6 +459,40 @@ function renderSettings(pg) {
       const r = await api('/api/auth/bind-qq',{method:'POST',body:JSON.stringify({qqNumber:S.qq})});
       S.msg = r.message; render();
     }}, '绑定QQ'));
+    // Keyword management (after QQ bind, before logout)
+    pg.append(h('h3',{style:'margin-top:24px;margin-bottom:12px'},'关键词管理'));
+    pg.append(h('p',{style:'font-size:12px;color:var(--muted);margin-bottom:8px'},'自定义关键词用于快速匹配分类。如"外卖"→"三餐"'));
+
+    const kwGrid = h('div',{style:'display:flex;gap:8px;margin-bottom:8px'});
+    const kwInput = h('input',{type:'text',placeholder:'关键词(如:外卖)',style:'flex:1'});
+    const kwCat = h('select');
+    kwCat.append(h('option',{value:''},'选择分类'));
+    S.cats.forEach(c => kwCat.append(h('option',{value:c.name},c.name)));
+    kwGrid.appendChild(kwInput);
+    kwGrid.appendChild(kwCat);
+    kwGrid.appendChild(h('button',{className:'btn btn-primary',style:'flex-shrink:0',onclick:async()=>{
+      if(!kwInput.value||!kwCat.value){S.msg='请填写完整';render();return;}
+      const r=await api('/api/keywords',{method:'POST',body:JSON.stringify({keyword:kwInput.value,categoryName:kwCat.value})});
+      S.msg=r.id?'关键词已保存':(r.message||'失败');
+      render();
+    }},'添加'));
+    pg.appendChild(kwGrid);
+
+    // List existing keywords
+    const kwList = h('div',{style:'max-height:200px;overflow:auto'});
+    (S.keywords||[]).forEach(kw=>{
+      const row = h('div',{style:'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)'});
+      row.append(h('span',{style:'flex:1;font-size:13px'},kw.keyword+' → '+kw.categoryName));
+      row.append(h('span',{style:'font-size:11px;color:var(--muted)'},'优先级:'+kw.priority));
+      row.append(h('button',{className:'btn btn-outline',style:'padding:4px 10px;font-size:11px;color:var(--expense);border-color:var(--expense)',onclick:async()=>{
+        await api('/api/keywords/'+kw.id,{method:'DELETE'});
+        await loadKeywords();
+        render();
+      }},'删除'));
+      kwList.appendChild(row);
+    });
+    pg.appendChild(kwList);
+
     pg.append(h('button', { className: 'btn btn-outline danger', style:'width:100%;margin-top:12px', onclick: () => {
       localStorage.removeItem('rkl_token'); S.token = null; S.user = null; render();
     }}, '退出登录'));
@@ -474,6 +533,15 @@ async function loadData() {
     if (bRes.bills) S.bills = bRes.bills.reverse();
     if (Array.isArray(cRes)) S.cats = cRes;
     if (Array.isArray(aRes)) S.accts = aRes;
+  } catch(e) { console.error(e); }
+  await loadKeywords();
+}
+
+async function loadKeywords() {
+  if (!S.token) return;
+  try {
+    const r = await api('/api/keywords');
+    if (Array.isArray(r)) S.keywords = r;
   } catch(e) { console.error(e); }
 }
 
