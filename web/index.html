@@ -75,10 +75,11 @@ td { padding: 12px; border-bottom: 1px solid #f3f4f6; }
 <script>
 // ── State ──
 const API = '';
+const _chartRoots = {};
 const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
   bills: [], cats: [], accts: [], keywords: [], msg: '', loading: false,
   // add form
-  billType: 'EXPENSE', amount: '', catId: '', acctId: '', remark: '',
+  billType: 'EXPENSE', amount: '', catId: '', subCatName: '', acctId: '', remark: '',
   // bills filter
   bf: { search: '', cat: '', from: '', to: '' },
   // settings
@@ -106,12 +107,18 @@ function h(tag, props, ...children) {
   const el = document.createElement(tag);
   if (props) Object.entries(props).forEach(([k,v]) => {
     if (k === 'className') el.className = v;
+    else if (k === 'selected' || k === 'checked' || k === 'disabled') el[k] = v;
     else if (k.startsWith('on')) el[k.toLowerCase()] = v;
     else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
     else el.setAttribute(k, v);
   });
   children.flat().forEach(c => { if (c != null) el.append(typeof c === 'string' ? document.createTextNode(c) : c); });
   return el;
+}
+
+function msgClass() {
+  if (!S.msg) return 'msg';
+  return /失败|错误|不能为空|已注册|不存在/.test(S.msg) ? 'msg err' : 'msg ok';
 }
 
 function render() {
@@ -159,11 +166,10 @@ function renderLogin(prompt) {
   div.append(h('button', { className: 'btn btn-primary', style:'width:100%', onclick: async () => {
     const path = S.smode==='login'?'/api/auth/login':'/api/auth/register';
     const r = await api(path,{method:'POST',body:JSON.stringify({phone:S.phone,password:S.pwd})});
-    if (r.token) { S.token = r.token; localStorage.setItem('rkl_token', r.token); S.msg = '登录成功!'; loadData(); }
-    else S.msg = r.message || '失败';
-    render();
+    if (r.token) { S.token = r.token; localStorage.setItem('rkl_token', r.token); S.msg = '登录成功!'; await loadData(); }
+    else { S.msg = r.message || '登录失败'; render(); }
   }}, S.smode==='login'?'登录':'注册'));
-  if (S.msg) div.append(h('p',{className:'msg '+ (S.msg.includes('成功')?'ok':'err')},S.msg));
+  if (S.msg) div.append(h('p',{className:msgClass()},S.msg));
   return div;
 }
 
@@ -176,7 +182,7 @@ function renderAdd(pg) {
   ['EXPENSE','INCOME'].forEach(t => {
     const b = h('button', {
       className: (S.billType===t?'on '+(t==='EXPENSE'?'exp':'inc'):''),
-      onClick: () => { S.billType = t; S.catId = ''; render(); }
+      onClick: () => { S.billType = t; S.catId = ''; S.subCatName = ''; render(); }
     }, t==='EXPENSE'?'支出':'收入');
     tog.appendChild(b);
   });
@@ -188,15 +194,40 @@ function renderAdd(pg) {
 
   // categories
   pg.append(h('p', { style: 'fontSize:13px;color:var(--muted);margin:16px 0 8px' }, '分类'));
-  const cg = h('div', { className: 'grid-4' });
-  S.cats.filter(c => c.billType === S.billType).forEach(c => {
-    const b = h('button', {
-      className: 'cat-btn' + (S.catId == c.id ? ' sel' : ''),
-      onclick: () => { S.catId = c.id; render(); }
-    }, c.name);
-    cg.appendChild(b);
-  });
-  pg.appendChild(cg);
+  const catsForType = S.cats.filter(c => c.billType === S.billType);
+  if (catsForType.length === 0) {
+    pg.append(h('p', { className: 'loading', style: 'padding:20px 0;font-size:14px' },
+      S.token ? '暂无分类数据，请检查网络连接后刷新页面' : '请先登录以加载分类数据'));
+  } else {
+    const cg = h('div', { className: 'grid-4' });
+    catsForType.forEach(c => {
+      const b = h('button', {
+        className: 'cat-btn' + (S.catId == c.id ? ' sel' : ''),
+        onclick: () => { S.catId = c.id; S.subCatName = ''; render(); }
+      }, c.name);
+      cg.appendChild(b);
+    });
+    pg.appendChild(cg);
+  }
+
+  // subcategories
+  const selCat = S.cats.find(c => c.id == S.catId);
+  if (selCat && selCat.subCategories && selCat.subCategories.length > 0) {
+    pg.append(h('p', { style: 'fontSize:13px;color:var(--muted);margin:16px 0 8px' }, '子分类'));
+    const sg = h('div', { className: 'grid-4' });
+    const allBtn = h('button', {
+      className: 'cat-btn' + (!S.subCatName ? ' sel' : ''),
+      onclick: () => { S.subCatName = ''; render(); }
+    }, '全部');
+    sg.appendChild(allBtn);
+    selCat.subCategories.forEach(sc => {
+      sg.appendChild(h('button', {
+        className: 'cat-btn' + (S.subCatName === sc.name ? ' sel' : ''),
+        onclick: () => { S.subCatName = sc.name; render(); }
+      }, sc.name));
+    });
+    pg.appendChild(sg);
+  }
 
   // account
   pg.append(h('p', { style: 'fontSize:13px;color:var(--muted);margin:16px 0 8px' }, '账户'));
@@ -217,25 +248,36 @@ function renderAdd(pg) {
       try {
         const r = await api('/api/bills', { method: 'POST', body: JSON.stringify({
           amount: parseFloat(S.amount), billType: S.billType, categoryId: parseInt(S.catId),
-          categoryName: cat?.name||'', accountId: parseInt(S.acctId), remark: S.remark||null
+          categoryName: cat?.name||'', subCategoryName: S.subCatName||null, accountId: parseInt(S.acctId), remark: S.remark||null
         })});
-        if (r.id) { S.amount = ''; S.remark = ''; S.msg = '记账成功!'; loadData(); }
-        else S.msg = r.message || '失败';
-      } catch(e) { S.msg = '网络错误'; }
-      render();
+        if (r.id) { S.amount = ''; S.remark = ''; S.msg = '记账成功!'; await loadData(); }
+        else { S.msg = r.message || '记账失败'; render(); }
+      } catch(e) { S.msg = '网络错误'; render(); }
     }
   }, '记一笔'));
 
-  if (S.msg) { const m = h('p', { className: 'msg ' + (S.msg.includes('成功')?'ok':'err') }, S.msg); pg.appendChild(m); }
+  if (S.msg) { pg.append(h('p', { className: msgClass() }, S.msg)); S.msg = ''; }
 }
 
 // ── Bills ──
 function renderBills(pg) {
   pg.append(h('h2', null, '账单'));
 
-  // summary
-  const exp = S.bills.filter(b=>b.billType==='EXPENSE').reduce((s,b)=>s+b.amount,0);
-  const inc = S.bills.filter(b=>b.billType==='INCOME').reduce((s,b)=>s+b.amount,0);
+  function filtered() {
+    return S.bills.filter(b => {
+      if (S.bf.search && !(b.remark||'').includes(S.bf.search) && !(b.categoryName||'').includes(S.bf.search)) return false;
+      if (S.bf.cat && b.categoryName !== S.bf.cat) return false;
+      if (S.bf.from && b.date < new Date(S.bf.from + 'T00:00:00').getTime()) return false;
+      if (S.bf.to && b.date > new Date(S.bf.to + 'T23:59:59').getTime()) return false;
+      return true;
+    });
+  }
+
+  const f = filtered();
+
+  // summary (uses filtered data)
+  const exp = f.filter(b=>b.billType==='EXPENSE').reduce((s,b)=>s+b.amount,0);
+  const inc = f.filter(b=>b.billType==='INCOME').reduce((s,b)=>s+b.amount,0);
 
   const sg = h('div', { className: 'grid-3' });
   [{l:'支出',v:'-¥'+exp.toFixed(2),c:'var(--expense)'},{l:'收入',v:'¥'+inc.toFixed(2),c:'var(--income)'},{l:'结余',v:'¥'+(inc-exp).toFixed(2),c:inc>=exp?'var(--income)':'var(--expense)'}].forEach(s => {
@@ -258,30 +300,21 @@ function renderBills(pg) {
 
   // export
   const expBtn = h('button',{className:'btn btn-outline',style:'margin-left:auto',onclick:()=>{
-    const rows = [['日期','类型','分类','金额','备注','来源'], ...filtered().map(b=>[fmtDate(b.date),b.billType==='EXPENSE'?'支出':'收入',b.categoryName,b.amount,b.remark||'',b.source])];
-    const csv = '\uFEFF'+rows.map(r=>r.map(c=>'"'+c+'"').join(',')).join('\n');
+    const rows = [['日期','类型','分类','子分类','金额','备注','来源'], ...filtered().map(b=>[fmtDate(b.date),b.billType==='EXPENSE'?'支出':'收入',b.categoryName,b.subCategoryName||'',b.amount,b.remark||'',b.source])];
+    const csv = '\uFEFF'+rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv])); a.download='rinklnote.csv'; a.click();
   }}, '导出CSV');
   fg.appendChild(expBtn);
   pg.appendChild(fg);
-
-  function filtered() {
-    return S.bills.filter(b => {
-      if (S.bf.search && !(b.remark||'').includes(S.bf.search) && !(b.categoryName||'').includes(S.bf.search)) return false;
-      if (S.bf.cat && b.categoryName !== S.bf.cat) return false;
-      if (S.bf.from && b.date < new Date(S.bf.from).getTime()) return false;
-      if (S.bf.to && b.date > new Date(S.bf.to).getTime() + 86400000) return false;
-      return true;
-    });
+  if (f.length === 0) {
+    const hasFilters = S.bf.search || S.bf.cat || S.bf.from || S.bf.to;
+    pg.append(h('p',{className:'loading'}, hasFilters ? '未找到匹配的账单，请调整筛选条件' : '暂无账单记录，记一笔开始吧'));
+    return;
   }
-
-  // table
-  const f = filtered();
-  if (f.length === 0) { pg.append(h('p',{className:'loading'},'暂无账单')); return; }
 
   const tbl = h('table');
   const thead = h('thead');
-  ['日期','分类','金额','备注','来源'].forEach(l => thead.append(h('th',null,l)));
+  ['日期','分类','子分类','金额','备注','来源'].forEach(l => thead.append(h('th',null,l)));
   tbl.appendChild(thead);
   const tbody = h('tbody');
   f.forEach(b => {
@@ -293,27 +326,37 @@ function renderBills(pg) {
       const origCat = b.categoryName;
       const sel = h('select',{style:'font-size:12px;padding:4px',onchange:async(e)=>{
         if(e.target.value && e.target.value!==origCat){
+          const parts = e.target.value.split('||');
+          const newCatName = parts[0];
+          const newSubName = parts[1] || null;
+          const displayVal = newSubName ? newCatName + ' / ' + newSubName : newCatName;
           // Record correction
           await api('/api/corrections',{method:'POST',body:JSON.stringify({
-            originalText:b.remark||'',originalCategory:origCat,correctedCategory:e.target.value
+            originalText:b.remark||'',originalCategory:origCat,correctedCategory:displayVal
           })});
           // Update bill
-          const newCat = S.cats.find(c => c.name === e.target.value);
+          const newCat = S.cats.find(c => c.name === newCatName);
           await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
-            amount:b.amount,billType:b.billType,categoryId:(newCat?newCat.id:b.categoryId),categoryName:e.target.value,
+            amount:b.amount,billType:b.billType,categoryId:(newCat?newCat.id:b.categoryId),categoryName:newCatName,subCategoryName:newSubName,
             accountId:b.accountId,remark:b.remark
           })});
-          S.msg='分类已更新';loadData();render();
+          S.msg='分类更新成功';await loadData();
         }
       }});
       sel.append(h('option',{value:''},'修改分类'));
       S.cats.filter(c=>c.billType===b.billType).forEach(c=>{
-        sel.append(h('option',{value:c.name,selected:c.name===b.categoryName},c.name));
+        sel.append(h('option',{value:c.name,selected:c.name===b.categoryName&&!b.subCategoryName},c.name));
+        if (c.subCategories) c.subCategories.forEach(sc => {
+          const val = c.name + '||' + sc.name;
+          sel.append(h('option',{value:val,selected:c.name===b.categoryName&&sc.name===b.subCategoryName},'  └ ' + sc.name));
+        });
       });
       catCell.innerHTML='';catCell.appendChild(sel);
-    }}, b.categoryName));
+    }}, b.categoryName);
     catCell.appendChild(catSpan);
+    if (b.subCategoryName) catSpan.textContent = b.categoryName + ' / ' + b.subCategoryName;
     tr.appendChild(catCell);
+    tr.append(h('td',{style:'color:var(--muted)'}, b.subCategoryName || '-'));
     tr.append(h('td',{className:'amount',style:'text-align:right;font-weight:700;color:'+(b.billType==='EXPENSE'?'var(--expense)':'var(--income)')}, (b.billType==='EXPENSE'?'-':'')+'¥'+b.amount.toFixed(2)));
     tr.append(h('td',{style:'color:var(--muted)'}, b.remark||'-'));
     const tagCls = b.source==='QQ'?'tag tag-qq':b.source==='WEB'?'tag tag-web':'tag tag-app';
@@ -322,6 +365,8 @@ function renderBills(pg) {
   });
   tbl.appendChild(tbody);
   pg.appendChild(tbl);
+
+  if (S.msg) { pg.append(h('p', { className: msgClass(), style: 'margin-top:12px' }, S.msg)); S.msg = ''; }
 }
 
 // ── Charts ──
@@ -349,20 +394,45 @@ function drawCharts() {
   const Re = window.Recharts;
   if (!Re) return setTimeout(drawCharts, 200);
 
+  if (S.bills.length === 0) {
+    ['chart-pie','chart-line','chart-bar'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.innerHTML = '';
+        const emptyEl = document.createElement('div');
+        emptyEl.style.cssText = 'text-align:center;color:var(--muted);padding:60px 20px';
+        emptyEl.textContent = '暂无账单数据，记一笔后即可查看图表分析';
+        el.appendChild(emptyEl);
+      }
+    });
+    return;
+  }
+
+  // Period filter
+  function inPeriod(bill) {
+    const now = Date.now();
+    const days = chartPeriod === 'week' ? 7 : chartPeriod === 'month' ? 30 : 365;
+    return bill.date >= now - days * 86400000;
+  }
+  const periodBills = S.bills.filter(inPeriod);
+
   // Pie
   const pieMap = {};
-  S.bills.filter(b=>b.billType==='EXPENSE').forEach(b => { pieMap[b.categoryName]=(pieMap[b.categoryName]||0)+b.amount; });
+  periodBills.filter(b=>b.billType==='EXPENSE').forEach(b => { pieMap[b.categoryName]=(pieMap[b.categoryName]||0)+b.amount; });
   const pieData = Object.entries(pieMap).map(([n,v])=>({name:n,value:+v.toFixed(2)}));
 
   if (pieData.length > 0) {
     const pieEl = document.getElementById('chart-pie');
     if (pieEl) {
+      if (_chartRoots.pie) _chartRoots.pie.unmount();
       pieEl.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">支出分类占比</h3>';
       const pieDiv = document.createElement('div'); pieDiv.id = 'pie-root'; pieEl.appendChild(pieDiv);
-      ReactDOM.createRoot(pieDiv).render(
+      const pieRoot = ReactDOM.createRoot(pieDiv);
+      _chartRoots.pie = pieRoot;
+      pieRoot.render(
         React.createElement(Re.ResponsiveContainer, { width: '100%', height: 280 },
           React.createElement(Re.PieChart, null,
-            React.createElement(Re.Pie, { data: pieData, dataKey: 'value', nameKey: 'name', cx: '50%', cy: '50%', outerRadius: 90, label: ({name,pct})=>`${name} ${(pct*100).toFixed(0)}%` },
+            React.createElement(Re.Pie, { data: pieData, dataKey: 'value', nameKey: 'name', cx: '50%', cy: '50%', outerRadius: 90, label: ({name,percent})=>`${name} ${(percent*100).toFixed(0)}%` },
               pieData.map((_,i) => React.createElement(Re.Cell, { key: i, fill: ['#7EC1FC','#CA3032','#04A433','#F59E0B','#8B5CF6','#EC4899','#06B6D4'][i%7] }))
             ),
             React.createElement(Re.Tooltip, { formatter: v => '¥' + v.toFixed(2) })
@@ -372,7 +442,7 @@ function drawCharts() {
     }
   }
 
-  // Monthly line
+  // Monthly line (always uses all bills for trend)
   const months = {};
   S.bills.forEach(b => {
     const m = new Date(b.date).toLocaleDateString('zh-CN',{year:'numeric',month:'short'});
@@ -385,9 +455,12 @@ function drawCharts() {
   if (lineData.length > 0) {
     const le = document.getElementById('chart-line');
     if (le) {
+      if (_chartRoots.line) _chartRoots.line.unmount();
       le.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">月度趋势</h3>';
       const ld = document.createElement('div'); ld.id = 'line-root'; le.appendChild(ld);
-      ReactDOM.createRoot(ld).render(
+      const lineRoot = ReactDOM.createRoot(ld);
+      _chartRoots.line = lineRoot;
+      lineRoot.render(
         React.createElement(Re.ResponsiveContainer, { width: '100%', height: 280 },
           React.createElement(Re.LineChart, { data: lineData },
             React.createElement(Re.CartesianGrid, { strokeDasharray: '3 3' }),
@@ -408,7 +481,7 @@ function drawCharts() {
   const start = Date.now() - days*86400000;
   const barMap = {};
   for (let i=0; i<days; i++) barMap[new Date(start+i*86400000).toLocaleDateString('zh-CN',{month:'short',day:'numeric'})] = 0;
-  S.bills.filter(b=>b.date>=start&&b.billType==='EXPENSE').forEach(b => {
+  periodBills.filter(b=>b.billType==='EXPENSE').forEach(b => {
     const d = new Date(b.date).toLocaleDateString('zh-CN',{month:'short',day:'numeric'});
     if (barMap[d] !== undefined) barMap[d] = (barMap[d]||0) + b.amount;
   });
@@ -416,9 +489,12 @@ function drawCharts() {
 
   const be = document.getElementById('chart-bar');
   if (be && barData.length > 0) {
+    if (_chartRoots.bar) _chartRoots.bar.unmount();
     be.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">每日支出</h3>';
     const bd = document.createElement('div'); bd.id = 'bar-root'; be.appendChild(bd);
-    ReactDOM.createRoot(bd).render(
+    const barRoot = ReactDOM.createRoot(bd);
+    _chartRoots.bar = barRoot;
+    barRoot.render(
       React.createElement(Re.ResponsiveContainer, { width: '100%', height: 240 },
         React.createElement(Re.BarChart, { data: barData },
           React.createElement(Re.CartesianGrid, { strokeDasharray: '3 3' }),
@@ -435,17 +511,22 @@ function drawCharts() {
 // ── Assets ──
 function renderAssets(pg) {
   pg.append(h('h2', null, '资产管理'));
-  pg.appendChild(h('button', { className: 'btn btn-primary', style:'margin-bottom:20px', onclick: async () => { await loadData(); render(); } }, '同步账单'));
+  pg.appendChild(h('button', { className: 'btn btn-primary', style:'margin-bottom:20px', onclick: async () => { await loadData(); } }, '同步账单'));
   const cards = h('div', { className: 'grid-3' });
-  S.accts.forEach(a => {
-    const c = h('div', { className: 'card', style: 'display:flex;align-items:center;gap:16px;border-left:4px solid '+a.iconColor });
-    c.append(h('div', { style: 'width:40px;height:40px;border-radius:50%;background:'+a.iconColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px' }, a.name[0]));
-    const info = h('div');
-    info.append(h('div', { style: 'font-weight:600' }, a.name));
-    info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' }, '***'));
-    c.appendChild(info);
-    cards.appendChild(c);
-  });
+  if (S.accts.length === 0) {
+    cards.appendChild(h('p', { className: 'loading', style: 'grid-column:1/-1;font-size:14px' },
+      '暂无账户数据，请检查网络连接后刷新页面'));
+  } else {
+    S.accts.forEach(a => {
+      const c = h('div', { className: 'card', style: 'display:flex;align-items:center;gap:16px;border-left:4px solid '+a.iconColor });
+      c.append(h('div', { style: 'width:40px;height:40px;border-radius:50%;background:'+a.iconColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px' }, a.name[0]));
+      const info = h('div');
+      info.append(h('div', { style: 'font-weight:600' }, a.name));
+      info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' }, '***'));
+      c.appendChild(info);
+      cards.appendChild(c);
+    });
+  }
   pg.appendChild(cards);
 }
 
@@ -482,45 +563,34 @@ function renderSettings(pg) {
 
     // List existing keywords
     const kwList = h('div',{style:'max-height:200px;overflow:auto'});
-    (S.keywords||[]).forEach(kw=>{
-      const row = h('div',{style:'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)'});
-      row.append(h('span',{style:'flex:1;font-size:13px'},kw.keyword+' → '+kw.categoryName));
-      row.append(h('span',{style:'font-size:11px;color:var(--muted)'},'优先级:'+kw.priority));
-      row.append(h('button',{className:'btn btn-outline',style:'padding:4px 10px;font-size:11px;color:var(--expense);border-color:var(--expense)',onclick:async()=>{
-        await api('/api/keywords/'+kw.id,{method:'DELETE'});
-        await loadKeywords();
-        render();
-      }},'删除'));
-      kwList.appendChild(row);
-    });
+    if (!S.keywords || S.keywords.length === 0) {
+      kwList.appendChild(h('p',{style:'color:var(--muted);font-size:13px;padding:12px 0;text-align:center'},
+        '暂无自定义关键词，添加关键词可实现智能分类匹配'));
+    } else {
+      S.keywords.forEach(kw=>{
+        const row = h('div',{style:'display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)'});
+        row.append(h('span',{style:'flex:1;font-size:13px'},kw.keyword+' → '+kw.categoryName));
+        row.append(h('span',{style:'font-size:11px;color:var(--muted)'},'优先级:'+kw.priority));
+        row.append(h('button',{className:'btn btn-outline',style:'padding:4px 10px;font-size:11px;color:var(--expense);border-color:var(--expense)',onclick:async()=>{
+          await api('/api/keywords/'+kw.id,{method:'DELETE'});
+          await loadKeywords();
+          render();
+        }},'删除'));
+        kwList.appendChild(row);
+      });
+    }
     pg.appendChild(kwList);
 
     pg.append(h('button', { className: 'btn btn-outline danger', style:'width:100%;margin-top:12px', onclick: () => {
       localStorage.removeItem('rkl_token'); S.token = null; S.user = null; render();
     }}, '退出登录'));
-    if (S.msg) pg.append(h('p',{className:'msg '+(S.msg.includes('成功')?'ok':'err')},S.msg));
+    if (S.msg) pg.append(h('p',{className:msgClass()},S.msg));
     return;
   }
 
-  const tog = h('div', { className: 'toggle', style:'margin-bottom:16px' });
-  ['login','register'].forEach(m => {
-    tog.appendChild(h('button', {
-      className: S.smode===m?'on exp':'',
-      onclick: () => { S.smode = m; S.msg = ''; render(); }
-    }, m==='login'?'登录':'注册'));
-  });
-  pg.appendChild(tog);
-
-  pg.append(h('input', { type:'text', placeholder:'手机号', value:S.phone, oninput:e=>S.phone=e.target.value, style:'margin-bottom:12px' }));
-  pg.append(h('input', { type:'password', placeholder:'密码', value:S.pwd, oninput:e=>S.pwd=e.target.value, style:'margin-bottom:12px' }));
-  pg.append(h('button', { className: 'btn btn-primary', style:'width:100%', onclick: async () => {
-    const path = S.smode==='login'?'/api/auth/login':'/api/auth/register';
-    const r = await api(path,{method:'POST',body:JSON.stringify({phone:S.phone,password:S.pwd})});
-    if (r.token) { S.token = r.token; localStorage.setItem('rkl_token', r.token); S.msg = '登录成功!'; loadData(); }
-    else S.msg = r.message || '失败';
-    render();
-  }}, S.smode==='login'?'登录':'注册'));
-  if (S.msg) pg.append(h('p',{className:'msg '+ (S.msg.includes('成功')?'ok':'err')},S.msg));
+  pg.append(h('p', { style: 'color:var(--muted);font-size:14px;margin-bottom:16px;text-align:center' },
+    '请登录后使用记账、账单管理、图表分析和资产管理功能'));
+  pg.appendChild(renderLogin(true));
 }
 
 // ── Helpers ──
@@ -537,6 +607,7 @@ async function loadData() {
     if (Array.isArray(aRes)) S.accts = aRes;
   } catch(e) { console.error(e); }
   await loadKeywords();
+  render();
 }
 
 async function loadKeywords() {
