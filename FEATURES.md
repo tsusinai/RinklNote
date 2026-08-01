@@ -11,8 +11,10 @@
 - 右侧抽屉式快捷记账（QuickAddDrawer），支持滑动手势
 
 ### 升级规划
-- [ ] 账单编辑与删除
-- [ ] 常用模板（如"早餐15元"一键录入）
+- [x] 账单编辑与删除 (Web 端已实现, 服务端 API 完整)
+- [x] 常用模板（如"早餐15元"一键录入） — 服务端+Android+Web
+- [x] NLP 自然语言输入（"午餐25元"自动识别分类+金额） — Android+服务端
+- [x] 智能推荐（按时段推荐常用账单） — Android+服务端, Web 可配置
 - [ ] 周期性账单（每月固定支出自动记录）
 - [ ] 分类拖拽排序（常用排在前面）
 - [ ] 金额快速选择（常用金额快捷按钮）
@@ -40,20 +42,17 @@
 ## 3. QQ 机器人记账
 
 ### 当前实现
-- ❌ 未实现
+- [x] QQ 官方 Bot API v2 接入（Webhook + Ed25519 验签）
+- [x] Ktor 后端 — 手机号注册/登录、JWT 鉴权、QQ 绑定(OpenID)
+- [x] QQ 消息 → NLU 解析 → H2 存储 → 回复结果
+- [x] Android App 同步拉取 QQ 账单 + 推送本地账单
+- [x] Web 端 Bot 配置（AppID/ClientSecret → DB 存储）
+- [x] 绑定码机制（向 Bot 发消息获取6位码 → Web 绑定）
 
-### 一期规划（详见计划文档）
-- [ ] NapCat (OneBot v11) Docker 自建 Bot
-- [ ] Ktor 后端 — 手机号注册/登录、JWT 鉴权、QQ 绑定
-- [ ] QQ 消息 → VoiceParser 解析 → PostgreSQL 存储
-- [ ] Android App 启动/刷新时拉取 QQ 账单（Retrofit + DataStore）
-- [ ] 游客模式：不登录也能正常用，需要同步时再登录
-
-### 二期规划
-- [ ] 切换到 QQ 官方 API（审核通过后）
+### 升级规划
 - [ ] QQ 端主动推送提醒（月账单、超预算提醒）
 - [ ] 群聊中 @机器人 多人记账（家庭/合租场景）
-- [ ] QQ 端查询账单（"本月花了多少" → 返回汇总）
+- [ ] QQ 端查询账单（"本月花了多少" → 返回汇总，服务端已有 naturalQuery）
 
 ---
 
@@ -113,11 +112,10 @@
 - 每条账单：分类色点 + 名称 + 金额
 - `BookkeepingViewModel` 按月查询（10天前到今天月末）
 - 通过 Room Flow 自动刷新，无分页加载
+- [x] Web 端搜索（按备注/分类/日期范围）+ CSV 导出
 
 ### 升级规划
-- [ ] 搜索（按金额/备注/分类）
-- [ ] 日期筛选（日历选择范围）
-- [ ] 分类筛选
+- [ ] App 端搜索和筛选
 - [ ] 时间段切换（月/季度/年）
 - [ ] 列表分页（大数据量）
 
@@ -153,6 +151,22 @@
 - [ ] JSON 备份/恢复
 - [ ] WebDAV / 云盘自动备份
 - [ ] 数据导入（微信/支付宝账单 CSV 导入）
+
+---
+
+## 10. 数据同步
+
+### 当前实现
+- [x] 双向同步协议（本地优先，Last-Writer-Wins 冲突处理）
+- [x] updatedAt 时间戳 + 软删除（编辑/删除可同步）
+- [x] 分页同步（limit/offset，hasMore 标记）
+- [x] Android → 服务器：记账后自动推送
+- [x] 服务器 → Android：下拉增量更新（含编辑和删除）
+- [x] 模板跨端同步
+
+### 升级规划
+- [ ] 后台自动同步（WorkManager 定时任务）
+- [ ] 冲突手动选择（当前自动 LWW）
 
 ---
 
@@ -195,42 +209,42 @@
 ## 12. LLM 智能解析
 
 ### 当前实现
-- ❌ 无，纯规则匹配
+- [x] 规则 + LLM 双引擎 NLU（RuleBasedParser + DeepSeek API）
+- [x] `voice_keywords` 表，用户维护个人关键词→分类映射
+- [x] Web 端关键词管理界面
+- [x] 解析优先级：用户关键词 > 系统默认 > LLM fallback
+- [x] LLM 自动学习（成功解析后自动保存关键词 priority=5）
+- [x] NLP 输入端点 `/api/bills/parse`
 
-### 一期: 用户自定义关键词
-- [ ] `voice_keywords` 表，用户维护个人关键词→分类映射
-- [ ] 解析优先级：用户关键词 > 系统默认 > 未知（提示用户创建）
-- [ ] App 端关键词管理界面
+### 消费洞察（已实现）
+- [x] 每月 AI 消费总结 (`/api/insights/monthly`)
+- [x] 异常消费提醒 (`/api/insights/anomaly`)
+- [x] 自然语言查询 (`/api/insights/query`)
+- [x] 智能记账推荐 (`/api/insights/suggest`)
 
-### 二期: LLM 自动学习
-- [ ] 监听用户手动修改分类的行为 → 自动生成关键词规则
-- [ ] `NLUService` 接口预留，后续接入 LLM API
+### 升级规划
 - [ ] 模糊语义理解："昨天那个和今天一样"、"再来一单"
-- [ ] 基于历史消费习惯的智能分类推荐
-
-### 三期: 消费洞察
-- [ ] 每月 AI 消费总结（"本月你外卖花了..."
-- [ ] 异常消费提醒（"今天比平时多花了50%")
-- [ ] 自然语言查询（"我上个月在交通上花了多少?"）
+- [ ] 中文数字识别（"二十"→20）
 
 ---
 
 ## 架构演进方向
 
 ```
-现在                       一期                     二期+
-─────────────────────────────────────────────────────────────
-单 Activity               同左                     同左
-Room 本地 DB              + PostgreSQL(server)     + 数据同步
-无网络                    Retrofit + JWT           WebSocket 实时
-StateFlow 缓存             同左                    + RemoteMediator
-纯客户端                   客户端 + Ktor 后端       客户端 + 后端 + LLM
-HirizontalPager 导航       同左                    考虑 Navigation Compose
-手动 DI (Factory)          同左                    考虑 Hilt/Koin
+现在 (2026-08)
+─────────────────────────────────────────
+单 Activity + HorizontalPager
+Room 本地 DB + H2/Ktor 服务端
+双向同步 (Last-Writer-Wins)
+Retrofit + JWT + DataStore
+StateFlow 缓存 + Flow 响应式
+Android + Ktor 后端 + Web SPA + QQ Bot
+NLU (规则+LLM双引擎) + 消费洞察
+手动 DI (Factory)
 ```
 
 ### 关键技术债务
 - [ ] `fallbackToDestructiveMigration` → 真实 migration
-- [ ] 语音解析未自动选中分类（bug）
 - [ ] ViewModel Factory 样板代码多 → DI 框架
-- [ ] `kotlinx-serialization-json` 已在 classpath 但未使用
+- [ ] 金额使用 Double → BigDecimal/整数分
+- [ ] 语音解析未自动选中分类（bug）
