@@ -7,6 +7,7 @@ import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.transaction
 
 fun Application.configureDatabase() {
@@ -29,10 +30,29 @@ fun Application.configureDatabase() {
     Database.connect(HikariDataSource(config))
 
     transaction {
-        SchemaUtils.create(UsersTable, CategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable)
+        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable)
+
+        // Performance indexes (not created by createMissingTablesAndColumns)
+        runMigrations()
     }
 
     val billService = BillService()
     billService.seedIfNeeded()
     log.info("Database initialized (${if (isH2) "H2" else "PostgreSQL"}) and seeded")
+}
+
+private fun Transaction.runMigrations() {
+    val indexes = listOf(
+        "CREATE INDEX IF NOT EXISTS idx_bills_user_id ON bills(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_bills_user_date ON bills(user_id, date)",
+        "CREATE INDEX IF NOT EXISTS idx_corrections_processed ON correction_log(processed, user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_templates_user ON bill_templates(user_id)",
+    )
+    indexes.forEach { sql ->
+        try {
+            exec(sql)
+        } catch (_: Exception) {
+            // Ignore "index already exists" errors
+        }
+    }
 }
