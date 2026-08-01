@@ -3,6 +3,8 @@ package com.example.rinklnote.server
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.QQBotService
+import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.DefaultNLUService
@@ -28,6 +30,7 @@ fun main() {
 
 fun Application.module() {
     install(CallLogging)
+    configureErrorHandling()
     configureSerialization()
     configureDatabase()
     configureSecurity()
@@ -86,12 +89,26 @@ fun Application.module() {
         anomalyThreshold = anomalyThreshold
     )
 
+    // QQ Official Bot — config stored in DB, managed via Web UI
+    val qqBotService = QQBotService()
+    qqBotService.loadFromDb()
+    if (qqBotService.isConfigured()) {
+        log.info("QQ Bot service loaded from DB (AppID: ${qqBotService.getMaskedAppId()})")
+    } else {
+        log.info("QQ Bot not yet configured — use Web settings page")
+    }
+
+    val templateService = TemplateService()
+
     routing {
         authRoutes(userService)
-        billRoutes(billService)
+        billRoutes(billService, nluService)
         correctionRoutes()
         keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService, nluService)
         insightRoutes(insightService)
+        qqBotWebhookRoutes(qqBotService, userService, billService, nluService)
+        qqBotManageRoutes(qqBotService, userService)
+        templateRoutes(templateService)
     }
 }

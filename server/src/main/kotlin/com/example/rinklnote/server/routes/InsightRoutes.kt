@@ -52,6 +52,25 @@ fun Route.insightRoutes(insightService: InsightService) {
                 val result = insightService.naturalQuery(userId, body.query)
                 call.respond(result)
             }
+
+            get("/suggest") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                val suggestion = insightService.suggestDailyPattern(userId)
+                if (suggestion != null) call.respond(suggestion)
+                else call.respond(mapOf("empty" to "true"))
+            }
+
+            get("/suggest-config") {
+                call.respond(insightService.loadSuggestConfig())
+            }
+
+            put("/suggest-config") {
+                val body = call.receive<InsightService.SuggestConfig>()
+                insightService.saveSuggestConfig(body)
+                call.respond(mapOf("message" to "配置已保存"))
+            }
         }
     }
 }
