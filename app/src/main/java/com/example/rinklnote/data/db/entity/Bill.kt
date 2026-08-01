@@ -40,5 +40,7 @@ data class Bill(
     val date: Long, // timestamp of start of day
     @ColumnInfo(name = "created_at") val createdAt: Long = 0L,
     val source: String = "APP", // "APP" or "QQ"
-    @ColumnInfo(name = "server_id") val serverId: Long? = null // server bill id for dedup
+    @ColumnInfo(name = "server_id") val serverId: Long? = null, // server bill id for dedup
+    @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
+    val deleted: Boolean = false
 )

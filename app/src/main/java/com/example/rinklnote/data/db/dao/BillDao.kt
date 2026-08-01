@@ -25,4 +25,16 @@ interface BillDao {
 
     @Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
     suspend fun insertAll(bills: List<Bill>)
+
+    @androidx.room.Upsert
+    suspend fun upsertAll(bills: List<Bill>)
+
+    @Query("DELETE FROM bills WHERE server_id = :serverId")
+    suspend fun deleteByServerId(serverId: Long)
+
+    @Query("SELECT * FROM bills WHERE server_id IS NULL")
+    suspend fun getUnsynced(): List<Bill>
+
+    @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt WHERE id = :localId")
+    suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
 }

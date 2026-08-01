@@ -76,7 +76,10 @@ fun AssetsScreen(
             val result = syncManager.sync()
             syncStatus = when (result) {
                 is SyncResult.NotLoggedIn -> null
-                is SyncResult.Success -> if (result.count > 0) "同步完成 (${result.count}条)" else null
+                is SyncResult.Success -> {
+                    val total = result.pushed + result.pulled
+                    if (total > 0) "同步完成 (推送${result.pushed}条, 拉取${result.pulled}条)" else null
+                }
                 is SyncResult.Error -> result.message
             }
         }
@@ -106,7 +109,7 @@ fun AssetsScreen(
                     val result = syncManager.sync()
                     syncStatus = when (result) {
                         is SyncResult.NotLoggedIn -> "未登录"
-                        is SyncResult.Success -> "同步完成 (${result.count}条)"
+                        is SyncResult.Success -> "同步完成 (推送${result.pushed}条, 拉取${result.pulled}条)"
                         is SyncResult.Error -> result.message
                     }
                 }

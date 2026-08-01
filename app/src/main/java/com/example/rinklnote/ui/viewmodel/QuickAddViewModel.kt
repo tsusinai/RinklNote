@@ -5,9 +5,13 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.sync.SyncManager
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.channels.Channel
@@ -32,8 +36,15 @@ data class QuickAddState(
     val remark: String = "",
     val showSubCategories: Boolean = false,
     val isConfirmEnabled: Boolean = false,
-    val confirmed: Boolean = false
+    val confirmed: Boolean = false,
+    val templates: List<BillTemplate> = emptyList(),
+    val nlpInput: String = "",
+    val isParsing: Boolean = false,
+    val suggestion: SuggestionData? = null,
+    val suggestionDismissed: Boolean = false
 ) {
+    data class SuggestionData(val label: String, val categoryName: String, val amount: Double)
+
     val categories: List<Category>
         get() = if (billType == "EXPENSE") expenseCategories else incomeCategories
 }
@@ -49,6 +60,10 @@ sealed interface QuickAddEvent {
     data class SelectAccount(val account: Account) : QuickAddEvent
     data class RemarkChanged(val remark: String) : QuickAddEvent
     data object DismissSubCategories : QuickAddEvent
+    data class NlpInput(val text: String) : QuickAddEvent
+    data object NlpSubmit : QuickAddEvent
+    data class TemplateClick(val template: BillTemplate) : QuickAddEvent
+    data object SuggestionClick : QuickAddEvent
     data object Confirm : QuickAddEvent
 }
 
@@ -58,7 +73,9 @@ sealed interface QuickAddEffect {
 }
 
 class QuickAddViewModel(
-    private val repository: BillRepository
+    private val repository: BillRepository,
+    private val syncManager: SyncManager? = null,
+    private val api: ApiService? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuickAddState())
@@ -105,6 +122,10 @@ class QuickAddViewModel(
             is QuickAddEvent.SelectAccount -> _state.update { it.copy(selectedAccount = event.account) }
             is QuickAddEvent.RemarkChanged -> _state.update { it.copy(remark = event.remark) }
             is QuickAddEvent.DismissSubCategories -> dismissSubCategories()
+            is QuickAddEvent.NlpInput -> _state.update { it.copy(nlpInput = event.text) }
+            is QuickAddEvent.NlpSubmit -> onNlpSubmit()
+            is QuickAddEvent.TemplateClick -> onTemplateClick(event.template)
+            is QuickAddEvent.SuggestionClick -> onSuggestionClick()
             is QuickAddEvent.Confirm -> confirm()
         }
     }
@@ -161,6 +182,105 @@ class QuickAddViewModel(
         _effects.trySend(QuickAddEffect.ConfirmRequested)
     }
 
+    // ── NLP ──
+    private fun onNlpSubmit() {
+        val text = _state.value.nlpInput.trim()
+        if (text.isBlank()) return
+        _state.update { it.copy(isParsing = true) }
+        val svc = api ?: return
+        viewModelScope.launch {
+            try {
+                val result = svc.parseBill(ParseRequest(text))
+                if (result.amount.isNotBlank() && result.amount.toDoubleOrNull() != null) {
+                    val cat = _state.value.categories.find { it.name == result.categoryName }
+                    if (cat != null) {
+                        _state.update {
+                            it.copy(
+                                amount = result.amount,
+                                selectedCategory = cat,
+                                billType = cat.billType,
+                                remark = result.remark.ifBlank { text },
+                                nlpInput = "",
+                                isParsing = false
+                            )
+                        }
+                        // Skip two-step: NLP intent is explicit enough
+                        _effects.trySend(QuickAddEffect.ConfirmRequested)
+                        return@launch
+                    }
+                }
+                _state.update { it.copy(isParsing = false) }
+            } catch (_: Exception) {
+                _state.update { it.copy(isParsing = false) }
+            }
+        }
+    }
+
+    // ── Template ──
+    private fun onTemplateClick(template: BillTemplate) {
+        val cat = _state.value.categories.find { it.id == template.categoryId } ?: return
+        val acct = _state.value.accounts.find { it.id == template.accountId } ?: return
+        _state.update {
+            it.copy(
+                amount = template.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
+                selectedCategory = cat,
+                billType = cat.billType,
+                selectedSubCategory = template.subCategoryName?.let { name ->
+                    _state.value.subCategories.find { sc -> sc.name == name }
+                },
+                selectedAccount = acct,
+                remark = ""
+            )
+        }
+        viewModelScope.launch { finalConfirm() }
+    }
+
+    // ── Suggestion ──
+    private fun onSuggestionClick() {
+        val s = _state.value.suggestion ?: return
+        val cat = _state.value.categories.find { it.name == s.categoryName } ?: return
+        val acct = _state.value.accounts.firstOrNull() ?: return
+        _state.update {
+            it.copy(
+                amount = s.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
+                selectedCategory = cat,
+                billType = cat.billType,
+                selectedAccount = acct,
+                remark = "",
+                suggestion = null,
+                suggestionDismissed = true
+            )
+        }
+        viewModelScope.launch { finalConfirm() }
+    }
+
+    fun loadTemplates(templates: List<BillTemplate>) {
+        _state.update { it.copy(templates = templates) }
+    }
+
+    fun loadSuggestion() {
+        val svc = api ?: return
+        viewModelScope.launch {
+            try {
+                val result = svc.getSuggestion()
+                val catName = result["categoryName"]
+                val amount = result["amount"]
+                if (!catName.isNullOrBlank() && amount != null) {
+                    val amt = amount.toDoubleOrNull() ?: return@launch
+                    _state.update {
+                        it.copy(suggestion = QuickAddState.SuggestionData(
+                            label = result["label"] ?: catName,
+                            categoryName = catName,
+                            amount = amt
+                        ))
+                    }
+                    kotlinx.coroutines.delay(5000)
+                    _state.update { it.copy(suggestion = null) }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     private var confirming = false
 
     fun finalConfirm() {
@@ -184,6 +304,8 @@ class QuickAddViewModel(
             )
             repository.addBill(bill)
             _effects.send(QuickAddEffect.FinalConfirmCompleted)
+            // Background push to server (best-effort, non-blocking)
+            syncManager?.let { launch { it.pushBill(bill) } }
         }
     }
 
@@ -202,10 +324,14 @@ class QuickAddViewModel(
         }
     }
 
-    class Factory(private val repository: BillRepository) : ViewModelProvider.Factory {
+    class Factory(
+        private val repository: BillRepository,
+        private val syncManager: SyncManager? = null,
+        private val api: ApiService? = null
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return QuickAddViewModel(repository) as T
+            return QuickAddViewModel(repository, syncManager, api) as T
         }
     }
 }

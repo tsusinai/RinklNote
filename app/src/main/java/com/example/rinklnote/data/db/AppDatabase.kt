@@ -11,18 +11,21 @@ import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.CategoryDao
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.data.db.dao.BillTemplateDao
 
 @Database(
-    entities = [Bill::class, Category::class, SubCategory::class, Account::class],
-    version = 5,
+    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class],
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun billDao(): BillDao
     abstract fun categoryDao(): CategoryDao
     abstract fun accountDao(): AccountDao
+    abstract fun billTemplateDao(): BillTemplateDao
 
     companion object {
         @Volatile
@@ -51,6 +54,29 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bills_server_id ON bills(server_id)")
             }
         }
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN updated_at INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE bills ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS bill_templates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        server_id INTEGER DEFAULT NULL UNIQUE,
+                        label TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        category_name TEXT NOT NULL,
+                        sub_category_name TEXT DEFAULT NULL,
+                        account_id INTEGER NOT NULL,
+                        sort_order INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+            }
+        }
 
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
@@ -58,7 +84,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .build()
         }
