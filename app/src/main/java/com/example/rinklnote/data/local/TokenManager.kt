@@ -38,6 +38,10 @@ class TokenManager(private val context: Context) {
         context.dataStore.edit { it[KEY_QQ_BOUND] = qqNumber }
     }
 
+    suspend fun clearQQ() {
+        context.dataStore.edit { it.remove(KEY_QQ_BOUND) }
+    }
+
     suspend fun setLastSyncTime(time: Long) {
         context.dataStore.edit { it[KEY_LAST_SYNC] = time }
     }

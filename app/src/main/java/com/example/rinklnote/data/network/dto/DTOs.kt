@@ -15,6 +15,18 @@ data class BindQQRequest(val qqNumber: String)
 data class MessageResponse(val message: String)
 
 @Serializable
+data class MeResponse(
+    val id: Long,
+    val phone: String,
+    val qqNumber: String? = null,
+    val qqOpenid: String? = null,
+    val createdAt: String? = null
+)
+
+@Serializable
+data class ChangePasswordRequest(val oldPassword: String, val newPassword: String)
+
+@Serializable
 data class BillDTO(
     val id: Long,
     val amount: Double,

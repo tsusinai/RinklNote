@@ -13,6 +13,15 @@ interface ApiService {
     @POST("api/auth/bind-qq")
     suspend fun bindQQ(@Body request: BindQQRequest): MessageResponse
 
+    @GET("api/auth/me")
+    suspend fun getMe(): MeResponse
+
+    @POST("api/auth/password")
+    suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
+
+    @POST("api/auth/unbind-qq")
+    suspend fun unbindQQ(): MessageResponse
+
     @GET("api/bills/sync")
     suspend fun syncBills(@Query("after") after: Long? = null, @Query("limit") limit: Int = 200): SyncResponse
 

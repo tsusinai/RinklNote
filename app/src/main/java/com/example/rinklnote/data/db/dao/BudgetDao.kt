@@ -26,6 +26,9 @@ interface BudgetDao {
     @Query("DELETE FROM budgets WHERE server_id = :serverId")
     suspend fun deleteByServerId(serverId: Long)
 
+    @Query("DELETE FROM budgets")
+    suspend fun deleteAll()
+
     @Query("UPDATE budgets SET server_id = :serverId, updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
 }

@@ -60,6 +60,7 @@ h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; }
 .toggle button:active { transform: scale(.95); }
 .toggle button.on { color: #fff; }
 .toggle button.on.exp { background: var(--expense); }
+.toggle button.on.theme { background: var(--primary); }
 .toggle button.on.inc { background: var(--income); }
 input[type="text"], input[type="number"], input[type="password"], input[type="date"], select { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); font-size: 14px; background: var(--card); font-family: inherit; transition: border-color var(--dur-med) var(--ease), background var(--dur-med) var(--ease); }
 input[type="text"]:hover, select:hover { border-color: var(--border); }
@@ -108,9 +109,10 @@ td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
 .recharts-default-tooltip .recharts-tooltip-label { color: var(--muted); }
 .recharts-surface { background: transparent; }
 
-/* Dark mode — mirrors Android DarkColorScheme (#1A1A1E bg / #252528 surface) */
+/* Dark mode — mirrors Android DarkColorScheme (#1A1A1E bg / #252528 surface).
+   System default applies unless an explicit theme override is set. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1A1A1E; --card: #252528; --text: #EAEAEA; --muted: #AAAAAA;
     --border: #333333; --border-light: #2D2D30;
     --primary-soft: rgba(126,193,252,.14); --primary-hover: rgba(126,193,252,.08);
@@ -119,6 +121,17 @@ td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
     --tag-app-bg: #2D2D30; --tag-app-fg: #AAAAAA;
     --shadow-sm: 0 1px 3px rgba(0,0,0,.4); --shadow: 0 1px 8px rgba(0,0,0,.45);
   }
+}
+
+/* Manual theme override — attribute wins over the system media query */
+:root[data-theme="dark"] {
+  --bg: #1A1A1E; --card: #252528; --text: #EAEAEA; --muted: #AAAAAA;
+  --border: #333333; --border-light: #2D2D30;
+  --primary-soft: rgba(126,193,252,.14); --primary-hover: rgba(126,193,252,.08);
+  --tag-web-bg: #0f2e1c; --tag-web-fg: #4ade80;
+  --tag-qq-bg: #12294a; --tag-qq-fg: #60a5fa;
+  --tag-app-bg: #2D2D30; --tag-app-fg: #AAAAAA;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4); --shadow: 0 1px 8px rgba(0,0,0,.45);
 }
 </style>
 </head>
@@ -142,6 +155,7 @@ const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
   phone: '', pwd: '', qq: '', smode: 'login', bindCode: '',
   botConfigured: false, botBound: false, botOpenid: '', botMaskedId: '',
   botAppId: '', botSecret: '', botShowSecret: false,
+  lastSync: 0, me: null, theme: localStorage.getItem('rkl_theme') || 'system',
 };
 
 const TABS = [
@@ -149,6 +163,7 @@ const TABS = [
   { id:'bills', label:'账单', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/></svg>' },
   { id:'charts', label:'图表', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' },
   { id:'assets', label:'资产', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/></svg>' },
+  { id:'me', label:'我的', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>' },
   { id:'settings', label:'设置', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>' },
 ];
 
@@ -179,6 +194,14 @@ function msgClass() {
   return /失败|错误|不能为空|已注册|不存在/.test(S.msg) ? 'msg err' : 'msg ok';
 }
 
+// Apply the manual theme (light/dark) or fall back to the OS via prefers-color-scheme
+function applyTheme() {
+  const t = S.theme;
+  if (t === 'light') document.documentElement.dataset.theme = 'light';
+  else if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+}
+
 function render() {
   const sidebar = document.querySelector('#sidebar .nav');
   sidebar.innerHTML = '';
@@ -193,13 +216,14 @@ function render() {
   content.innerHTML = '';
   const pg = document.createElement('div'); pg.className = 'page active';
 
-  if (!S.token && S.tab !== 'settings') {
+  if (!S.token && S.tab !== 'settings' && S.tab !== 'me') {
     pg.append(h('h2', null, '请先登录'), renderLogin(true));
   } else {
     if (S.tab === 'add') renderAdd(pg);
     else if (S.tab === 'bills') renderBills(pg);
     else if (S.tab === 'charts') renderCharts(pg);
     else if (S.tab === 'assets') renderAssets(pg);
+    else if (S.tab === 'me') renderMe(pg);
     else if (S.tab === 'settings') renderSettings(pg);
   }
   content.appendChild(pg);
@@ -592,41 +616,147 @@ function renderAssets(pg) {
   pg.appendChild(cards);
 }
 
+// ── Me (user center) ──
+function renderMe(pg) {
+  pg.append(h('h2', null, '我的'));
+
+  if (!S.token) {
+    pg.append(h('p', { style: 'color:var(--muted);font-size:14px;margin-bottom:16px' }, '登录后管理账号、修改密码与绑定QQ'));
+    pg.appendChild(renderLogin(true));
+    return;
+  }
+
+  // Account info card + QQ binding card (both filled from a single /me fetch)
+  const acctBox = h('div', { className: 'card', style: 'margin-bottom:16px;font-size:13px' });
+  const qqBox = h('div', { className: 'card', style: 'margin-bottom:16px' });
+  pg.appendChild(acctBox);
+  pg.appendChild(qqBox);
+  acctBox.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px">加载中...</div>';
+  qqBox.innerHTML = '';
+
+  (async () => {
+    let me = null;
+    try { me = await api('/api/auth/me'); S.me = me; } catch(e) {}
+    if (!me) {
+      acctBox.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px">加载失败，请刷新重试</div>';
+      qqBox.innerHTML = '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px">加载失败，请刷新重试</div>';
+      return;
+    }
+    // Account info
+    acctBox.innerHTML = '';
+    acctBox.appendChild(h('h3', { style: 'margin-bottom:10px' }, '账号信息'));
+    const row = (label, val) => h('div', { style: 'display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)' },
+      h('span', { style: 'color:var(--muted)' }, label), h('span', { style: 'font-weight:500' }, val));
+    acctBox.appendChild(row('手机号', me.phone));
+    acctBox.appendChild(row('QQ号', me.qqNumber || '未绑定'));
+    acctBox.appendChild(row('QQ机器人', me.qqOpenid ? ('已绑定 …' + me.qqOpenid.slice(-6)) : '未绑定'));
+    if (me.createdAt) acctBox.appendChild(row('注册时间', me.createdAt.slice(0, 10)));
+
+    // QQ binding
+    qqBox.appendChild(h('h3', { style: 'margin-bottom:10px' }, 'QQ号绑定'));
+    if (me.qqNumber) {
+      qqBox.appendChild(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-light);margin-bottom:12px' },
+        h('span', { style: 'color:var(--muted)' }, '已绑定 QQ号'), h('span', { style: 'font-weight:500' }, me.qqNumber)));
+      qqBox.appendChild(h('button', { className: 'btn btn-outline danger', style: 'width:100%', onclick: async () => {
+        if (!confirm('确定解绑QQ号？')) return;
+        const r = await api('/api/auth/unbind-qq', { method: 'POST' });
+        S.msg = r.message; render();
+      }}, '解绑QQ号'));
+    } else {
+      qqBox.appendChild(h('p', { style: 'font-size:12px;color:var(--muted);margin-bottom:10px' }, '绑定QQ号后可通过QQ机器人快捷记账'));
+      const qqInput = h('input', { type: 'text', placeholder: 'QQ号', style: 'margin-bottom:12px;width:100%' });
+      qqBox.appendChild(qqInput);
+      qqBox.appendChild(h('button', { className: 'btn btn-primary', style: 'width:100%', onclick: async () => {
+        if (!qqInput.value) { S.msg = '请输入QQ号'; render(); return; }
+        const r = await api('/api/auth/bind-qq', { method: 'POST', body: JSON.stringify({ qqNumber: qqInput.value }) });
+        S.msg = r.message; render();
+      }}, '绑定QQ'));
+    }
+  })();
+
+  // Change password card (local inputs, not bound to S, to avoid focus loss)
+  const pwdBox = h('div', { className: 'card', style: 'margin-bottom:16px' });
+  pwdBox.appendChild(h('h3', { style: 'margin-bottom:10px' }, '修改密码'));
+  const op = h('input', { type: 'password', placeholder: '原密码', style: 'margin-bottom:12px;width:100%' });
+  const np = h('input', { type: 'password', placeholder: '新密码(至少6位)', style: 'margin-bottom:12px;width:100%' });
+  pwdBox.appendChild(op); pwdBox.appendChild(np);
+  pwdBox.appendChild(h('button', { className: 'btn btn-primary', style: 'width:100%', onclick: async () => {
+    const r = await api('/api/auth/password', { method: 'POST', body: JSON.stringify({ oldPassword: op.value, newPassword: np.value }) });
+    S.msg = r.message || (r.oldPassword ? '原密码错误' : '修改失败');
+    op.value = ''; np.value = '';
+    if (S.me && r && r.message && !/失败|错误|密码/.test(r.message)) { try { S.me = await api('/api/auth/me'); } catch(e){} }
+    render();
+  }}, '修改密码'));
+  pg.appendChild(pwdBox);
+
+  // Logout (consolidated here; clears all cached state)
+  pg.appendChild(h('button', { className: 'btn btn-outline danger', style: 'width:100%', onclick: () => {
+    if (!confirm('退出将清除本地缓存数据')) return;
+    localStorage.removeItem('rkl_token'); localStorage.removeItem('rkl_theme');
+    S.token = null; S.user = null; S.me = null;
+    S.bills = []; S.cats = []; S.accts = []; S.keywords = [];
+    S.qq = ''; S.phone = ''; S.pwd = ''; S.lastSync = 0;
+    S.botConfigured = false; S.botBound = false; S.botOpenid = ''; S.botMaskedId = '';
+    S.tab = 'me'; render();
+  }}, '退出登录'));
+
+  if (S.msg) pg.appendChild(h('p', { className: msgClass() }, S.msg));
+}
+
 // ── Settings ──
 function renderSettings(pg) {
   pg.append(h('h2', null, '设置'));
 
   if (S.token) {
-    pg.append(h('p', { style: 'color:var(--muted);margin-bottom:16px' }, '已登录'));
-    pg.append(h('input', { type:'text', placeholder:'QQ号', value:S.qq, oninput:e=>S.qq=e.target.value, style:'margin-bottom:12px' }));
-    pg.append(h('button', { className: 'btn btn-primary', style:'width:100%', onclick: async () => {
-      const r = await api('/api/auth/bind-qq',{method:'POST',body:JSON.stringify({qqNumber:S.qq})});
-      S.msg = r.message; render();
-    }}, '绑定QQ'));
+    // Theme card
+    const themeCard = h('div',{className:'card',style:'margin-bottom:16px'});
+    themeCard.append(h('div',{className:'section-label'},'主题'));
+    const themeToggle = h('div',{className:'toggle',style:'margin-top:8px'});
+    [['system','跟随系统'],['light','浅色'],['dark','深色']].forEach(([v,label])=>{
+      themeToggle.appendChild(h('button',{className:'theme'+(S.theme===v?' on':''),onclick:()=>{
+        S.theme=v; localStorage.setItem('rkl_theme',v); applyTheme(); render();
+      }},label));
+    });
+    themeCard.appendChild(themeToggle);
+    pg.appendChild(themeCard);
+
+    // Sync card
+    const syncCard = h('div',{className:'card',style:'margin-bottom:16px'});
+    syncCard.append(h('div',{className:'section-label'},'同步'));
+    syncCard.append(h('p',{style:'font-size:13px;color:var(--muted);margin-top:8px'},'上次同步: '+(S.lastSync?new Date(S.lastSync).toLocaleString():'从未')));
+    syncCard.append(h('button',{className:'btn btn-primary',style:'margin-top:8px',onclick:async()=>{
+      await loadData(); S.msg='同步完成'; render();
+    }},'立即同步'));
+    pg.appendChild(syncCard);
+
     // QQ Bot settings
     pg.append(h('h3',{style:'margin-top:24px;margin-bottom:12px'},'QQ 机器人'));
     const botBox = h('div',{className:'card',style:'margin-bottom:16px;font-size:13px'});
     pg.appendChild(botBox);
 
     // Load bot status asynchronously
+    botBox.textContent = '加载中...';
     (async () => {
+      let failed = false;
       try {
         const st = await api('/api/qq-bot/status');
         S.botConfigured = st.configured === 'true';
         S.botMaskedId = st.maskedAppId || '';
-      } catch(e) { S.botConfigured = false; }
+      } catch(e) { S.botConfigured = false; failed = true; }
       try {
         const bs = await api('/api/qq-bot/bind-status');
         S.botBound = bs.bound === 'true';
         S.botOpenid = bs.openid || '';
-      } catch(e) { S.botBound = false; }
+      } catch(e) { S.botBound = false; failed = true; }
       botBox.innerHTML = '';
-      renderBotSection(botBox);
+      if (failed) botBox.append(h('p',{style:'color:var(--expense);font-size:13px'},'加载失败，请稍后重试'));
+      else renderBotSection(botBox);
     })();
 
-    // Keyword management (after bot settings, before logout)
-    pg.append(h('h3',{style:'margin-top:24px;margin-bottom:12px'},'关键词管理'));
-    pg.append(h('p',{style:'font-size:12px;color:var(--muted);margin-bottom:8px'},'自定义关键词用于快速匹配分类。如"外卖"→"三餐"'));
+    // Keyword management
+    const kwCard = h('div',{className:'card',style:'margin-bottom:16px'});
+    kwCard.append(h('h3',{style:'margin-bottom:8px'},'关键词管理'));
+    kwCard.append(h('p',{style:'font-size:12px;color:var(--muted);margin-bottom:8px'},'自定义关键词用于快速匹配分类。如"外卖"→"三餐"'));
 
     const kwGrid = h('div',{style:'display:flex;gap:8px;margin-bottom:8px'});
     const kwInput = h('input',{type:'text',placeholder:'关键词(如:外卖)',style:'flex:1'});
@@ -642,7 +772,7 @@ function renderSettings(pg) {
       await loadKeywords();
       render();
     }},'添加'));
-    pg.appendChild(kwGrid);
+    kwCard.appendChild(kwGrid);
 
     // List existing keywords
     const kwList = h('div',{style:'max-height:200px;overflow:auto'});
@@ -662,7 +792,8 @@ function renderSettings(pg) {
         kwList.appendChild(row);
       });
     }
-    pg.appendChild(kwList);
+    kwCard.appendChild(kwList);
+    pg.appendChild(kwCard);
 
     // Template Management
     pg.append(h('h3',{style:'margin-top:24px;margin-bottom:12px'},'记账模板'));
@@ -682,9 +813,6 @@ function renderSettings(pg) {
     pg.appendChild(budgetBox);
     renderBudgetSection(budgetBox);
 
-    pg.append(h('button', { className: 'btn btn-outline danger', style:'width:100%;margin-top:12px', onclick: () => {
-      localStorage.removeItem('rkl_token'); S.token = null; S.user = null; render();
-    }}, '退出登录'));
     if (S.msg) pg.append(h('p',{className:msgClass()},S.msg));
     return;
   }
@@ -786,7 +914,7 @@ function renderBotSection(box) {
   guide.appendChild(h('ol',null,
     h('li',null,'在 q.qq.com 创建机器人，获取 AppID 和 ClientSecret'),
     h('li',null,'在此页面填入凭证并保存'),
-    h('li',null,'在 QQ 开放平台「开发设置」中配置 Webhook URL: http://118.31.184.221/api/qq/bot/webhook'),
+    h('li',null,'在 QQ 开放平台「开发设置」中配置 Webhook URL: '+location.origin+'/api/qq/bot/webhook'),
     h('li',null,'向机器人发送任意消息获取绑定码，在此绑定账号')
   ));
   box.appendChild(guide);
@@ -835,7 +963,10 @@ function renderTemplateSection(box) {
         },'删'));
         list.appendChild(row);
       });
-    }catch(e){}
+    }catch(e){
+      const list = box.querySelector('#tmpl_list');
+      if(list) list.append(h('p',{style:'color:var(--expense);font-size:12px'},'加载失败，请稍后重试'));
+    }
   })();
 }
 
@@ -863,7 +994,7 @@ function renderSuggestConfig(box) {
         r.appendChild(inp);r.appendChild(lbl);
         box.appendChild(r);
       });
-    }catch(e){box.innerHTML='';}
+    }catch(e){box.innerHTML='<div style="font-size:13px;color:var(--expense)">加载失败，请稍后重试</div>';}
   })();
 }
 
@@ -876,9 +1007,11 @@ function renderBudgetSection(box) {
 
   (async () => {
     try {
-      // Refresh bills so month expense is current
-      const bRes = await api('/api/bills/sync');
-      if (bRes.bills) S.bills = bRes.bills.reverse();
+      // Refresh bills so month expense is current (skip if already loaded)
+      if (S.bills.length === 0) {
+        const bRes = await api('/api/bills/sync');
+        if (bRes.bills) S.bills = bRes.bills.reverse();
+      }
 
       const budgets = await api('/api/budgets');
       const cur = (Array.isArray(budgets) ? budgets : []).find(b => b.monthStart === monthStart && !b.deleted);
@@ -926,7 +1059,7 @@ function renderBudgetSection(box) {
         S.msg = '预算已保存'; render();
       }}, '保存'));
       box.appendChild(row);
-    } catch (e) { box.innerHTML = ''; }
+    } catch (e) { box.innerHTML = '<div style="font-size:13px;color:var(--expense)">加载失败，请稍后重试</div>'; }
   })();
 }
 
@@ -964,6 +1097,7 @@ async function loadData() {
     try {
       const bRes = await api('/api/bills/sync');
       if (bRes.bills) S.bills = bRes.bills.reverse();
+      S.lastSync = Date.now();
     } catch(e) { console.error('Failed to sync bills:', e); }
     await loadKeywords();
   }
@@ -980,6 +1114,7 @@ async function loadKeywords() {
 
 // ── Init ──
 async function init() {
+  applyTheme();
   if (S.token) await loadData();
   render();
 }

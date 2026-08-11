@@ -33,6 +33,7 @@ interface BillRepository {
     suspend fun getUnsyncedBudgets(): List<Budget>
     suspend fun markBudgetSynced(localId: Long, serverId: Long, updatedAt: Long)
     suspend fun deleteBudgetByServerId(serverId: Long)
+    suspend fun clearLocalData()
     suspend fun loadReferenceData()
     suspend fun seedIfNeeded()
 }

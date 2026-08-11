@@ -13,7 +13,8 @@ data class UserInfo(
     val id: Long,
     val phone: String,
     val qqNumber: String?,
-    val qqOpenid: String?
+    val qqOpenid: String?,
+    val createdAt: String? = null
 )
 
 class UserService(
@@ -62,7 +63,7 @@ class UserService(
     fun findById(id: Long): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.id eq id }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
             }
         }
     }
@@ -70,7 +71,7 @@ class UserService(
     fun findByPhone(phone: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
             }
         }
     }
@@ -78,7 +79,7 @@ class UserService(
     fun findByQQ(qqNumber: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
             }
         }
     }
@@ -86,7 +87,7 @@ class UserService(
     fun findByQqOpenid(openid: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
             }
         }
     }
@@ -108,6 +109,28 @@ class UserService(
             UsersTable.update({ UsersTable.id eq userId }) {
                 it[UsersTable.qqOpenid] = null
             }
+        }
+    }
+
+    fun unbindQQNumber(userId: Long) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.qqNumber] = null
+            }
+        }
+    }
+
+    fun updatePassword(userId: Long, oldPassword: String, newPassword: String): Boolean {
+        return transaction {
+            val hash = UsersTable.selectAll()
+                .where { UsersTable.id eq userId }
+                .singleOrNull()?.get(UsersTable.passwordHash)
+                ?: return@transaction false
+            if (!BCrypt.checkpw(oldPassword, hash)) return@transaction false
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[passwordHash] = BCrypt.hashpw(newPassword, BCrypt.gensalt())
+            }
+            true
         }
     }
 

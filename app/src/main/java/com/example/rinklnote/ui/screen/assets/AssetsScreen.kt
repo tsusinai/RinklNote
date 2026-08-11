@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
 import androidx.compose.runtime.LaunchedEffect
+import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.screen.login.LoginScreen
@@ -62,11 +62,13 @@ private fun accountIconRes(name: String): Int = when (name) {
 fun AssetsScreen(
     viewModel: AssetsViewModel,
     authViewModel: AuthViewModel,
-    syncManager: SyncManager
+    syncManager: SyncManager,
+    settingsManager: SettingsManager
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val authState by authViewModel.state.collectAsStateWithLifecycle()
     val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
+    val autoSync by settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
     val coroutineScope = rememberCoroutineScope()
 
     var showLogin by remember { mutableStateOf(false) }
@@ -74,9 +76,9 @@ fun AssetsScreen(
     var syncStatus by remember { mutableStateOf<String?>(null) }
     var editingAccount by remember { mutableStateOf<Account?>(null) }
 
-    // Auto-sync on tab open when logged in
-    LaunchedEffect(authState.isLoggedIn) {
-        if (authState.isLoggedIn && authState.isQQBound) {
+    // Auto-sync on tab open when logged in (respects the auto-sync setting)
+    LaunchedEffect(authState.isLoggedIn, autoSync) {
+        if (authState.isLoggedIn && authState.isQQBound && autoSync) {
             syncStatus = "同步中..."
             val result = syncManager.sync()
             syncStatus = when (result) {
@@ -133,8 +135,7 @@ fun AssetsScreen(
                         is SyncResult.Error -> result.message
                     }
                 }
-            },
-            onLogout = { authViewModel.onEvent(com.example.rinklnote.ui.viewmodel.AuthEvent.Logout) }
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -180,8 +181,7 @@ private fun SyncSection(
     syncStatus: String?,
     onLogin: () -> Unit,
     onBindQQ: () -> Unit,
-    onSync: () -> Unit,
-    onLogout: () -> Unit
+    onSync: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -207,10 +207,7 @@ private fun SyncSection(
             !authState.isQQBound -> {
                 Text("已登录，请绑定QQ号", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onBindQQ, modifier = Modifier.weight(1f)) { Text("绑定QQ") }
-                    OutlinedButton(onClick = onLogout, modifier = Modifier.weight(1f)) { Text("退出") }
-                }
+                Button(onClick = onBindQQ, modifier = Modifier.fillMaxWidth()) { Text("绑定QQ") }
             }
             else -> {
                 Text("QQ已绑定，可同步账单", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -224,8 +221,6 @@ private fun SyncSection(
                 if (syncStatus != null) {
                     Text(syncStatus, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("退出登录") }
             }
         }
     }

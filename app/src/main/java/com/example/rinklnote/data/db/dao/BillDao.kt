@@ -39,6 +39,9 @@ interface BillDao {
     @Query("DELETE FROM bills WHERE id = :id")
     suspend fun hardDeleteById(id: Long)
 
+    @Query("DELETE FROM bills")
+    suspend fun deleteAll()
+
     @Query("UPDATE bills SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)
 

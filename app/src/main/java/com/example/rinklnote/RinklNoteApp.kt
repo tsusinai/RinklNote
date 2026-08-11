@@ -2,6 +2,7 @@ package com.example.rinklnote
 
 import android.app.Application
 import com.example.rinklnote.data.db.AppDatabase
+import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.RetrofitClient
@@ -19,6 +20,7 @@ class RinklNoteApp : Application() {
     val database: AppDatabase by lazy { AppDatabase.getInstance(this) }
     val repository: BillRepository by lazy { BillRepositoryImpl(database) }
     val tokenManager: TokenManager by lazy { TokenManager(this) }
+    val settingsManager: SettingsManager by lazy { SettingsManager(this) }
     val apiService: ApiService by lazy { RetrofitClient.create(tokenManager) }
     val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao(), database.budgetDao()) }
 

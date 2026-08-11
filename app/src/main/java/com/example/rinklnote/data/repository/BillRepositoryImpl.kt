@@ -67,6 +67,13 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
 
     override suspend fun deleteBudgetByServerId(serverId: Long) = budgetDao.deleteByServerId(serverId)
 
+    override suspend fun clearLocalData() {
+        // Wipe per-user data on logout. Keep categories/accounts (shared reference data).
+        billDao.deleteAll()
+        budgetDao.deleteAll()
+        templateDao.deleteAll()
+    }
+
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
         categoryDao.getSubCategories(parentId)
 

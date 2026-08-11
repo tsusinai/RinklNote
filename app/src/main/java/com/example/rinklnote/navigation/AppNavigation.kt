@@ -61,6 +61,7 @@ import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
+import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
@@ -72,11 +73,11 @@ import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import kotlinx.coroutines.launch
 
-private val tabs = listOf("计划", "记账", "资产")
+private val tabs = listOf("计划", "记账", "资产", "我的")
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
@@ -88,7 +89,7 @@ fun AppNavigation(app: RinklNoteApp) {
     }
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val tabWidth = screenWidth / 3
+    val tabWidth = screenWidth / 4
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
         factory = BookkeepingViewModel.Factory(app.repository, app.syncManager)
@@ -193,7 +194,15 @@ fun AppNavigation(app: RinklNoteApp) {
                     2 -> AssetsScreen(
                         viewModel = assetsVM,
                         authViewModel = authVM,
-                        syncManager = app.syncManager
+                        syncManager = app.syncManager,
+                        settingsManager = app.settingsManager
+                    )
+                    3 -> ProfileScreen(
+                        authViewModel = authVM,
+                        settingsManager = app.settingsManager,
+                        tokenManager = app.tokenManager,
+                        syncManager = app.syncManager,
+                        repository = app.repository
                     )
                 }
             }
