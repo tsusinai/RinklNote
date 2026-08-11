@@ -3,6 +3,8 @@ package com.example.rinklnote.data.repository
 import com.example.rinklnote.data.db.AppDatabase
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.BillTemplate
+import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import kotlinx.coroutines.flow.Flow
@@ -15,6 +17,8 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     private val billDao = db.billDao()
     private val categoryDao = db.categoryDao()
     private val accountDao = db.accountDao()
+    private val templateDao = db.billTemplateDao()
+    private val budgetDao = db.budgetDao()
 
     private val _expenseCategories = MutableStateFlow<List<Category>>(emptyList())
     override val expenseCategories: StateFlow<List<Category>> = _expenseCategories.asStateFlow()
@@ -29,6 +33,10 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> =
         billDao.observeByMonth(monthStart, nextMonthStart)
 
+    override fun observeTemplates(): Flow<List<BillTemplate>> = templateDao.observeAll()
+
+    override fun observeBudgets(): Flow<List<Budget>> = budgetDao.observeAll()
+
     override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double =
         billDao.getTotalExpense(monthStart, nextMonthStart) ?: 0.0
 
@@ -37,9 +45,27 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
 
     override suspend fun addBill(bill: Bill): Long = billDao.insert(bill)
 
+    override suspend fun updateBill(bill: Bill) = billDao.update(bill)
+
+    override suspend fun deleteBill(bill: Bill) {
+        // Soft delete locally — server gets pushed the deletion via SyncManager.
+        billDao.softDelete(bill.id, System.currentTimeMillis())
+    }
+
     override suspend fun insertAllBills(bills: List<Bill>) { billDao.insertAll(bills) }
 
     override suspend fun updateAccount(account: Account) = accountDao.update(account)
+
+    override suspend fun getBudget(monthStart: Long): Budget? = budgetDao.getByMonth(monthStart)
+
+    override suspend fun upsertBudget(budget: Budget) = budgetDao.upsert(budget)
+
+    override suspend fun getUnsyncedBudgets(): List<Budget> = budgetDao.getUnsynced()
+
+    override suspend fun markBudgetSynced(localId: Long, serverId: Long, updatedAt: Long) =
+        budgetDao.updateServerId(localId, serverId, updatedAt)
+
+    override suspend fun deleteBudgetByServerId(serverId: Long) = budgetDao.deleteByServerId(serverId)
 
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
         categoryDao.getSubCategories(parentId)

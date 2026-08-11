@@ -30,7 +30,7 @@ fun Application.configureDatabase() {
     Database.connect(HikariDataSource(config))
 
     transaction {
-        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable)
+        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
         runMigrations()
@@ -47,6 +47,7 @@ private fun Transaction.runMigrations() {
         "CREATE INDEX IF NOT EXISTS idx_bills_user_date ON bills(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_corrections_processed ON correction_log(processed, user_id)",
         "CREATE INDEX IF NOT EXISTS idx_templates_user ON bill_templates(user_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_user_month ON budgets(user_id, month_start)",
     )
     indexes.forEach { sql ->
         try {

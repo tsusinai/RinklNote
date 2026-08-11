@@ -42,5 +42,6 @@ data class Bill(
     val source: String = "APP", // "APP" or "QQ"
     @ColumnInfo(name = "server_id") val serverId: Long? = null, // server bill id for dedup
     @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    val dirty: Boolean = false // true = local edit/delete not yet pushed to server
 )

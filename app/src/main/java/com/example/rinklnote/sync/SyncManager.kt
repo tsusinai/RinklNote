@@ -2,12 +2,15 @@ package com.example.rinklnote.sync
 
 import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BillTemplateDao
+import com.example.rinklnote.data.db.dao.BudgetDao
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
+import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.TemplateDTO
+import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import kotlinx.coroutines.flow.first
 
 sealed class SyncResult {
@@ -20,29 +23,19 @@ class SyncManager(
     private val api: ApiService,
     private val tokenManager: TokenManager,
     private val billDao: BillDao,
-    private val templateDao: BillTemplateDao? = null
+    private val templateDao: BillTemplateDao? = null,
+    private val budgetDao: BudgetDao? = null
 ) {
     suspend fun sync(): SyncResult {
         if (!tokenManager.isLoggedIn()) return SyncResult.NotLoggedIn
 
         return try {
-            // 1. Push: upload local unsynced bills
+            // 1. Push: upload local unsynced bills (create/update/delete branching)
             var pushed = 0
             val unsynced = billDao.getUnsynced()
             for (bill in unsynced) {
                 try {
-                    val dto = api.uploadBill(CreateBillRequest(
-                        amount = bill.amount,
-                        billType = bill.billType,
-                        categoryId = bill.categoryId,
-                        categoryName = bill.categoryName,
-                        subCategoryName = bill.subCategoryName,
-                        accountId = bill.accountId,
-                        remark = bill.remark,
-                        date = bill.date
-                    ))
-                    billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
-                    pushed++
+                    if (pushOneBill(bill)) pushed++
                 } catch (_: Exception) {
                     // Individual push failure → skip, retry next sync
                 }
@@ -100,31 +93,123 @@ class SyncManager(
                 } catch (_: Exception) {}
             }
 
+            // 4. Sync budgets (push unsynced, then pull all + LWW merge)
+            syncBudgets()
+
             SyncResult.Success(pushed, pulled)
         } catch (e: Exception) {
             SyncResult.Error(e.message ?: "同步失败")
         }
     }
 
-    /** Upload a single local bill (non-blocking, called after QuickAdd) */
+    /**
+     * Push a single local bill to the server, branching on its state:
+     *  - deleted            → DELETE (soft-deleted server-side, hard-delete locally)
+     *  - serverId != null   → PUT (update existing)
+     *  - otherwise          → POST (create)
+     */
+    private suspend fun pushOneBill(bill: Bill): Boolean {
+        return when {
+            bill.deleted -> {
+                val serverId = bill.serverId ?: return false
+                api.deleteBill(serverId)
+                billDao.hardDeleteById(bill.id)
+                true
+            }
+            bill.serverId != null -> {
+                val dto = api.updateBill(bill.serverId, bill.toRequest())
+                billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
+                true
+            }
+            else -> {
+                val dto = api.uploadBill(bill.toRequest())
+                billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
+                true
+            }
+        }
+    }
+
+    /** Upload a single local bill (non-blocking, called after QuickAdd/edit/delete) */
     suspend fun pushBill(bill: Bill) {
         try {
-            val dto = api.uploadBill(CreateBillRequest(
-                amount = bill.amount,
-                billType = bill.billType,
-                categoryId = bill.categoryId,
-                categoryName = bill.categoryName,
-                subCategoryName = bill.subCategoryName,
-                accountId = bill.accountId,
-                remark = bill.remark,
-                date = bill.date
-            ))
-            billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
+            pushOneBill(bill)
         } catch (_: Exception) {
             // Will be pushed on next full sync
         }
     }
+
+    /** Upload a single local budget (non-blocking, called after SetBudget) */
+    suspend fun pushBudget(budget: Budget) {
+        val dao = budgetDao ?: return
+        try {
+            if (!budget.deleted) {
+                val dto = api.upsertBudget(UpsertBudgetRequest(budget.monthStart, budget.amount))
+                dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
+            }
+        } catch (_: Exception) {
+            // Will be pushed on next full sync
+        }
+    }
+
+    /** Budgets are few in number → push all unsynced, pull everything, merge by LWW. */
+    private suspend fun syncBudgets() {
+        val dao = budgetDao ?: return
+
+        // Push unsynced (server_id IS NULL OR dirty = 1)
+        dao.getUnsynced().forEach { budget ->
+            try {
+                if (!budget.deleted) {
+                    val dto = api.upsertBudget(UpsertBudgetRequest(budget.monthStart, budget.amount))
+                    dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Pull all + last-write-wins merge
+        try {
+            api.getBudgets().forEach { dto ->
+                val serverTime = dto.updatedAt ?: dto.createdAt
+                val local = dao.getByServerId(dto.id)
+                if (local == null) {
+                    dao.upsert(
+                        Budget(
+                            serverId = dto.id,
+                            monthStart = dto.monthStart,
+                            amount = dto.amount,
+                            updatedAt = serverTime,
+                            deleted = dto.deleted,
+                            dirty = false
+                        )
+                    )
+                } else {
+                    val localTime = local.updatedAt ?: 0L
+                    if (serverTime > localTime) {
+                        dao.upsert(
+                            local.copy(
+                                amount = dto.amount,
+                                monthStart = dto.monthStart,
+                                updatedAt = serverTime,
+                                deleted = dto.deleted,
+                                dirty = false
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
 }
+
+private fun Bill.toRequest() = CreateBillRequest(
+    amount = amount,
+    billType = billType,
+    categoryId = categoryId,
+    categoryName = categoryName,
+    subCategoryName = subCategoryName,
+    accountId = accountId,
+    remark = remark,
+    date = date
+)
 
 private fun TemplateDTO.toEntity() = BillTemplate(
     serverId = this.id, label = this.label, amount = this.amount,

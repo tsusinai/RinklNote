@@ -19,6 +19,19 @@ interface ApiService {
     @POST("api/bills")
     suspend fun uploadBill(@Body bill: CreateBillRequest): BillDTO
 
+    @PUT("api/bills/{id}")
+    suspend fun updateBill(@Path("id") id: Long, @Body bill: CreateBillRequest): BillDTO
+
+    @DELETE("api/bills/{id}")
+    suspend fun deleteBill(@Path("id") id: Long): MessageResponse
+
+    // Budgets
+    @GET("api/budgets")
+    suspend fun getBudgets(): List<BudgetDTO>
+
+    @PUT("api/budgets")
+    suspend fun upsertBudget(@Body request: UpsertBudgetRequest): BudgetDTO
+
     @POST("api/bills/parse")
     suspend fun parseBill(@Body request: ParseRequest): ParseResponse
 

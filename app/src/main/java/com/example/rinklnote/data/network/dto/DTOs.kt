@@ -71,4 +71,20 @@ data class ParseResponse(
 )
 
 @Serializable
+data class BudgetDTO(
+    val id: Long,
+    val monthStart: Long,
+    val amount: Double,
+    val createdAt: Long,
+    val updatedAt: Long? = null,
+    val deleted: Boolean = false
+)
+
+@Serializable
+data class UpsertBudgetRequest(
+    val monthStart: Long,
+    val amount: Double
+)
+
+@Serializable
 data class ReorderRequest(val ids: List<Long>)

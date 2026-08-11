@@ -67,11 +67,11 @@ import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
+import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
-import com.example.rinklnote.util.VoiceParser
 import kotlinx.coroutines.launch
 
 private val tabs = listOf("计划", "记账", "资产")
@@ -93,13 +93,16 @@ fun AppNavigation(app: RinklNoteApp) {
     val tabWidth = screenWidth / 3
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
-        factory = BookkeepingViewModel.Factory(app.repository)
+        factory = BookkeepingViewModel.Factory(app.repository, app.syncManager)
     )
     val quickAddVM: QuickAddViewModel = viewModel(
         factory = QuickAddViewModel.Factory(app.repository, app.syncManager, app.apiService)
     )
     val assetsVM: AssetsViewModel = viewModel(
         factory = AssetsViewModel.Factory(app.repository)
+    )
+    val budgetVM: BudgetViewModel = viewModel(
+        factory = BudgetViewModel.Factory(app.repository, app.syncManager)
     )
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
@@ -140,20 +143,10 @@ fun AppNavigation(app: RinklNoteApp) {
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
             val spokenText = matches?.firstOrNull() ?: ""
-            val parsed = VoiceParser.parse(spokenText)
-            if (parsed.amount != null) {
-                quickAddVM.onEvent(QuickAddEvent.Clear)
-                val amountStr = if (parsed.amount == parsed.amount.toLong().toDouble()) {
-                    parsed.amount.toLong().toString()
-                } else {
-                    parsed.amount.toString()
-                }
-                amountStr.forEach { digit ->
-                    quickAddVM.onEvent(QuickAddEvent.Digit(digit.toString()))
-                }
-            }
-            if (parsed.remark.isNotBlank()) {
-                quickAddVM.onEvent(QuickAddEvent.RemarkChanged(parsed.remark))
+            if (spokenText.isNotBlank()) {
+                // Voice is the NLP entry: server parse (with local fallback in the VM)
+                quickAddVM.onEvent(QuickAddEvent.NlpInput(spokenText))
+                quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
             }
         }
     }
@@ -194,7 +187,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     .statusBarsPadding()
             ) { page ->
                 when (page) {
-                    0 -> PlanScreen()
+                    0 -> PlanScreen(viewModel = budgetVM)
                     1 -> BookkeepingScreen(
                         onOpenDrawer = openDrawer,
                         viewModel = bookkeepingVM

@@ -20,7 +20,7 @@ class RinklNoteApp : Application() {
     val repository: BillRepository by lazy { BillRepositoryImpl(database) }
     val tokenManager: TokenManager by lazy { TokenManager(this) }
     val apiService: ApiService by lazy { RetrofitClient.create(tokenManager) }
-    val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao()) }
+    val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao(), database.budgetDao()) }
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

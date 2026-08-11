@@ -52,9 +52,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
+import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
@@ -168,6 +170,15 @@ private fun DrawerContent(
 ) {
     // Collect state once — children read from snapshot, no duplicate subscriptions
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
+
+    // Fetch smart suggestion once when the drawer opens
+    LaunchedEffect(Unit) {
+        val s = viewModel.state.value
+        if (s.suggestion == null && !s.suggestionDismissed) {
+            viewModel.loadSuggestion()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -192,11 +203,28 @@ private fun DrawerContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        state.suggestion?.let { suggestion ->
+            SuggestionSection(
+                label = suggestion.label,
+                onUse = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
+                onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        if (state.templates.isNotEmpty()) {
+            TemplatesSection(
+                templates = state.templates,
+                onTemplateClick = { viewModel.onEvent(QuickAddEvent.TemplateClick(it)) }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.subCategories, state.selectedSubCategory, viewModel)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        AccountSection(state.accounts, state.selectedAccount, viewModel)
+        AccountSection(state.accounts, state.selectedAccount, balanceHidden, viewModel)
 
         Spacer(modifier = Modifier.height(17.dp))
 
@@ -225,6 +253,83 @@ private fun DrawerContent(
                     contentDescription = "语音记账",
                     modifier = Modifier.size(28.dp),
                     tint = Color.Unspecified
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionSection(
+    label: String,
+    onUse: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable { onUse() }
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f)
+        )
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text("✕", fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+    }
+}
+
+@Composable
+private fun TemplatesSection(
+    templates: List<BillTemplate>,
+    onTemplateClick: (BillTemplate) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("快捷模板", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text("一键记账", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        templates.forEach { template ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onTemplateClick(template) }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(template.label, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    "¥${template.amount.toBigDecimal().stripTrailingZeros().toPlainString()}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.tertiary
                 )
             }
         }
@@ -342,6 +447,7 @@ private fun SubCategoryPopup(
 private fun AccountSection(
     accounts: List<Account>,
     selectedAccount: Account?,
+    hidden: Boolean,
     viewModel: QuickAddViewModel
 ) {
     Column(
@@ -359,9 +465,11 @@ private fun AccountSection(
         ) {
             Text("账户选择", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Icon(
-                painter = painterResource(R.drawable.ic_eye_hide),
-                contentDescription = "隐藏",
-                modifier = Modifier.size(15.dp),
+                painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
+                contentDescription = if (hidden) "显示余额" else "隐藏余额",
+                modifier = Modifier
+                    .size(15.dp)
+                    .clickable { BalancePrivacy.toggle() },
                 tint = Color.Unspecified
             )
         }
@@ -370,6 +478,7 @@ private fun AccountSection(
             AccountRow(
                 account = account,
                 isSelected = selectedAccount?.id == account.id,
+                hidden = hidden,
                 onClick = { viewModel.onEvent(QuickAddEvent.SelectAccount(account)) }
             )
         }
@@ -377,7 +486,7 @@ private fun AccountSection(
 }
 
 @Composable
-private fun AccountRow(account: Account, isSelected: Boolean, onClick: () -> Unit) {
+private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -397,7 +506,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, onClick: () -> Uni
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("***", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (hidden) "***" else String.format("%.2f", account.balance), fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier

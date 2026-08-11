@@ -1,6 +1,8 @@
 package com.example.rinklnote.ui.component
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +36,12 @@ fun BillCard(
     dayOfWeek: String,
     totalAmount: Double,
     bills: List<Bill>,
+    revealedBillId: Long?,
+    menuBill: Bill?,
+    onRevealChange: (Long?) -> Unit,
+    onMenuChange: (Bill?) -> Unit,
+    onEdit: (Bill) -> Unit,
+    onDelete: (Bill) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -68,25 +77,62 @@ fun BillCard(
         // Items
         bills.forEach { bill ->
             val displayName = bill.subCategoryName ?: bill.categoryName
-            BillItem(
-                categoryName = displayName,
-                amount = if (bill.billType == "EXPENSE") -bill.amount else bill.amount,
-                billType = bill.billType
-            )
+            val revealed = revealedBillId == bill.id
+            Box {
+                SwipeableBillItem(
+                    revealed = revealed,
+                    onRevealChange = { r -> onRevealChange(if (r) bill.id else null) },
+                    onDelete = { onDelete(bill) }
+                ) {
+                    BillItem(
+                        categoryName = displayName,
+                        amount = if (bill.billType == "EXPENSE") -bill.amount else bill.amount,
+                        billType = bill.billType,
+                        onClick = {
+                            // Tap an open row to close it; tap a closed row to edit
+                            if (revealed) onRevealChange(null) else onEdit(bill)
+                        },
+                        onLongPress = { onMenuChange(bill) }
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuBill?.id == bill.id,
+                    onDismissRequest = { onMenuChange(null) }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("编辑") },
+                        onClick = {
+                            onMenuChange(null)
+                            onEdit(bill)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除") },
+                        onClick = {
+                            onMenuChange(null)
+                            onDelete(bill)
+                        }
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BillItem(
     categoryName: String,
     amount: Double,
-    billType: String
+    billType: String,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

@@ -3,8 +3,11 @@ package com.example.rinklnote.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.Job
@@ -19,34 +22,70 @@ import kotlinx.coroutines.launch
 @androidx.compose.runtime.Immutable
 data class BookkeepingState(
     val bills: List<Bill> = emptyList(),
+    val monthBills: List<Bill> = emptyList(),
     val totalExpense: Double = 0.0,
     val totalIncome: Double = 0.0,
     val isLoading: Boolean = false,
-    val currentDate: Long = System.currentTimeMillis()
-)
+    val currentDate: Long = System.currentTimeMillis(),
+    val editingBill: Bill? = null,
+    val expenseCategories: List<Category> = emptyList(),
+    val incomeCategories: List<Category> = emptyList(),
+    val accounts: List<Account> = emptyList()
+) {
+    val categories: List<Category>
+        get() = if (editingBill?.billType == "INCOME") incomeCategories else expenseCategories
+}
 
 sealed interface BookkeepingEvent {
     data object Refresh : BookkeepingEvent
+    data class EditBill(val bill: Bill) : BookkeepingEvent
+    data object CancelEdit : BookkeepingEvent
+    data class ConfirmEdit(val bill: Bill) : BookkeepingEvent
+    data class DeleteBill(val bill: Bill) : BookkeepingEvent
 }
 
 class BookkeepingViewModel(
-    private val repository: BillRepository
+    private val repository: BillRepository,
+    private val syncManager: SyncManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(BookkeepingState())
     val state: StateFlow<BookkeepingState> = _state.asStateFlow()
 
     private var billCollectorJob: Job? = null
+    private var monthBillCollectorJob: Job? = null
 
     init {
         // Single long-lived bill collector — never leaks
         collectBills()
+        collectMonthBills()
         refreshTotals()
+
+        // Reference data for the edit overlay
+        viewModelScope.launch {
+            repository.expenseCategories.collect { cats ->
+                _state.update { it.copy(expenseCategories = cats) }
+            }
+        }
+        viewModelScope.launch {
+            repository.incomeCategories.collect { cats ->
+                _state.update { it.copy(incomeCategories = cats) }
+            }
+        }
+        viewModelScope.launch {
+            repository.accounts.collect { accts ->
+                _state.update { it.copy(accounts = accts) }
+            }
+        }
     }
 
     fun onEvent(event: BookkeepingEvent) {
         when (event) {
             is BookkeepingEvent.Refresh -> refreshTotals()
+            is BookkeepingEvent.EditBill -> _state.update { it.copy(editingBill = event.bill) }
+            is BookkeepingEvent.CancelEdit -> _state.update { it.copy(editingBill = null) }
+            is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
+            is BookkeepingEvent.DeleteBill -> deleteBill(event.bill)
         }
     }
 
@@ -57,6 +96,17 @@ class BookkeepingViewModel(
             val nextMonthStart = getNextMonthStart()
             repository.observeBillsByMonth(startDate, nextMonthStart).collect { bills ->
                 _state.update { it.copy(bills = bills, isLoading = false) }
+            }
+        }
+    }
+
+    private fun collectMonthBills() {
+        monthBillCollectorJob?.cancel()
+        monthBillCollectorJob = viewModelScope.launch {
+            val monthStart = getMonthStart()
+            val nextMonthStart = getNextMonthStart()
+            repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
+                _state.update { it.copy(monthBills = bills) }
             }
         }
     }
@@ -72,10 +122,29 @@ class BookkeepingViewModel(
         }
     }
 
-    class Factory(private val repository: BillRepository) : ViewModelProvider.Factory {
+    private fun confirmEdit(bill: Bill) {
+        val dirtyBill = bill.copy(dirty = true, updatedAt = System.currentTimeMillis())
+        viewModelScope.launch {
+            repository.updateBill(dirtyBill)
+            syncManager?.let { launch { it.pushBill(dirtyBill) } }
+            _state.update { it.copy(editingBill = null) }
+        }
+    }
+
+    private fun deleteBill(bill: Bill) {
+        viewModelScope.launch {
+            repository.deleteBill(bill) // soft delete locally (dirty=1, deleted=1)
+            syncManager?.let { launch { it.pushBill(bill.copy(deleted = true, dirty = true)) } }
+        }
+    }
+
+    class Factory(
+        private val repository: BillRepository,
+        private val syncManager: SyncManager? = null
+    ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return BookkeepingViewModel(repository) as T
+            return BookkeepingViewModel(repository, syncManager) as T
         }
     }
 }

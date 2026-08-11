@@ -12,6 +12,7 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
+import com.example.rinklnote.util.VoiceParser
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.channels.Channel
@@ -64,6 +65,7 @@ sealed interface QuickAddEvent {
     data object NlpSubmit : QuickAddEvent
     data class TemplateClick(val template: BillTemplate) : QuickAddEvent
     data object SuggestionClick : QuickAddEvent
+    data object DismissSuggestion : QuickAddEvent
     data object Confirm : QuickAddEvent
 }
 
@@ -108,6 +110,11 @@ class QuickAddViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            repository.observeTemplates().collect { templates ->
+                _state.update { it.copy(templates = templates) }
+            }
+        }
     }
 
     fun onEvent(event: QuickAddEvent) {
@@ -126,6 +133,9 @@ class QuickAddViewModel(
             is QuickAddEvent.NlpSubmit -> onNlpSubmit()
             is QuickAddEvent.TemplateClick -> onTemplateClick(event.template)
             is QuickAddEvent.SuggestionClick -> onSuggestionClick()
+            is QuickAddEvent.DismissSuggestion -> _state.update {
+                it.copy(suggestion = null, suggestionDismissed = true)
+            }
             is QuickAddEvent.Confirm -> confirm()
         }
     }
@@ -187,7 +197,11 @@ class QuickAddViewModel(
         val text = _state.value.nlpInput.trim()
         if (text.isBlank()) return
         _state.update { it.copy(isParsing = true) }
-        val svc = api ?: return
+        val svc = api
+        if (svc == null) {
+            applyLocalParse(text)
+            return
+        }
         viewModelScope.launch {
             try {
                 val result = svc.parseBill(ParseRequest(text))
@@ -212,7 +226,37 @@ class QuickAddViewModel(
                 _state.update { it.copy(isParsing = false) }
             } catch (_: Exception) {
                 _state.update { it.copy(isParsing = false) }
+                applyLocalParse(text)
             }
+        }
+    }
+
+    /** Offline/unauth fallback: local rule-based parsing (VoiceParser). */
+    private fun applyLocalParse(text: String) {
+        val parsed = VoiceParser.parse(text)
+        if (parsed.amount == null) {
+            _state.update { it.copy(isParsing = false) }
+            return
+        }
+        val cat = parsed.categoryName?.let { name -> _state.value.categories.find { it.name == name } }
+        val amountStr = if (parsed.amount == parsed.amount.toLong().toDouble()) {
+            parsed.amount.toLong().toString()
+        } else {
+            parsed.amount.toString()
+        }
+        _state.update {
+            it.copy(
+                amount = amountStr,
+                selectedCategory = cat ?: it.selectedCategory,
+                billType = cat?.billType ?: it.billType,
+                remark = parsed.remark.ifBlank { it.remark },
+                nlpInput = "",
+                isParsing = false
+            )
+        }
+        // Category auto-selected → proceed to CountAfter (fixes voice category bug)
+        if (cat != null) {
+            _effects.trySend(QuickAddEffect.ConfirmRequested)
         }
     }
 

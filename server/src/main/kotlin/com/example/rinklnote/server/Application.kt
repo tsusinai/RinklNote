@@ -3,6 +3,7 @@ package com.example.rinklnote.server
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
@@ -50,6 +51,7 @@ fun Application.module() {
 
     val userService = UserService(jwtSecret, jwtIssuer, jwtAudience)
     val billService = BillService()
+    val budgetService = BudgetService()
 
     val deepseekApiKey = System.getenv("DEEPSEEK_API_KEY")
         ?: environment.config.propertyOrNull("deepseek.apiKey")?.getString()
@@ -103,6 +105,7 @@ fun Application.module() {
     routing {
         authRoutes(userService)
         billRoutes(billService, nluService)
+        budgetRoutes(budgetService)
         correctionRoutes()
         keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService, nluService)

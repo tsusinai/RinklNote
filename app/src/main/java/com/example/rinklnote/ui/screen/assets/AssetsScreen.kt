@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.assets
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,8 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.screen.login.LoginScreen
 import com.example.rinklnote.ui.screen.profile.BindQQScreen
+import com.example.rinklnote.ui.util.BalancePrivacy
+import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
@@ -63,11 +66,13 @@ fun AssetsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val authState by authViewModel.state.collectAsStateWithLifecycle()
+    val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
 
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
+    var editingAccount by remember { mutableStateOf<Account?>(null) }
 
     // Auto-sync on tab open when logged in
     LaunchedEffect(authState.isLoggedIn) {
@@ -90,12 +95,27 @@ fun AssetsScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "资产管理",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "资产管理",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Icon(
+                painter = painterResource(if (balanceHidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
+                contentDescription = if (balanceHidden) "显示余额" else "隐藏余额",
+                modifier = Modifier
+                    .size(22.dp)
+                    .clickable { BalancePrivacy.toggle() },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         // QQ Sync Section
         SyncSection(
@@ -122,8 +142,15 @@ fun AssetsScreen(
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "total") {
+                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden)
+            }
             items(state.accounts, key = { it.id }) { account ->
-                AccountCard(account = account)
+                AccountCard(
+                    account = account,
+                    hidden = balanceHidden,
+                    onClick = { editingAccount = account }
+                )
             }
         }
     }
@@ -133,6 +160,17 @@ fun AssetsScreen(
     }
     if (showBindQQ) {
         BindQQScreen(viewModel = authViewModel, onDismiss = { showBindQQ = false })
+    }
+
+    editingAccount?.let { account ->
+        BalanceEditDialog(
+            account = account,
+            onConfirm = { updated ->
+                editingAccount = null
+                viewModel.onEvent(AssetsEvent.UpdateBalance(updated))
+            },
+            onDismiss = { editingAccount = null }
+        )
     }
 }
 
@@ -194,13 +232,46 @@ private fun SyncSection(
 }
 
 @Composable
-private fun AccountCard(account: Account) {
+private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean) {
+    val total = accounts.sumOf { it.balance }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "总资产",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        Text(
+            text = if (hidden) "***" else String.format("%.2f", total),
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    }
+}
+
+@Composable
+private fun AccountCard(
+    account: Account,
+    hidden: Boolean,
+    onClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(4.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -220,7 +291,7 @@ private fun AccountCard(account: Account) {
             )
         }
         Text(
-            text = "***",
+            text = if (hidden) "***" else String.format("%.2f", account.balance),
             fontSize = 20.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface

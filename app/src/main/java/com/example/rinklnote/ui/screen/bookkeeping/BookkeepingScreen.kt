@@ -9,20 +9,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import android.os.Build
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +38,7 @@ import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.ChartBox
+import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.util.toDayOfWeek
 import com.example.rinklnote.util.toHeaderString
@@ -55,6 +57,12 @@ fun BookkeepingScreen(
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
     val (chartData, chartLabels) = remember(state.bills) { computeChartData(state.bills) }
 
+    // Interaction state
+    var revealedBillId by remember { mutableStateOf<Long?>(null) }
+    var menuBill by remember { mutableStateOf<Bill?>(null) }
+    var deleteTarget by remember { mutableStateOf<Bill?>(null) }
+    var showMonthDetail by remember { mutableStateOf(false) }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item(key = "topbar") { TopBar(date = state.currentDate) }
@@ -64,7 +72,8 @@ fun BookkeepingScreen(
                     expenseData = chartData,
                     totalExpense = state.totalExpense,
                     totalIncome = state.totalIncome,
-                    labels = chartLabels
+                    labels = chartLabels,
+                    onDetailClick = { showMonthDetail = true }
                 )
             }
             item(key = "spacer") { Spacer(modifier = Modifier.height(20.dp)) }
@@ -75,7 +84,19 @@ fun BookkeepingScreen(
                         date = date,
                         dayOfWeek = date.toDayOfWeek(),
                         totalAmount = bills.sumOf { if (it.billType == "EXPENSE") -it.amount else it.amount },
-                        bills = bills
+                        bills = bills,
+                        revealedBillId = revealedBillId,
+                        menuBill = menuBill,
+                        onRevealChange = { revealedBillId = it },
+                        onMenuChange = { menuBill = it },
+                        onEdit = { bill ->
+                            menuBill = null
+                            viewModel.onEvent(BookkeepingEvent.EditBill(bill))
+                        },
+                        onDelete = { bill ->
+                            menuBill = null
+                            deleteTarget = bill
+                        }
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -97,6 +118,45 @@ fun BookkeepingScreen(
         ) {
             Text("+", fontSize = 28.sp, fontWeight = FontWeight.Light, color = MaterialTheme.colorScheme.onSurface)
         }
+
+        // Edit overlay — fullscreen, covers everything while editing
+        state.editingBill?.let { bill ->
+            BillEditOverlay(
+                bill = bill,
+                expenseCategories = state.expenseCategories,
+                incomeCategories = state.incomeCategories,
+                accounts = state.accounts,
+                onCancel = { viewModel.onEvent(BookkeepingEvent.CancelEdit) },
+                onConfirm = { newBill -> viewModel.onEvent(BookkeepingEvent.ConfirmEdit(newBill)) }
+            )
+        }
+
+        // Delete confirm dialog
+        deleteTarget?.let { bill ->
+            AlertDialog(
+                onDismissRequest = { deleteTarget = null },
+                title = { Text("删除账单") },
+                text = { Text("确定删除这笔${(bill.subCategoryName ?: bill.categoryName)}的账单吗？") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleteTarget = null
+                        viewModel.onEvent(BookkeepingEvent.DeleteBill(bill))
+                    }) {
+                        Text("删除", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+                }
+            )
+        }
+
+        // Month detail overlay
+        MonthDetailOverlay(
+            visible = showMonthDetail,
+            monthBills = state.monthBills,
+            onDismiss = { showMonthDetail = false }
+        )
     }
 }
 

@@ -59,7 +59,8 @@ fun ChartBox(
     totalExpense: Double,
     totalIncome: Double,
     labels: List<String>,
-    currentMonth: Int = java.time.LocalDate.now().monthValue
+    currentMonth: Int = java.time.LocalDate.now().monthValue,
+    onDetailClick: () -> Unit = {}
 ) {
     var chartType by remember { mutableStateOf(ChartType.LINE) }
     val textMeasurer = rememberTextMeasurer()
@@ -158,12 +159,12 @@ fun ChartBox(
 
             Spacer(modifier = Modifier.width(4.dp))
 
-            // Detail button
+            // Detail button — opens month detail overlay
             Box(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable { /* TODO: detail view */ },
+                    .clickable { onDetailClick() },
                 contentAlignment = Alignment.Center
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
