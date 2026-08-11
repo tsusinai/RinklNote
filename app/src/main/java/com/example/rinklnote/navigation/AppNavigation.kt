@@ -3,7 +3,7 @@ package com.example.rinklnote.navigation
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.speech.RecognizerIntent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,9 +30,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,10 +60,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
+import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
+import com.example.rinklnote.ui.screen.login.LoginPage
 import com.example.rinklnote.ui.screen.plan.PlanScreen
+import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.Motion
@@ -71,9 +78,12 @@ import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val tabs = listOf("计划", "记账", "资产", "我的")
+
+private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minutes while on screen
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
@@ -82,6 +92,10 @@ fun AppNavigation(app: RinklNoteApp) {
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
     var showConfirmed by remember { mutableStateOf(false) }
+    var showLogin by remember { mutableStateOf(false) }
+    var showBindQQ by remember { mutableStateOf(false) }
+    var voiceActive by remember { mutableStateOf(false) }
+    var showQqBotGuide by remember { mutableStateOf(false) }
 
     val openDrawer: () -> Unit = {
         showDrawer = true
@@ -106,6 +120,31 @@ fun AppNavigation(app: RinklNoteApp) {
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
     )
+    val authState by authVM.state.collectAsStateWithLifecycle()
+    val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
+
+    // Periodic auto-sync while logged in (respects the auto-sync setting). The
+    // QQ-bound check was removed — syncing works whether or not QQ is bound. The
+    // loop restarts whenever login state or the setting changes.
+    LaunchedEffect(authState.isLoggedIn, autoSync) {
+        while (authState.isLoggedIn && autoSync) {
+            app.syncManager.sync()
+            delay(AUTO_SYNC_INTERVAL_MS)
+        }
+    }
+
+    // Dismiss the QuickAdd drawer / keypad whenever the user leaves the bookkeeping
+    // tab (tap or swipe) — otherwise the overlay stays on top of other tabs.
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != 1) {
+            showDrawer = false
+            showKeypad = false
+            showConfirmed = false
+            voiceActive = false
+            quickAddVM.reset()
+            quickAddVM.resetConfirming()
+        }
+    }
 
     val onTabClick: (Int) -> Unit = { index ->
         coroutineScope.launch {
@@ -135,26 +174,14 @@ fun AppNavigation(app: RinklNoteApp) {
     BackHandler(enabled = showDrawer) { showDrawer = false }
     BackHandler(enabled = showKeypad) { showKeypad = false }
 
-    // Voice input launchers
-    val voiceLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spokenText = matches?.firstOrNull() ?: ""
-            if (spokenText.isNotBlank()) {
-                // Voice is the NLP entry: server parse (with local fallback in the VM)
-                quickAddVM.onEvent(QuickAddEvent.NlpInput(spokenText))
-                quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
-            }
-        }
-    }
-
+    // Voice input: bottom floating mini bar (device real-time recognition, server
+    // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            startVoiceRecognition(context, voiceLauncher)
+            showKeypad = false
+            voiceActive = true
         } else {
             Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
         }
@@ -168,7 +195,8 @@ fun AppNavigation(app: RinklNoteApp) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            startVoiceRecognition(context, voiceLauncher)
+            showKeypad = false
+            voiceActive = true
         } else {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -191,18 +219,16 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenDrawer = openDrawer,
                         viewModel = bookkeepingVM
                     )
-                    2 -> AssetsScreen(
-                        viewModel = assetsVM,
-                        authViewModel = authVM,
-                        syncManager = app.syncManager,
-                        settingsManager = app.settingsManager
-                    )
+                    2 -> AssetsScreen(viewModel = assetsVM)
                     3 -> ProfileScreen(
                         authViewModel = authVM,
                         settingsManager = app.settingsManager,
                         tokenManager = app.tokenManager,
                         syncManager = app.syncManager,
-                        repository = app.repository
+                        repository = app.repository,
+                        onLoginClick = { showLogin = true },
+                        onBindQQClick = { showBindQQ = true },
+                        onQqBotGuideClick = { showQqBotGuide = true }
                     )
                 }
             }
@@ -223,6 +249,7 @@ fun AppNavigation(app: RinklNoteApp) {
             onDismiss = {
                 showDrawer = false
                 showConfirmed = false
+                voiceActive = false
                 quickAddVM.reset()
             },
             onFinalConfirm = onFinalConfirm,
@@ -275,7 +302,93 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
             }
         }
+
+        // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav
+        if (showLogin) {
+            LoginPage(viewModel = authVM, onDismiss = { showLogin = false })
+        }
+        if (showBindQQ) {
+            BindQQPage(viewModel = authVM, onDismiss = { showBindQQ = false })
+        }
+
+        // Bottom floating voice bar — no full-screen page. Device recognizer streams
+        // live text while speaking; on success the transcript fills the bill via NLP.
+        AnimatedVisibility(
+            visible = voiceActive,
+            enter = slideInVertically(animationSpec = Motion.SheetEnter, initialOffsetY = { it }),
+            exit = slideOutVertically(animationSpec = Motion.SheetExit, targetOffsetY = { it })
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                VoiceInputBar(
+                    api = app.apiService,
+                    onResult = { text ->
+                        voiceActive = false
+                        // Voice is the NLP entry: server parse (with local fallback in the VM)
+                        quickAddVM.onEvent(QuickAddEvent.NlpInput(text))
+                        quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
+                    },
+                    onDismiss = { voiceActive = false }
+                )
+            }
+        }
+
+        // QQ 机器人绑定引导 — deep-links to the web binding page
+        if (showQqBotGuide) {
+            QqBotGuideDialog(
+                botBound = authState.botBound,
+                onOpenWeb = {
+                    showQqBotGuide = false
+                    try {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(RetrofitClient.BASE_URL))
+                        )
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onDismiss = { showQqBotGuide = false }
+            )
+        }
     }
+}
+
+@Composable
+private fun QqBotGuideDialog(
+    botBound: Boolean,
+    onOpenWeb: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("QQ 机器人绑定") },
+        text = {
+            Column {
+                Text(
+                    text = "状态：" + if (botBound) "已绑定（可在 QQ 里直接发消息记账）" else "未绑定",
+                    fontSize = 14.sp,
+                    color = if (botBound) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("绑定步骤：", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("1. 在 QQ 中给机器人发送任意消息，机器人会回复 6 位绑定码；", fontSize = 13.sp)
+                Text("2. 打开网页并登录同一账号；", fontSize = 13.sp)
+                Text("3. 在网页「账号绑定」中输入绑定码完成绑定。", fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "绑定后即可通过 QQ 给机器人发消息记账，账单会自动同步。",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onOpenWeb) { Text("前往网页完成绑定") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 @Composable
@@ -331,18 +444,3 @@ private fun CustomBottomBar(
     }
 }
 
-private fun startVoiceRecognition(
-    context: android.content.Context,
-    launcher: androidx.activity.result.ActivityResultLauncher<Intent>
-) {
-    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-        putExtra(RecognizerIntent.EXTRA_PROMPT, "说出消费内容，如：午餐二十元")
-    }
-    try {
-        launcher.launch(intent)
-    } catch (e: Exception) {
-        Toast.makeText(context, "语音识别不可用", Toast.LENGTH_SHORT).show()
-    }
-}

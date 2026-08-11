@@ -36,11 +36,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.theme.IncomeGreen
+import java.time.LocalDate
 
 @Composable
 fun MonthDetailOverlay(
     visible: Boolean,
     monthBills: List<Bill>,
+    monthOffset: Int,
+    onPrevMonth: () -> Unit,
+    onNextMonth: () -> Unit,
     onDismiss: () -> Unit
 ) {
     BackHandler(enabled = visible) { onDismiss() }
@@ -63,7 +67,22 @@ fun MonthDetailOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("本月明细", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onPrevMonth, enabled = true) {
+                        Text("‹", fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Text(
+                        text = monthTitle(monthOffset),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    // Next is disabled at the current month — the browser only
+                    // navigates into the past.
+                    TextButton(onClick = onNextMonth, enabled = monthOffset < 0) {
+                        Text("›", fontSize = 26.sp, color = if (monthOffset < 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 TextButton(onClick = onDismiss) {
                     Text("关闭", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -86,7 +105,7 @@ fun MonthDetailOverlay(
                             modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("本月暂无账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("该月暂无账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -105,6 +124,12 @@ fun MonthDetailOverlay(
             }
         }
     }
+}
+
+/** Title for the month-detail overlay, e.g. "2026年8月" or "2026年7月" (offset -1). */
+private fun monthTitle(offset: Int): String {
+    val d = LocalDate.now().plusMonths(offset.toLong())
+    return "${d.year}年${d.monthValue}月"
 }
 
 @Composable

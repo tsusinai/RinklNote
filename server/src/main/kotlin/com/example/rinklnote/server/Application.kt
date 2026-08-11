@@ -7,6 +7,8 @@ import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.asr.AsrConfig
+import com.example.rinklnote.server.services.asr.WhisperAsrService
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.DefaultNLUService
 import com.example.rinklnote.server.services.nlu.LLMParser
@@ -21,6 +23,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.callloging.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.cancel
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
@@ -36,18 +39,20 @@ fun Application.module() {
     configureDatabase()
     configureSecurity()
 
-    val jwtSecret = System.getenv("JWT_SECRET")
-        ?: environment.config.propertyOrNull("jwt.secret")?.getString()
-        ?: throw IllegalStateException("JWT secret not configured. Set JWT_SECRET env var.")
+    val jwtSecret = requireStrongSecret(
+        System.getenv("JWT_SECRET") ?: environment.config.propertyOrNull("jwt.secret")?.getString(),
+        "JWT_SECRET"
+    )
     val jwtIssuer = System.getenv("JWT_ISSUER")
         ?: environment.config.propertyOrNull("jwt.issuer")?.getString()
         ?: "rinklnote-server"
     val jwtAudience = System.getenv("JWT_AUDIENCE")
         ?: environment.config.propertyOrNull("jwt.audience")?.getString()
         ?: "rinklnote-app"
-    val webhookSecret = System.getenv("WEBHOOK_SECRET")
-        ?: environment.config.propertyOrNull("webhook.secret")?.getString()
-        ?: throw IllegalStateException("Webhook secret not configured. Set WEBHOOK_SECRET env var.")
+    val webhookSecret = requireStrongSecret(
+        System.getenv("WEBHOOK_SECRET") ?: environment.config.propertyOrNull("webhook.secret")?.getString(),
+        "WEBHOOK_SECRET"
+    )
 
     val userService = UserService(jwtSecret, jwtIssuer, jwtAudience)
     val billService = BillService()
@@ -102,9 +107,36 @@ fun Application.module() {
 
     val templateService = TemplateService()
 
+    // Speech-to-text (optional). Unconfigured → Android falls back to on-device recognition.
+    val asrApiKey = System.getenv("ASR_API_KEY")
+        ?: environment.config.propertyOrNull("asr.apiKey")?.getString()
+    val asrBaseUrl = System.getenv("ASR_BASE_URL")
+        ?: environment.config.propertyOrNull("asr.baseUrl")?.getString()
+        ?: "https://api.openai.com"
+    val asrModel = System.getenv("ASR_MODEL")
+        ?: environment.config.propertyOrNull("asr.model")?.getString()
+        ?: "whisper-1"
+    val asrTimeoutMs = System.getenv("ASR_TIMEOUT_MS")?.toLongOrNull()
+        ?: environment.config.propertyOrNull("asr.timeoutMs")?.getString()?.toLongOrNull()
+        ?: 30_000L
+    val asrService = WhisperAsrService(
+        if (asrApiKey.isNullOrBlank()) null
+        else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
+    )
+
+    // Release HTTP clients and cancel the app coroutine scope (LearningService loop,
+    // async webhook processing) on graceful shutdown.
+    environment.monitor.subscribe(ApplicationStopped) {
+        appScope.cancel()
+        llmParser.shutdown()
+        qqBotService.shutdown()
+        asrService.shutdown()
+    }
+
     routing {
         authRoutes(userService)
         billRoutes(billService, nluService)
+        transcribeRoutes(asrService)
         budgetRoutes(budgetService)
         correctionRoutes()
         keywordRoutes()

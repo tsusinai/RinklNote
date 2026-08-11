@@ -71,13 +71,16 @@ fun BillEditOverlay(
         val amountVal = amount.toDoubleOrNull() ?: return
         val cat = visibleCategories.find { it.id == selectedCategory?.id } ?: return
         val acct = selectedAccount ?: return
+        // Keep the existing subcategory when the category is unchanged — the overlay
+        // has no subcategory picker, so resetting it on every save silently drops data.
+        val sub = if (cat.id == bill.categoryId) bill.subCategoryName else null
         onConfirm(
             bill.copy(
                 amount = amountVal,
                 billType = billType,
                 categoryId = cat.id,
                 categoryName = cat.name,
-                subCategoryName = null,
+                subCategoryName = sub,
                 accountId = acct.id,
                 remark = remark.ifBlank { null }
             )

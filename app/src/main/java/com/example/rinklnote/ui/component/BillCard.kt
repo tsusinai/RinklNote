@@ -3,6 +3,7 @@ package com.example.rinklnote.ui.component
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,9 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.ui.theme.DarkIncomeGreen
+import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.toDateString
 
 @Composable
@@ -64,11 +68,13 @@ fun BillCard(
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+            val sign = if (totalAmount >= 0) "+" else "-"
             Text(
-                text = String.format("%.2f", totalAmount),
+                text = String.format("%s¥%.2f", sign, kotlin.math.abs(totalAmount)),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (totalAmount >= 0) incomeGreen else MaterialTheme.colorScheme.tertiary
             )
         }
 
@@ -86,8 +92,9 @@ fun BillCard(
                 ) {
                     BillItem(
                         categoryName = displayName,
-                        amount = if (bill.billType == "EXPENSE") -bill.amount else bill.amount,
+                        amount = bill.amount,
                         billType = bill.billType,
+                        remark = bill.remark,
                         onClick = {
                             // Tap an open row to close it; tap a closed row to edit
                             if (revealed) onRevealChange(null) else onEdit(bill)
@@ -126,39 +133,57 @@ private fun BillItem(
     categoryName: String,
     amount: Double,
     billType: String,
+    remark: String?,
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
+    val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+    val isExpense = billType == "EXPENSE"
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiary)
+                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else incomeGreen)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = categoryName,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = categoryName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!remark.isNullOrBlank()) {
+                    Text(
+                        text = remark,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = String.format("%.2f", amount),
+            text = String.format("%s¥%.2f", if (isExpense) "-" else "+", amount),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.tertiary
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else incomeGreen
         )
     }
 }

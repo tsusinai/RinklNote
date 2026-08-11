@@ -29,8 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -151,11 +151,18 @@ fun BookkeepingScreen(
             )
         }
 
-        // Month detail overlay
+        // Month detail overlay — browse historical months with the ‹ › arrows
         MonthDetailOverlay(
             visible = showMonthDetail,
             monthBills = state.monthBills,
-            onDismiss = { showMonthDetail = false }
+            monthOffset = state.monthOffset,
+            onPrevMonth = { viewModel.selectMonth(state.monthOffset - 1) },
+            onNextMonth = { viewModel.selectMonth(state.monthOffset + 1) },
+            onDismiss = {
+                showMonthDetail = false
+                // Reset back to the current month so reopening always starts fresh
+                if (state.monthOffset != 0) viewModel.selectMonth(0)
+            }
         )
     }
 }
@@ -169,36 +176,18 @@ private fun TopBar(date: Long) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(R.drawable.ic_more_menu),
-                contentDescription = "更多",
-                modifier = Modifier.size(30.dp),
-                tint = Color.Unspecified
-            )
-            Spacer(modifier = Modifier.width(85.dp))
-            Text(
-                text = date.toHeaderString(),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-        Row {
-            Icon(
-                painter = painterResource(R.drawable.ic_finance),
-                contentDescription = "金融",
-                modifier = Modifier.size(30.dp),
-                tint = Color.Unspecified
-            )
-            Spacer(modifier = Modifier.padding(start = 8.dp))
-            Icon(
-                painter = painterResource(R.drawable.ic_register),
-                contentDescription = "登记",
-                modifier = Modifier.size(30.dp),
-                tint = Color.Unspecified
-            )
-        }
+        // Balanced spacers keep the date visually centered. The three original
+        // icons (更多/金融/登记) had no click handlers — they were dead UI.
+        Box(modifier = Modifier.size(30.dp))
+        Text(
+            text = date.toHeaderString(),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center
+        )
+        Box(modifier = Modifier.size(30.dp))
     }
 }
 

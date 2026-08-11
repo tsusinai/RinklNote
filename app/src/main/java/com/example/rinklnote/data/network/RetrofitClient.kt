@@ -11,8 +11,15 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
+    /**
+     * Flip to true once nginx TLS is provisioned on the production server.
+     * Until then the server only serves plain HTTP, so this must stay false.
+     */
+    const val USE_HTTPS = false
+
     // Production server. Use "http://10.0.2.2:8080/" for local emulator testing
-    private const val BASE_URL = "http://118.31.184.221/"
+    val BASE_URL: String =
+        if (USE_HTTPS) "https://118.31.184.221/" else "http://118.31.184.221/"
 
     private val json = Json {
         ignoreUnknownKeys = true

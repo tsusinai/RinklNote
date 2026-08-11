@@ -1,7 +1,9 @@
 package com.example.rinklnote.server.plugins
 
 import io.ktor.http.*
+import io.ktor.serialization.ContentConvertException
 import io.ktor.server.application.*
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException
@@ -13,6 +15,14 @@ fun Application.configureErrorHandling() {
     install(StatusPages) {
         exception<IllegalArgumentException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, mapOf("message" to (cause.message ?: "参数无效")))
+        }
+        // Malformed request body (bad JSON / wrong types / undecodable charset) is a
+        // client error, not a 500. These two Ktor exceptions have separate hierarchies.
+        exception<BadRequestException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest, mapOf("message" to "请求体格式错误"))
+        }
+        exception<ContentConvertException> { call, _ ->
+            call.respond(HttpStatusCode.BadRequest, mapOf("message" to "请求体格式错误"))
         }
         exception<IllegalStateException> { call, cause ->
             call.respond(HttpStatusCode.Conflict, mapOf("message" to (cause.message ?: "操作冲突")))

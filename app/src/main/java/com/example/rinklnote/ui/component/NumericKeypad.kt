@@ -37,6 +37,8 @@ fun NumericKeypad(
     onConfirm: () -> Unit,
     onToggleType: () -> Unit,
     onRemarkClick: () -> Unit,
+    showTypeToggle: Boolean = true,
+    showRemark: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val isExpense = billType == "EXPENSE"
@@ -51,7 +53,7 @@ fun NumericKeypad(
         // Row: Amount display + Toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Amount display — matches Count box
@@ -71,50 +73,54 @@ fun NumericKeypad(
                 )
             }
 
-            // Toggle — matches InOrOut
+            // Toggle — matches InOrOut (hidden when showTypeToggle = false)
+            if (showTypeToggle) {
+                Box(
+                    modifier = Modifier
+                        .width(64.dp)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onToggleType() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (isExpense) "支出" else "收入",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+                    )
+                }
+            }
+        }
+
+        // Remark field (hidden when showRemark = false)
+        if (showRemark) {
+            Spacer(modifier = Modifier.height(8.dp))
+
             Box(
                 modifier = Modifier
-                    .width(64.dp)
+                    .fillMaxWidth()
                     .height(36.dp)
                     .clip(RoundedCornerShape(15.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onToggleType() },
-                contentAlignment = Alignment.Center
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onRemarkClick() },
+                contentAlignment = Alignment.CenterStart
             ) {
                 Text(
-                    text = if (isExpense) "支出" else "收入",
+                    text = remark.ifBlank { "点击输入备注..." },
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Normal,
-                    color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+                    color = if (remark.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else Color.Black,
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Remark field
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-                .clip(RoundedCornerShape(15.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onRemarkClick() },
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(
-                text = remark.ifBlank { "点击输入备注..." },
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Normal,
-                color = if (remark.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else Color.Black,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -122,7 +128,7 @@ fun NumericKeypad(
         // Row 1: 1 2 3 Backspace
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
         ) {
             KeyButton("1", onClick = { onDigit("1") })
             KeyButton("2", onClick = { onDigit("2") })
@@ -135,7 +141,7 @@ fun NumericKeypad(
         // Row 2: 4 5 6 -
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
         ) {
             KeyButton("4", onClick = { onDigit("4") })
             KeyButton("5", onClick = { onDigit("5") })
@@ -148,7 +154,7 @@ fun NumericKeypad(
         // Row 3: 7 8 9
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
         ) {
             KeyButton("7", onClick = { onDigit("7") })
             KeyButton("8", onClick = { onDigit("8") })
@@ -161,7 +167,7 @@ fun NumericKeypad(
         // Row 4: 归零 0 . 确认
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
         ) {
             KeyButton("归零", textSize = 16, onClick = onClear)
             KeyButton("0", onClick = { onDigit("0") })

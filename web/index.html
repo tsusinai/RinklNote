@@ -43,6 +43,8 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--primary); out
 #sidebar .nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 #sidebar .nav button:hover:not(.active) { background: var(--border-light); color: var(--text); }
 #content { flex: 1; overflow: auto; padding: 36px 40px; }
+.tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#mobilenav { display: none; }
 .page { display: none; max-width: 880px; margin: 0 auto; }
 .page.active { display: block; animation: fadeIn var(--dur-slow) var(--ease); }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
@@ -133,6 +135,35 @@ td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
   --tag-app-bg: #2D2D30; --tag-app-fg: #AAAAAA;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.4); --shadow: 0 1px 8px rgba(0,0,0,.45);
 }
+
+/* Mobile: bottom tab bar, stacked grids, touch-friendly sizing.
+   Desktop layout (sidebar, multi-column grids) stays untouched above 768px. */
+@media (max-width: 768px) {
+  #sidebar { display: none; }
+  #mobilenav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 60px; background: var(--card); border-top: 1px solid var(--border-light); padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+  .mnav { display: flex; width: 100%; }
+  .mnav button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: none; background: none; color: var(--muted); font-size: 11px; font-weight: 500; font-family: inherit; padding: 6px 0; cursor: pointer; transition: color var(--dur-med) var(--ease); }
+  .mnav button:active { opacity: .7; }
+  .mnav button.active { color: var(--primary); font-weight: 600; }
+  #content { padding: 16px 14px 84px; }
+  h2 { font-size: 18px; margin-bottom: 16px; }
+  .card { padding: 16px; }
+  .grid-2 { grid-template-columns: 1fr; gap: 14px; }
+  .grid-3 { grid-template-columns: 1fr; }
+  .summary-grid { grid-template-columns: repeat(3, 1fr); }
+  .summary-grid .card { padding: 12px 8px; }
+  .summary-grid .val { font-size: 20px; }
+  .grid-4 { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cat-btn { padding: 9px 6px; font-size: 12px; }
+  .amount-input { font-size: 38px; padding: 12px 0; }
+  input[type="text"], input[type="number"], input[type="password"], input[type="date"], select { font-size: 16px; }
+  .btn { padding: 12px 18px; font-size: 15px; }
+  .toggle button { padding: 8px 14px; }
+  table { min-width: 640px; }
+  th, td { white-space: nowrap; }
+  .bot-card .field-row label { min-width: 72px; }
+  .field-row { flex-wrap: wrap; }
+}
 </style>
 </head>
 <body>
@@ -140,6 +171,7 @@ td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
   <div id="sidebar"><h1>RinklNote</h1><div class="nav"></div></div>
   <div id="content"></div>
 </div>
+<div id="mobilenav"><div class="mnav"></div></div>
 
 <script>
 // ── State ──
@@ -156,6 +188,7 @@ const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
   botConfigured: false, botBound: false, botOpenid: '', botMaskedId: '',
   botAppId: '', botSecret: '', botShowSecret: false,
   lastSync: 0, me: null, theme: localStorage.getItem('rkl_theme') || 'system',
+  searchFocus: false, revealBalance: false,
 };
 
 const TABS = [
@@ -172,6 +205,15 @@ async function api(path, opts={}) {
   const h = { 'Content-Type':'application/json', ...opts.headers };
   if (S.token) h['Authorization'] = 'Bearer ' + S.token;
   const r = await fetch(API + path, { ...opts, headers: h });
+  // Expired/revoked token: clear it and bounce back to the login screen instead
+  // of failing silently on every subsequent request. Harmless for the unauthenticated
+  // login/register calls (their 401 already lands on the login screen).
+  if (r.status === 401 && S.token) {
+    S.token = null;
+    localStorage.removeItem('rkl_token');
+    S.user = null;
+    render();
+  }
   return r.json();
 }
 
@@ -206,10 +248,20 @@ function render() {
   const sidebar = document.querySelector('#sidebar .nav');
   sidebar.innerHTML = '';
   TABS.forEach(t => {
-    const btn = h('button', { className: S.tab === t.id ? 'active' : '', onClick: () => { S.tab = t.id; render(); } });
+    const btn = h('button', { className: S.tab === t.id ? 'active' : '', 'aria-label': t.label, role: 'tab', onClick: () => { S.tab = t.id; render(); } });
     btn.innerHTML = t.icon;
     btn.append(' ' + t.label);
     sidebar.appendChild(btn);
+  });
+
+  // Mobile bottom tab bar — same 5 main tabs, settings is reached from the 我的 page.
+  const mnav = document.querySelector('#mobilenav .mnav');
+  mnav.innerHTML = '';
+  TABS.filter(t => t.id !== 'settings').forEach(t => {
+    const b = h('button', { className: S.tab === t.id ? 'active' : '', 'aria-label': t.label, role: 'tab', onClick: () => { S.tab = t.id; render(); } });
+    b.innerHTML = t.icon;
+    b.append(h('span', null, t.label));
+    mnav.appendChild(b);
   });
 
   const content = document.getElementById('content');
@@ -229,6 +281,15 @@ function render() {
   content.appendChild(pg);
 
   if (S.tab === 'charts') setTimeout(drawCharts, 100);
+}
+
+// Debounced full re-render — high-frequency handlers (e.g. search input) call
+// scheduleRender() instead of render() so the whole tree is not rebuilt on every
+// keystroke. The final render still rebuilds, but at most once per idle window.
+let renderTimer = null;
+function scheduleRender(delay = 200) {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => { renderTimer = null; render(); }, delay);
 }
 
 // ── Login ──
@@ -361,7 +422,7 @@ function renderBills(pg) {
   const exp = f.filter(b=>b.billType==='EXPENSE').reduce((s,b)=>s+b.amount,0);
   const inc = f.filter(b=>b.billType==='INCOME').reduce((s,b)=>s+b.amount,0);
 
-  const sg = h('div', { className: 'grid-3' });
+  const sg = h('div', { className: 'grid-3 summary-grid' });
   [{l:'支出',k:'bills:exp',v:exp,fmt:v=>'-¥'+v.toFixed(2),c:'var(--expense)'},
    {l:'收入',k:'bills:inc',v:inc,fmt:v=>'¥'+v.toFixed(2),c:'var(--income)'},
    {l:'结余',k:'bills:bal',v:inc-exp,fmt:v=>'¥'+v.toFixed(2),c:inc>=exp?'var(--income)':'var(--expense)'}].forEach(s => {
@@ -375,7 +436,13 @@ function renderBills(pg) {
 
   // filters
   const fg = h('div', { style: 'display:flex;gap:10px;margin:20px 0;flex-wrap:wrap' });
-  fg.append(h('input', { type:'text', placeholder:'搜索...', value:S.bf.search, oninput:e=>{S.bf.search=e.target.value;render();}, style:'width:160px' }));
+  const searchInput = h('input', { type:'text', placeholder:'搜索...', value:S.bf.search,
+    oninput:e=>{S.bf.search=e.target.value;S.searchFocus=true;scheduleRender();}, style:'width:160px' });
+  fg.append(searchInput);
+  // A debounced render rebuilds the input and drops focus; restore it so typing
+  // does not get interrupted. Cleared after the refocus so a later render (e.g.
+  // from another control) does not yank focus back.
+  if (S.searchFocus) { searchInput.focus(); S.searchFocus = false; }
   const cs = h('select', { onchange:e=>{S.bf.cat=e.target.value;render();} });
   cs.append(h('option',{value:''},'全部分类'));
   [...new Set(S.bills.map(b=>b.categoryName))].forEach(c => cs.append(h('option',{value:c},c)));
@@ -385,9 +452,15 @@ function renderBills(pg) {
   fg.append(h('input',{type:'date',value:S.bf.to,onchange:e=>{S.bf.to=e.target.value;render();}}));
 
   // export
+  const csvSafe = (v) => {
+    const s = String(v ?? '');
+    // CSV formula injection guard: Excel/Sheets evaluate cells starting with
+    // =, +, -, @ (or tab/CR) as formulas. Prefixing a single quote forces text.
+    return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+  };
   const expBtn = h('button',{className:'btn btn-outline',style:'margin-left:auto',onclick:()=>{
     const rows = [['日期','类型','分类','子分类','金额','备注','来源'], ...filtered().map(b=>[fmtDate(b.date),b.billType==='EXPENSE'?'支出':'收入',b.categoryName,b.subCategoryName||'',b.amount,b.remark||'',b.source])];
-    const csv = '\uFEFF'+rows.map(r=>r.map(c=>'"'+String(c||'').replace(/"/g,'""')+'"').join(',')).join('\n');
+    const csv = '\uFEFF'+rows.map(r=>r.map(c=>'"'+csvSafe(c).replace(/"/g,'""')+'"').join(',')).join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv])); a.download='rinklnote.csv'; a.click();
   }}, '导出CSV');
   fg.appendChild(expBtn);
@@ -450,7 +523,9 @@ function renderBills(pg) {
     tbody.appendChild(tr);
   });
   tbl.appendChild(tbody);
-  pg.appendChild(tbl);
+  const wrap = h('div', { className: 'tbl-scroll' });
+  wrap.appendChild(tbl);
+  pg.appendChild(wrap);
 
   if (S.msg) { pg.append(h('p', { className: msgClass(), style: 'margin-top:12px' }, S.msg)); S.msg = ''; }
 }
@@ -494,10 +569,15 @@ function drawCharts() {
     return;
   }
 
-  // Period filter
+  // Period filter. Week/year are rolling windows; month is the current calendar
+  // month (1st → today) so "本月" is a real month, not a rolling 30 days.
   function inPeriod(bill) {
     const now = Date.now();
-    const days = chartPeriod === 'week' ? 7 : chartPeriod === 'month' ? 30 : 365;
+    if (chartPeriod === 'month') {
+      const d = new Date(); d.setHours(0,0,0,0); d.setDate(1);
+      return bill.date >= d.getTime();
+    }
+    const days = chartPeriod === 'week' ? 7 : 365;
     return bill.date >= now - days * 86400000;
   }
   const periodBills = S.bills.filter(inPeriod);
@@ -507,10 +587,10 @@ function drawCharts() {
   periodBills.filter(b=>b.billType==='EXPENSE').forEach(b => { pieMap[b.categoryName]=(pieMap[b.categoryName]||0)+b.amount; });
   const pieData = Object.entries(pieMap).map(([n,v])=>({name:n,value:+v.toFixed(2)}));
 
-  if (pieData.length > 0) {
-    const pieEl = document.getElementById('chart-pie');
-    if (pieEl) {
-      if (_chartRoots.pie) _chartRoots.pie.unmount();
+  const pieEl = document.getElementById('chart-pie');
+  if (pieEl) {
+    if (_chartRoots.pie) { _chartRoots.pie.unmount(); _chartRoots.pie = null; }
+    if (pieData.length > 0) {
       pieEl.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">支出分类占比</h3>';
       const pieDiv = document.createElement('div'); pieDiv.id = 'pie-root'; pieEl.appendChild(pieDiv);
       const pieRoot = ReactDOM.createRoot(pieDiv);
@@ -525,6 +605,12 @@ function drawCharts() {
           )
         )
       );
+    } else {
+      pieEl.innerHTML = '';
+      const emptyEl = document.createElement('div');
+      emptyEl.style.cssText = 'text-align:center;color:var(--muted);padding:60px 20px';
+      emptyEl.textContent = '该时段暂无支出数据';
+      pieEl.appendChild(emptyEl);
     }
   }
 
@@ -562,11 +648,19 @@ function drawCharts() {
     }
   }
 
-  // Daily bar
-  const days = chartPeriod==='week'?7:chartPeriod==='month'?30:365;
-  const start = Date.now() - days*86400000;
+  // Daily bar — anchored to today's midnight so the current day is always the
+  // last bar. Month view aligns to the calendar month (1st → today).
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  let start, dayCount;
+  if (chartPeriod === 'month') {
+    start = new Date(todayStart.getTime()); start.setDate(1);
+    dayCount = Math.round((todayStart - start) / 86400000) + 1;
+  } else {
+    dayCount = chartPeriod === 'week' ? 7 : 365;
+    start = todayStart.getTime() - (dayCount - 1) * 86400000;
+  }
   const barMap = {};
-  for (let i=0; i<days; i++) barMap[new Date(start+i*86400000).toLocaleDateString('zh-CN',{month:'short',day:'numeric'})] = 0;
+  for (let i=0; i<dayCount; i++) barMap[new Date(start + i*86400000).toLocaleDateString('zh-CN',{month:'short',day:'numeric'})] = 0;
   periodBills.filter(b=>b.billType==='EXPENSE').forEach(b => {
     const d = new Date(b.date).toLocaleDateString('zh-CN',{month:'short',day:'numeric'});
     if (barMap[d] !== undefined) barMap[d] = (barMap[d]||0) + b.amount;
@@ -574,30 +668,53 @@ function drawCharts() {
   const barData = Object.entries(barMap).map(([d,a])=>({date:d,amount:+a.toFixed(2)}));
 
   const be = document.getElementById('chart-bar');
-  if (be && barData.length > 0) {
-    if (_chartRoots.bar) _chartRoots.bar.unmount();
-    be.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">每日支出</h3>';
-    const bd = document.createElement('div'); bd.id = 'bar-root'; be.appendChild(bd);
-    const barRoot = ReactDOM.createRoot(bd);
-    _chartRoots.bar = barRoot;
-    barRoot.render(
-      React.createElement(Re.ResponsiveContainer, { width: '100%', height: 240 },
-        React.createElement(Re.BarChart, { data: barData },
-          React.createElement(Re.CartesianGrid, { strokeDasharray: '3 3' }),
-          React.createElement(Re.XAxis, { dataKey: 'date', style: { fontSize: 10 } }),
-          React.createElement(Re.YAxis, { style: { fontSize: 11 } }),
-          React.createElement(Re.Tooltip, { formatter: v => '¥' + v.toFixed(2) }),
-          React.createElement(Re.Bar, { dataKey: 'amount', fill: '#CA3032', name: '支出', radius: [4,4,0,0] })
+  if (be) {
+    if (_chartRoots.bar) { _chartRoots.bar.unmount(); _chartRoots.bar = null; }
+    if (barData.length > 0) {
+      be.innerHTML = '<h3 style="font-size:14px;color:var(--muted);margin-bottom:16px">每日支出</h3>';
+      const bd = document.createElement('div'); bd.id = 'bar-root'; be.appendChild(bd);
+      const barRoot = ReactDOM.createRoot(bd);
+      _chartRoots.bar = barRoot;
+      barRoot.render(
+        React.createElement(Re.ResponsiveContainer, { width: '100%', height: 240 },
+          React.createElement(Re.BarChart, { data: barData },
+            React.createElement(Re.CartesianGrid, { strokeDasharray: '3 3' }),
+            React.createElement(Re.XAxis, { dataKey: 'date', style: { fontSize: 10 } }),
+            React.createElement(Re.YAxis, { style: { fontSize: 11 } }),
+            React.createElement(Re.Tooltip, { formatter: v => '¥' + v.toFixed(2) }),
+            React.createElement(Re.Bar, { dataKey: 'amount', fill: '#CA3032', name: '支出', radius: [4,4,0,0] })
+          )
         )
-      )
-    );
+      );
+    } else {
+      be.innerHTML = '';
+      const emptyEl = document.createElement('div');
+      emptyEl.style.cssText = 'text-align:center;color:var(--muted);padding:60px 20px';
+      emptyEl.textContent = '该时段暂无支出数据';
+      be.appendChild(emptyEl);
+    }
   }
 }
 
 // ── Assets ──
 function renderAssets(pg) {
-  pg.append(h('h2', null, '资产管理'));
+  const head = h('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px' });
+  head.appendChild(h('h2', { style: 'margin:0' }, '资产管理'));
+  // Balance privacy toggle — mirrors the Android BalancePrivacy eye button.
+  head.appendChild(h('button', {
+    className: 'btn btn-outline', style: 'padding:6px 12px;font-size:13px',
+    onclick: () => { S.revealBalance = !S.revealBalance; render(); }
+  }, S.revealBalance ? '隐藏余额' : '显示余额'));
+  pg.appendChild(head);
   pg.appendChild(h('button', { className: 'btn btn-primary', style:'margin-bottom:20px', onclick: async () => { await loadData(); } }, '同步账单'));
+
+  const total = S.accts.reduce((s,a)=>s+(a.balance||0),0);
+  const totalCard = h('div', { className: 'card', style: 'margin-bottom:20px;background:var(--primary);color:#fff;border-radius:15px;padding:20px' });
+  totalCard.append(h('div', { style: 'font-size:13px;opacity:.85' }, '总资产'));
+  totalCard.append(h('div', { className: 'amount', style: 'font-size:28px;font-weight:700' },
+    S.revealBalance ? '¥'+total.toFixed(2) : '****'));
+  pg.appendChild(totalCard);
+
   const cards = h('div', { className: 'grid-3' });
   if (S.accts.length === 0) {
     cards.appendChild(h('p', { className: 'loading', style: 'grid-column:1/-1;font-size:14px' },
@@ -608,7 +725,8 @@ function renderAssets(pg) {
       c.append(h('div', { style: 'width:40px;height:40px;border-radius:50%;background:'+a.iconColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px' }, a.name[0]));
       const info = h('div');
       info.append(h('div', { style: 'font-weight:600' }, a.name));
-      info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' }, '***'));
+      info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' },
+        S.revealBalance ? '¥'+(a.balance||0).toFixed(2) : '***'));
       c.appendChild(info);
       cards.appendChild(c);
     });
@@ -689,6 +807,12 @@ function renderMe(pg) {
   }}, '修改密码'));
   pg.appendChild(pwdBox);
 
+  // Settings entry (mobile reaches settings via this page; harmless extra entry on desktop)
+  const setCard = h('div', { className: 'card', style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px' });
+  setCard.append(h('span', { style: 'font-weight:600' }, '设置'));
+  setCard.append(h('button', { className: 'btn btn-outline', style: 'padding:6px 16px;font-size:13px', onclick: () => { S.tab = 'settings'; render(); } }, '进入 ›'));
+  pg.appendChild(setCard);
+
   // Logout (consolidated here; clears all cached state)
   pg.appendChild(h('button', { className: 'btn btn-outline danger', style: 'width:100%', onclick: () => {
     if (!confirm('退出将清除本地缓存数据')) return;
@@ -706,6 +830,11 @@ function renderMe(pg) {
 // ── Settings ──
 function renderSettings(pg) {
   pg.append(h('h2', null, '设置'));
+
+  // On mobile settings is reached from the 我的 page — offer a way back
+  if (window.matchMedia('(max-width:768px)').matches) {
+    pg.append(h('button', { className: 'btn btn-outline', style: 'margin-bottom:16px', onclick: () => { S.tab = 'me'; render(); } }, '‹ 返回我的'));
+  }
 
   if (S.token) {
     // Theme card
@@ -785,6 +914,7 @@ function renderSettings(pg) {
         row.append(h('span',{style:'flex:1;font-size:13px'},kw.keyword+' → '+kw.categoryName));
         row.append(h('span',{style:'font-size:11px;color:var(--muted)'},'优先级:'+kw.priority));
         row.append(h('button',{className:'btn btn-outline',style:'padding:4px 10px;font-size:11px;color:var(--expense);border-color:var(--expense)',onclick:async()=>{
+          if(!confirm('确定删除关键词 "'+kw.keyword+'" 吗？')) return;
           await api('/api/keywords/'+kw.id,{method:'DELETE'});
           await loadKeywords();
           render();
@@ -959,7 +1089,7 @@ function renderTemplateSection(box) {
         const row = h('div',{style:'display:flex;align-items:center;gap:4px;padding:4px 0;border-bottom:1px solid var(--border-light)'});
         row.appendChild(h('span',{style:'flex:1;font-size:12px'},t.label+' ¥'+t.amount+' → '+t.categoryName));
         row.appendChild(h('button',{className:'btn btn-outline',style:'padding:2px 6px;font-size:10px',
-          onclick:async()=>{await api('/api/templates/'+t.id,{method:'DELETE'});render();}
+          onclick:async()=>{if(!confirm('确定删除模板 "'+t.label+'" 吗？')) return; await api('/api/templates/'+t.id,{method:'DELETE'});render();}
         },'删'));
         list.appendChild(row);
       });
@@ -1007,17 +1137,20 @@ function renderBudgetSection(box) {
 
   (async () => {
     try {
-      // Refresh bills so month expense is current (skip if already loaded)
+      // Refresh bills so month expense is current (skip if already loaded).
+      // Fetch into the full list rather than overwriting S.bills with a single
+      // 200-row page — otherwise >200 bills would truncate the dashboard.
       if (S.bills.length === 0) {
-        const bRes = await api('/api/bills/sync');
-        if (bRes.bills) S.bills = bRes.bills.reverse();
+        S.bills = await fetchAllBills();
       }
 
       const budgets = await api('/api/budgets');
       const cur = (Array.isArray(budgets) ? budgets : []).find(b => b.monthStart === monthStart && !b.deleted);
-      const expense = S.bills
+      // Round the accumulated sum to cents so the `expense > cur.amount` budget
+      // over/under comparison below is exact instead of drifting at 1e-12.
+      const expense = Math.round(S.bills
         .filter(b => b.billType === 'EXPENSE' && b.date >= monthStart && b.date < nextMonth)
-        .reduce((s, b) => s + (b.amount || 0), 0);
+        .reduce((s, b) => s + (b.amount || 0), 0) * 100) / 100;
 
       box.innerHTML = '';
       box.appendChild(h('div', { style:'display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px' },
@@ -1082,6 +1215,27 @@ function countUp(el, target, key, fmt, dur=400) {
   })(performance.now());
 }
 
+let lastDataSig = ''; // auto-refresh guard: skip re-render when nothing changed
+
+// Forward-paginate all bills using the server's composite cursor (updatedAt, id),
+// so pages never duplicate or skip rows that share the same updatedAt.
+async function fetchAllBills() {
+  const all = [];
+  let after = 0, afterId = null, hasMore = true, guard = 0;
+  while (hasMore && guard++ < 500) {
+    let url = '/api/bills/sync?limit=200';
+    if (after > 0) url += '&after=' + after;
+    if (afterId != null) url += '&afterId=' + afterId;
+    const bRes = await api(url);
+    const list = bRes.bills || [];
+    if (list.length) all.push(...list);
+    after = bRes.nextAfter != null ? bRes.nextAfter : Math.max(...list.map(b => b.updatedAt || 0));
+    afterId = bRes.nextAfterId != null ? bRes.nextAfterId : null;
+    hasMore = !!bRes.hasMore && list.length === 200;
+  }
+  return all;
+}
+
 async function loadData() {
   // Load categories & accounts first (public, no auth needed), then bills (needs valid JWT)
   // If bills sync fails, categories & accounts still load so the UI works
@@ -1095,13 +1249,20 @@ async function loadData() {
 
   if (S.token) {
     try {
-      const bRes = await api('/api/bills/sync');
-      if (bRes.bills) S.bills = bRes.bills.reverse();
+      // Forward-paginate until all bills are fetched (server caps each page at 200,
+      // ASC by updatedAt) — otherwise >200 bills would truncate the newest records.
+      const all = await fetchAllBills();
+      if (all.length) S.bills = all.reverse(); // newest first
       S.lastSync = Date.now();
     } catch(e) { console.error('Failed to sync bills:', e); }
     await loadKeywords();
   }
-  render();
+  // Skip full re-render (chart re-animation) when nothing changed — keeps auto-refresh quiet.
+  const sig = JSON.stringify(S.bills);
+  if (sig !== lastDataSig) {
+    lastDataSig = sig;
+    render();
+  }
 }
 
 async function loadKeywords() {
@@ -1119,6 +1280,10 @@ async function init() {
   render();
 }
 init();
+
+// Auto-refresh: surface app-pushed bills on the dashboard without a manual reload.
+// Pauses while the tab is hidden to save network.
+setInterval(() => { if (!document.hidden) loadData(); }, 30000);
 </script>
 </body>
 </html>

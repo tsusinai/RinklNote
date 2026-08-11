@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.routes
 
+import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserService
 import io.ktor.http.*
@@ -21,6 +22,10 @@ data class BotConfigRequest(val appId: String, val clientSecret: String)
 data class QQBindStatusResponse(val bound: Boolean, val openid: String? = null)
 
 fun Route.qqBotManageRoutes(qqBotService: QQBotService, userService: UserService) {
+    // Brute-force guard for 6-digit bind codes: max 5 failed guesses per IP in
+    // 5 minutes, then the endpoint is temporarily blocked.
+    val bindLimiter = InMemoryRateLimiter(maxAttempts = 5, windowSeconds = 300)
+
     route("/api/qq-bot") {
         authenticate("auth-jwt") {
             get("/status") {
@@ -69,6 +74,11 @@ fun Route.qqBotManageRoutes(qqBotService: QQBotService, userService: UserService
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
                     ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("message" to "未登录"))
 
+                val ip = call.request.local.remoteHost
+                if (bindLimiter.isBlocked(ip)) {
+                    return@post call.respond(HttpStatusCode.TooManyRequests, mapOf("message" to "尝试次数过多，请稍后再试"))
+                }
+
                 val body = call.receive<BindCodeRequest>()
                 if (body.code.isBlank()) {
                     return@post call.respond(HttpStatusCode.BadRequest, mapOf("message" to "请输入绑定码"))
@@ -76,6 +86,7 @@ fun Route.qqBotManageRoutes(qqBotService: QQBotService, userService: UserService
 
                 val openid = qqBotService.consumeBindCode(body.code)
                 if (openid == null) {
+                    bindLimiter.recordFailure(ip)
                     return@post call.respond(HttpStatusCode.BadRequest, mapOf("message" to "绑定码无效或已过期"))
                 }
 

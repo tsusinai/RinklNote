@@ -27,9 +27,6 @@ interface BillDao {
     @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
     suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double?
 
-    @Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
-    suspend fun insertAll(bills: List<Bill>)
-
     @androidx.room.Upsert
     suspend fun upsertAll(bills: List<Bill>)
 
@@ -41,6 +38,12 @@ interface BillDao {
 
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
+
+    // Logout cleanup: purge only bills already pushed to the server (server_id set).
+    // Locally-edited / never-pushed rows are kept so they are not permanently lost
+    // and get pushed on the next login's sync.
+    @Query("DELETE FROM bills WHERE server_id IS NOT NULL")
+    suspend fun deleteSynced()
 
     @Query("UPDATE bills SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)

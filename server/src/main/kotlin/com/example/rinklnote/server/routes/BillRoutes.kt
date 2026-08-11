@@ -50,8 +50,9 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     ?: return@get call.respond(HttpStatusCode.Unauthorized)
 
                 val after = call.request.queryParameters["after"]?.toLongOrNull()
+                val afterId = call.request.queryParameters["afterId"]?.toLongOrNull()
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
-                val response = billService.syncBills(userId, after, limit)
+                val response = billService.syncBills(userId, after, afterId, limit)
                 call.respond(response)
             }
 
@@ -103,9 +104,11 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     ?: return@put call.respond(HttpStatusCode.Unauthorized)
 
                 val billId = call.parameters["id"]?.toLongOrNull()
-                    ?: return@put call.respond(HttpStatusCode.BadRequest)
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
 
                 val body = call.receive<CreateBillRequest>()
+                require(body.amount > 0 && body.amount.isFinite()) { "金额必须大于0" }
+                require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
 
                 val updated = transaction {
                     val row = BillsTable.selectAll()

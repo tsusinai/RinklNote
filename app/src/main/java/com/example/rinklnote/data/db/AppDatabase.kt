@@ -65,19 +65,23 @@ abstract class AppDatabase : RoomDatabase() {
         }
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                // DDL must match the Room entity exactly (id NOT NULL + named unique index).
+                // The old inline `server_id UNIQUE` produced an autoindex and a non-NOT-NULL
+                // PK, so Room's schema validation crashed on any upgrade that ran this.
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS bill_templates (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        server_id INTEGER DEFAULT NULL UNIQUE,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        server_id INTEGER,
                         label TEXT NOT NULL,
                         amount REAL NOT NULL,
                         category_id INTEGER NOT NULL,
                         category_name TEXT NOT NULL,
-                        sub_category_name TEXT DEFAULT NULL,
+                        sub_category_name TEXT,
                         account_id INTEGER NOT NULL,
-                        sort_order INTEGER NOT NULL DEFAULT 0
+                        sort_order INTEGER NOT NULL
                     )
                 """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bill_templates_server_id ON bill_templates(server_id)")
             }
         }
         private val MIGRATION_7_8 = object : Migration(7, 8) {
@@ -85,13 +89,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE bills ADD COLUMN dirty INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS budgets (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        server_id INTEGER DEFAULT NULL,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        server_id INTEGER,
                         month_start INTEGER NOT NULL,
                         amount REAL NOT NULL,
-                        updated_at INTEGER DEFAULT NULL,
-                        deleted INTEGER NOT NULL DEFAULT 0,
-                        dirty INTEGER NOT NULL DEFAULT 0
+                        updated_at INTEGER,
+                        deleted INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL
                     )
                 """.trimIndent())
                 // Named index matches Room's expected schema (avoids autoindex-name mismatch)

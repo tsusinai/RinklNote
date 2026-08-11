@@ -16,6 +16,7 @@ val ExpenseRedText = Color(0xFFFF0000)
 
 // Income — semantic: inflows are green (domain-specific, no M3 equivalent)
 val IncomeGreen = Color(0xFF04A433)
+val DarkIncomeGreen = Color(0xFF4CD97B)
 
 // Icon tones
 val IconGray = Color(0xFF555555)

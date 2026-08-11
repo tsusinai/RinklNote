@@ -23,8 +23,8 @@ object Motion {
     // Easing shared with Web's --ease
     val IndicatorEasing = FastOutSlowInEasing
 
-    // Sheets / keypad: spring in, tween out
-    val SheetEnter: FiniteAnimationSpec<IntOffset> = spring(dampingRatio = 0.8f, stiffness = 300f)
+    // Sheets / keypad: smooth tween in and out (no spring overshoot / bounce)
+    val SheetEnter: FiniteAnimationSpec<IntOffset> = tween(DurationSheet, easing = IndicatorEasing)
     val SheetExit: FiniteAnimationSpec<IntOffset> = tween(DurationSheet)
 
     // QuickAdd drawer (horizontal)

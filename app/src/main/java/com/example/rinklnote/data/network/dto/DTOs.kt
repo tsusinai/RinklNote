@@ -47,7 +47,9 @@ data class BillDTO(
 data class SyncResponse(
     val bills: List<BillDTO>,
     val serverTime: Long,
-    val hasMore: Boolean = false
+    val hasMore: Boolean = false,
+    val nextAfter: Long? = null,
+    val nextAfterId: Long? = null
 )
 
 @Serializable
@@ -99,4 +101,7 @@ data class UpsertBudgetRequest(
 )
 
 @Serializable
-data class ReorderRequest(val ids: List<Long>)
+data class TranscribeResponse(
+    val text: String = "",
+    val available: Boolean = true
+)

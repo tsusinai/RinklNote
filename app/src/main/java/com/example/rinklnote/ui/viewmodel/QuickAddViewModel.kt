@@ -120,7 +120,7 @@ class QuickAddViewModel(
     fun onEvent(event: QuickAddEvent) {
         when (event) {
             is QuickAddEvent.Digit -> onDigit(event.digit)
-            is QuickAddEvent.Clear -> _state.update { it.copy(amount = "") }
+            is QuickAddEvent.Clear -> _state.update { it.copy(amount = "", isConfirmEnabled = false) }
             is QuickAddEvent.Backspace -> onBackspace()
             is QuickAddEvent.ToggleType -> toggleType()
             is QuickAddEvent.SelectCategory -> selectCategory(event.category)
@@ -298,10 +298,6 @@ class QuickAddViewModel(
         viewModelScope.launch { finalConfirm() }
     }
 
-    fun loadTemplates(templates: List<BillTemplate>) {
-        _state.update { it.copy(templates = templates) }
-    }
-
     fun loadSuggestion() {
         val svc = api ?: return
         viewModelScope.launch {
@@ -331,9 +327,14 @@ class QuickAddViewModel(
         if (confirming) return
         confirming = true
         val s = _state.value
-        val amount = s.amount.toDoubleOrNull() ?: return
-        val category = s.selectedCategory ?: return
-        val account = s.selectedAccount ?: return
+        val amount = s.amount.toDoubleOrNull()
+        val category = s.selectedCategory
+        val account = s.selectedAccount
+        if (amount == null || category == null || account == null) {
+            // Not a valid submission — release the guard so the user can retry.
+            confirming = false
+            return
+        }
 
         viewModelScope.launch {
             val bill = Bill(
@@ -346,10 +347,16 @@ class QuickAddViewModel(
                 remark = s.remark.ifBlank { null },
                 date = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             )
-            repository.addBill(bill)
+            val savedId = repository.addBill(bill)
             _effects.send(QuickAddEffect.FinalConfirmCompleted)
-            // Background push to server (best-effort, non-blocking)
-            syncManager?.let { launch { it.pushBill(bill) } }
+            // Background push to server (best-effort, non-blocking).
+            // Push the persisted row (with its real auto-generated id) so
+            // SyncManager can stamp server_id on it — otherwise it stays
+            // unsynced and every full sync re-POSTs a duplicate.
+            val saved = bill.copy(id = savedId)
+            syncManager?.let { launch { it.pushBill(saved) } }
+            // Release the guard so the next QuickAdd can submit again.
+            confirming = false
         }
     }
 

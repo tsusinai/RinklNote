@@ -4,6 +4,7 @@ import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.nlu.NLUService
+import com.example.rinklnote.server.tables.WebhookEventTable
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -14,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 fun Route.qqBotWebhookRoutes(
     qqBotService: QQBotService,
@@ -93,9 +96,15 @@ fun Route.qqBotWebhookRoutes(
                         // Process message asynchronously
                         val eventType = json["t"]?.jsonPrimitive?.content ?: return@post
                         val d = json["d"]?.jsonObject ?: return@post
+                        val msgId = d["id"]?.jsonPrimitive?.content ?: return@post
 
                         scope.launch {
-                            processMessage(eventType, d, qqBotService, userService, billService, nluService)
+                            val dedupKey = "$eventType:$msgId"
+                            if (isFirstEvent(dedupKey)) {
+                                processMessage(eventType, d, qqBotService, userService, billService, nluService)
+                            } else {
+                                logger.info("Duplicate webhook event ignored: $dedupKey")
+                            }
                         }
                     }
 
@@ -204,5 +213,32 @@ private suspend fun processMessage(
         logger.info("Bill created for user ${user.id}: $reply")
     } catch (e: Exception) {
         logger.error("Error processing QQ Bot message", e)
+    }
+}
+
+/**
+ * Idempotency guard: returns true only for the first delivery of an event.
+ * The primary key makes concurrent deliveries race — only one insert wins,
+ * the others see a constraint violation and are treated as duplicates.
+ * Old entries are pruned opportunistically (kept for 3 days).
+ */
+private fun isFirstEvent(eventId: String): Boolean {
+    val now = System.currentTimeMillis()
+    return transaction {
+        val inserted = try {
+            WebhookEventTable.insert {
+                it[WebhookEventTable.eventId] = eventId
+                it[WebhookEventTable.processedAt] = now
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+        if (inserted) {
+            // Opportunistic prune (keep 3 days). Raw SQL avoids pulling the
+            // ISqlExpressionBuilder operator into scope for this lambda.
+            exec("DELETE FROM webhook_events WHERE processed_at < $now")
+        }
+        inserted
     }
 }

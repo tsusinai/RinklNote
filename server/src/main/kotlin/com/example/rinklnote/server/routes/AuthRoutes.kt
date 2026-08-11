@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.routes
 
+import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.UserService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -38,8 +39,19 @@ data class MeResponse(
 data class ChangePasswordRequest(val oldPassword: String, val newPassword: String)
 
 fun Route.authRoutes(userService: UserService) {
+    // In-memory per-IP limiting: blocks brute-force login/password guessing and
+    // mass account creation. Generous limits so legit users behind a shared IP
+    // are not affected.
+    val loginLimiter = InMemoryRateLimiter(maxAttempts = 10, windowSeconds = 600)      // 10 failed / 10 min
+    val registerLimiter = InMemoryRateLimiter(maxAttempts = 5, windowSeconds = 3600)   // 5 registrations / hour
+
     route("/api/auth") {
         post("/register") {
+            val ip = call.request.local.remoteHost
+            if (registerLimiter.isBlocked(ip)) {
+                call.respond(HttpStatusCode.TooManyRequests, MessageResponse("注册过于频繁，请稍后再试"))
+                return@post
+            }
             val body = call.receive<RegisterRequest>()
             if (body.phone.isBlank() || body.password.isBlank()) {
                 call.respond(HttpStatusCode.BadRequest, MessageResponse("手机号或密码不能为空"))
@@ -51,6 +63,7 @@ fun Route.authRoutes(userService: UserService) {
             }
             val existing = userService.findByPhone(body.phone)
             if (existing != null) {
+                registerLimiter.recordFailure(ip)
                 call.respond(HttpStatusCode.Conflict, MessageResponse("该手机号已注册"))
                 return@post
             }
@@ -59,12 +72,19 @@ fun Route.authRoutes(userService: UserService) {
         }
 
         post("/login") {
+            val ip = call.request.local.remoteHost
+            if (loginLimiter.isBlocked(ip)) {
+                call.respond(HttpStatusCode.TooManyRequests, MessageResponse("尝试次数过多，请稍后再试"))
+                return@post
+            }
             val body = call.receive<LoginRequest>()
             val result = userService.login(body.phone, body.password)
             if (result == null) {
+                loginLimiter.recordFailure(ip)
                 call.respond(HttpStatusCode.Unauthorized, MessageResponse("手机号或密码错误"))
                 return@post
             }
+            loginLimiter.recordSuccess(ip)
             val (userId, token) = result
             call.respond(AuthResponse(userId, token))
         }

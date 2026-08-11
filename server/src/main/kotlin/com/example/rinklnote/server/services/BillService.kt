@@ -28,7 +28,12 @@ data class BillDTO(
 data class SyncResponse(
     val bills: List<BillDTO>,
     val serverTime: Long,
-    val hasMore: Boolean = false
+    val hasMore: Boolean = false,
+    // Composite cursor (updatedAt, id) for the last returned bill — clients echo
+    // these back on the next page to avoid duplicate/skip when two bills share
+    // the same updatedAt across a page boundary.
+    val nextAfter: Long? = null,
+    val nextAfterId: Long? = null
 )
 
 @Serializable
@@ -142,6 +147,8 @@ class BillService {
         remark: String?,
         date: Long?
     ): BillDTO {
+        require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
+        require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
         val now = System.currentTimeMillis()
         val billDate = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
@@ -187,15 +194,24 @@ class BillService {
         }
     }
 
-    fun syncBills(userId: Long, after: Long?, limit: Int = 200): SyncResponse {
+    fun syncBills(userId: Long, after: Long? = null, afterId: Long? = null, limit: Int = 200): SyncResponse {
         val now = System.currentTimeMillis()
-        val bills = transaction {
+        val page = transaction {
             val query = BillsTable.selectAll()
                 .where { BillsTable.userId eq userId }
-                .orderBy(BillsTable.updatedAt, SortOrder.ASC)
+                .orderBy(BillsTable.updatedAt to SortOrder.ASC, BillsTable.id to SortOrder.ASC)
 
             if (after != null && after > 0) {
-                query.andWhere { BillsTable.updatedAt greater after }
+                if (afterId != null) {
+                    // Keyset cursor: strictly after (updatedAt, id). Handles concurrent
+                    // writes that bump several rows to the same updatedAt.
+                    query.andWhere {
+                        (BillsTable.updatedAt greater after) or
+                            ((BillsTable.updatedAt eq after) and (BillsTable.id greater afterId))
+                    }
+                } else {
+                    query.andWhere { BillsTable.updatedAt greater after }
+                }
             }
 
             query.limit(limit + 1).map {
@@ -216,8 +232,33 @@ class BillService {
                 )
             }
         }
-        val hasMore = bills.size > limit
-        return SyncResponse(bills = bills.take(limit), serverTime = now, hasMore = hasMore)
+        val hasMore = page.size > limit
+        val pageBills = page.take(limit)
+        val last = pageBills.lastOrNull()
+        return SyncResponse(
+            bills = pageBills,
+            serverTime = now,
+            hasMore = hasMore,
+            nextAfter = last?.updatedAt,
+            nextAfterId = last?.id
+        )
+    }
+
+    /**
+     * All non-deleted bills for a user, page-fetched with the composite cursor so
+     * insight queries never truncate at 200 rows or include soft-deleted bills.
+     */
+    fun allBills(userId: Long): List<BillDTO> {
+        var after: Long? = null
+        var afterId: Long? = null
+        val result = mutableListOf<BillDTO>()
+        do {
+            val page = syncBills(userId, after, afterId, 200)
+            result += page.bills.filter { !it.deleted }
+            after = page.nextAfter
+            afterId = page.nextAfterId
+        } while (page.hasMore && after != null)
+        return result
     }
 
     fun seedIfNeeded() {
@@ -301,7 +342,68 @@ class BillService {
         }
     }
 
+    data class MonthStats(
+        val totalExpense: Double,
+        val totalIncome: Double,
+        val topExpenseCategories: List<Pair<String, Double>>
+    )
+
+    /**
+     * Aggregates a single month with SQL SUM/GROUP BY instead of loading every
+     * bill into memory. Used by the insight endpoints.
+     */
+    fun monthlyStats(userId: Long, monthStart: Long, nextMonthStart: Long): MonthStats = transaction {
+        val totalExpense = BillsTable.select(BillsTable.amount.sum())
+            .where {
+                (BillsTable.userId eq userId) and
+                    (BillsTable.deleted eq false) and
+                    (BillsTable.billType eq "EXPENSE") and
+                    (BillsTable.date greaterEq monthStart) and
+                    (BillsTable.date less nextMonthStart)
+            }
+            .first()[BillsTable.amount.sum()] ?: 0.0
+        val totalIncome = BillsTable.select(BillsTable.amount.sum())
+            .where {
+                (BillsTable.userId eq userId) and
+                    (BillsTable.deleted eq false) and
+                    (BillsTable.billType eq "INCOME") and
+                    (BillsTable.date greaterEq monthStart) and
+                    (BillsTable.date less nextMonthStart)
+            }
+            .first()[BillsTable.amount.sum()] ?: 0.0
+        val topCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amount.sum())
+            .where {
+                (BillsTable.userId eq userId) and
+                    (BillsTable.deleted eq false) and
+                    (BillsTable.billType eq "EXPENSE") and
+                    (BillsTable.date greaterEq monthStart) and
+                    (BillsTable.date less nextMonthStart)
+            }
+            .groupBy(BillsTable.categoryName)
+            .orderBy(BillsTable.amount.sum() to SortOrder.DESC)
+            .limit(5)
+            .map { it[BillsTable.categoryName] to Money.cents(it[BillsTable.amount.sum()] ?: 0.0) }
+
+        // Round SQL SUM results to cents: summing double-precision columns drifts,
+        // and downstream exact comparisons (e.g. Web budget over/under) would misfire.
+        MonthStats(Money.cents(totalExpense), Money.cents(totalIncome), topCategories)
+    }
+
     fun getCategories(): List<CategoryDTO> = transaction {
+        // Load all subcategories in one query and group by parent — avoids the
+        // per-category SELECT that was the N+1 here.
+        val subGroups = SubCategoriesTable.selectAll()
+            .orderBy(SubCategoriesTable.id to SortOrder.ASC)
+            .groupBy { it[SubCategoriesTable.parentCategoryId] }
+            .mapValues { (_, rows) ->
+                rows.map {
+                    SubCategoryDTO(
+                        id = it[SubCategoriesTable.id],
+                        name = it[SubCategoriesTable.name],
+                        parentCategoryId = it[SubCategoriesTable.parentCategoryId]
+                    )
+                }
+            }
         CategoriesTable.selectAll()
             .orderBy(CategoriesTable.billType to SortOrder.ASC, CategoriesTable.id to SortOrder.ASC)
             .map { row ->
@@ -310,16 +412,7 @@ class BillService {
                     name = row[CategoriesTable.name],
                     iconName = row[CategoriesTable.iconName],
                     billType = row[CategoriesTable.billType],
-                    subCategories = SubCategoriesTable.selectAll()
-                        .where { SubCategoriesTable.parentCategoryId eq row[CategoriesTable.id] }
-                        .orderBy(SubCategoriesTable.id to SortOrder.ASC)
-                        .map {
-                            SubCategoryDTO(
-                                id = it[SubCategoriesTable.id],
-                                name = it[SubCategoriesTable.name],
-                                parentCategoryId = it[SubCategoriesTable.parentCategoryId]
-                            )
-                        }
+                    subCategories = subGroups[row[CategoriesTable.id]] ?: emptyList()
                 )
             }
     }

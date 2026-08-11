@@ -81,10 +81,12 @@ fun SwipeableBillItem(
             )
         }
 
-        // Foreground row content
+        // Foreground row content — opaque surface so the red delete background
+        // (and its "删除" label) only becomes visible when the row is swiped left.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
                 .graphicsLayer { translationX = offsetX }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(

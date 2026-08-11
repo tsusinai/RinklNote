@@ -1,6 +1,7 @@
 package com.example.rinklnote.data.network
 
 import com.example.rinklnote.data.network.dto.*
+import okhttp3.MultipartBody
 import retrofit2.http.*
 
 interface ApiService {
@@ -23,7 +24,11 @@ interface ApiService {
     suspend fun unbindQQ(): MessageResponse
 
     @GET("api/bills/sync")
-    suspend fun syncBills(@Query("after") after: Long? = null, @Query("limit") limit: Int = 200): SyncResponse
+    suspend fun syncBills(
+        @Query("after") after: Long? = null,
+        @Query("afterId") afterId: Long? = null,
+        @Query("limit") limit: Int = 200
+    ): SyncResponse
 
     @POST("api/bills")
     suspend fun uploadBill(@Body bill: CreateBillRequest): BillDTO
@@ -43,6 +48,12 @@ interface ApiService {
 
     @POST("api/bills/parse")
     suspend fun parseBill(@Body request: ParseRequest): ParseResponse
+
+    // Speech-to-text: upload recorded audio, get transcript.
+    // Server returns {available:false} when no ASR is configured → client falls back to on-device.
+    @Multipart
+    @POST("api/bills/transcribe")
+    suspend fun transcribe(@Part file: MultipartBody.Part): TranscribeResponse
 
     // Templates
     @GET("api/templates")

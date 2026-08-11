@@ -213,13 +213,18 @@ private fun BudgetKeypadOverlay(
                 billType = "EXPENSE",
                 remark = "",
                 onDigit = { digit ->
-                    val newAmount = if (digit == "." && amount.contains(".")) amount else amount + digit
-                    amount = newAmount
+                    amount = when {
+                        digit == "." -> if (amount.isEmpty()) "0." else if (amount.contains(".")) amount else amount + digit
+                        amount == "0" -> digit // replace leading zero
+                        else -> amount + digit
+                    }
                 },
                 onClear = { amount = "" },
                 onBackspace = { amount = amount.dropLast(1) },
                 onToggleType = {},
                 onRemarkClick = {},
+                showTypeToggle = false,
+                showRemark = false,
                 onConfirm = ::confirmEdit
             )
         }

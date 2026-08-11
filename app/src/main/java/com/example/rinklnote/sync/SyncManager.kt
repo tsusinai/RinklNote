@@ -12,6 +12,8 @@ import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 sealed class SyncResult {
     data object NotLoggedIn : SyncResult()
@@ -26,7 +28,11 @@ class SyncManager(
     private val templateDao: BillTemplateDao? = null,
     private val budgetDao: BudgetDao? = null
 ) {
-    suspend fun sync(): SyncResult {
+    // Serialize push/sync so a QuickAdd push and an automatic sync can never run
+    // concurrently and double-submit the same bill.
+    private val syncMutex = Mutex()
+
+    suspend fun sync(): SyncResult = syncMutex.withLock {
         if (!tokenManager.isLoggedIn()) return SyncResult.NotLoggedIn
 
         return try {
@@ -44,10 +50,14 @@ class SyncManager(
             // 2. Pull: download server changes
             var pulled = 0
             var lastSync = tokenManager.lastSyncTime.first()
+            // Composite cursor (updatedAt, id) — the server returns the tail of each
+            // page so we can continue past rows that share the same updatedAt.
+            var afterId: Long? = null
             var hasMore = true
             while (hasMore) {
                 val response = api.syncBills(
                     after = if (lastSync > 0) lastSync else null,
+                    afterId = afterId,
                     limit = 200
                 )
                 hasMore = response.hasMore
@@ -77,7 +87,9 @@ class SyncManager(
                 }
                 billDao.upsertAll(merged)
                 pulled += merged.size
-                lastSync = response.serverTime
+                // Advance to the server-provided composite cursor.
+                lastSync = response.nextAfter ?: response.bills.maxOfOrNull { it.updatedAt ?: 0 } ?: lastSync
+                afterId = response.nextAfterId
             }
 
             tokenManager.setLastSyncTime(lastSync)
@@ -111,7 +123,14 @@ class SyncManager(
     private suspend fun pushOneBill(bill: Bill): Boolean {
         return when {
             bill.deleted -> {
-                val serverId = bill.serverId ?: return false
+                val serverId = bill.serverId
+                if (serverId == null) {
+                    // Never pushed to the server — nothing to soft-delete remotely,
+                    // so purge the local tombstone immediately (otherwise it lingers
+                    // forever as an unsynced deleted row).
+                    billDao.hardDeleteById(bill.id)
+                    return true
+                }
                 api.deleteBill(serverId)
                 billDao.hardDeleteById(bill.id)
                 true
@@ -130,7 +149,7 @@ class SyncManager(
     }
 
     /** Upload a single local bill (non-blocking, called after QuickAdd/edit/delete) */
-    suspend fun pushBill(bill: Bill) {
+    suspend fun pushBill(bill: Bill) = syncMutex.withLock {
         try {
             pushOneBill(bill)
         } catch (_: Exception) {
@@ -139,8 +158,8 @@ class SyncManager(
     }
 
     /** Upload a single local budget (non-blocking, called after SetBudget) */
-    suspend fun pushBudget(budget: Budget) {
-        val dao = budgetDao ?: return
+    suspend fun pushBudget(budget: Budget) = syncMutex.withLock {
+        val dao = budgetDao ?: return@withLock
         try {
             if (!budget.deleted) {
                 val dto = api.upsertBudget(UpsertBudgetRequest(budget.monthStart, budget.amount))

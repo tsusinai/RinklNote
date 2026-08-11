@@ -95,7 +95,7 @@ fun Route.keywordRoutes() {
                     ?: return@delete call.respond(HttpStatusCode.Unauthorized)
 
                 val keywordId = call.parameters["id"]?.toLongOrNull()
-                    ?: return@delete call.respond(HttpStatusCode.BadRequest)
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
 
                 val deleted = transaction {
                     VoiceKeywordsTable.deleteWhere {

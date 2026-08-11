@@ -25,15 +25,15 @@ fun Long.toHeaderString(): String {
     return localDate.format(headerFormatter)
 }
 
-fun getMonthStart(): Long {
+fun getMonthStart(offsetMonths: Int = 0): Long {
     val now = LocalDate.now()
-    val start = now.withDayOfMonth(1)
+    val start = now.withDayOfMonth(1).plusMonths(offsetMonths.toLong())
     return start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 }
 
-fun getNextMonthStart(): Long {
+fun getNextMonthStart(offsetMonths: Int = 0): Long {
     val now = LocalDate.now()
-    val next = now.withDayOfMonth(1).plusMonths(1)
+    val next = now.withDayOfMonth(1).plusMonths(offsetMonths.toLong() + 1)
     return next.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 }
 

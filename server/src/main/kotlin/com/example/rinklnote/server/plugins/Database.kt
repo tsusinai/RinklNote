@@ -30,7 +30,7 @@ fun Application.configureDatabase() {
     Database.connect(HikariDataSource(config))
 
     transaction {
-        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable)
+        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, WebhookEventTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
         runMigrations()

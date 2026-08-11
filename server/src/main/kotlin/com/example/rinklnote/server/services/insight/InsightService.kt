@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.services.insight
 
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.tables.BotConfigTable
 import kotlinx.serialization.Serializable
@@ -43,31 +44,26 @@ class InsightService(
     suspend fun monthlySummary(userId: Long, month: String): MonthlySummaryResponse {
         // Validate month format
         require(month.matches(Regex("""^\d{4}-(0[1-9]|1[0-2])$"""))) { "月份格式错误，需要 YYYY-MM" }
-        val bills = transaction { billService.syncBills(userId, null).bills }
 
         val yearMonth = month.split("-")
         val targetYear = yearMonth[0].toInt()
         val targetMonth = yearMonth[1].toInt()
+        val shanghai = ZoneId.of("Asia/Shanghai")
+        val monthStart = LocalDate.of(targetYear, targetMonth, 1).atStartOfDay(shanghai).toInstant().toEpochMilli()
+        val nextMonthStart = LocalDate.of(targetYear, targetMonth, 1)
+            .plusMonths(1).atStartOfDay(shanghai).toInstant().toEpochMilli()
 
-        val monthBills = bills.filter {
-            val d = LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it.date), ZoneId.of("Asia/Shanghai"))
-            d.year == targetYear && d.monthValue == targetMonth
-        }
-
-        val totalExpense = monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
-        val totalIncome = monthBills.filter { it.billType == "INCOME" }.sumOf { it.amount }
-        val byCategory = monthBills.filter { it.billType == "EXPENSE" }
-            .groupBy { it.categoryName }
-            .mapValues { it.value.sumOf { b -> b.amount } }
-            .entries
-            .sortedByDescending { it.value }
-            .take(5)
+        // SQL aggregate — no loading of all bills for a single month.
+        val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
+        val totalExpense = stats.totalExpense
+        val totalIncome = stats.totalIncome
+        val byCategory = stats.topExpenseCategories
 
         val context = """
 账单数据 ($month):
 - 总支出: ¥${"%.2f".format(totalExpense)}
 - 总收入: ¥${"%.2f".format(totalIncome)}
-- 支出分类TOP5: ${byCategory.joinToString { "${it.key} ¥${"%.2f".format(it.value)}" }}
+- 支出分类TOP5: ${byCategory.joinToString { "${it.first} ¥${"%.2f".format(it.second)}" }}
 
 请你用中文写一段简洁的月度消费总结（80-150字），并列出2-3个值得关注的点(highlights)。
 
@@ -93,17 +89,17 @@ class InsightService(
     }
 
     suspend fun anomalyCheck(userId: Long): AnomalyResponse {
-        val bills = transaction { billService.syncBills(userId, null).bills }
+        val bills = billService.allBills(userId)
         val now = System.currentTimeMillis()
         val thirtyDaysAgo = now - 30L * 24 * 60 * 60 * 1000
 
         val recentExpenses = bills.filter { it.billType == "EXPENSE" && it.date >= thirtyDaysAgo }
-        val dailyAvg = recentExpenses.sumOf { it.amount } / 30.0
+        val dailyAvg = Money.cents(recentExpenses.sumOf { it.amount } / 30.0)
 
         val todayStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli()
-        val todayExpense = bills.filter { it.billType == "EXPENSE" && it.date >= todayStart }
-            .sumOf { it.amount }
+        val todayExpense = Money.cents(bills.filter { it.billType == "EXPENSE" && it.date >= todayStart }
+            .sumOf { it.amount })
 
         val alerts = mutableListOf<AnomalyAlert>()
 
@@ -120,7 +116,7 @@ class InsightService(
     }
 
     suspend fun naturalQuery(userId: Long, query: String): QueryResponse {
-        val bills = transaction { billService.syncBills(userId, null).bills }
+        val bills = billService.allBills(userId)
         val categories = transaction { billService.getCategories().map { it.name } }
 
         // Build real data context for the LLM
@@ -130,16 +126,16 @@ class InsightService(
         // Current month summary
         val monthStart = now.withDayOfMonth(1).atStartOfDay(shanghai).toInstant().toEpochMilli()
         val monthBills = bills.filter { it.date >= monthStart }
-        val totalExpense = monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
+        val totalExpense = Money.cents(monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount })
         val topCategories = monthBills.filter { it.billType == "EXPENSE" }
             .groupBy { it.categoryName }
-            .mapValues { it.value.sumOf { b -> b.amount } }
+            .mapValues { Money.cents(it.value.sumOf { b -> b.amount }) }
             .entries.sortedByDescending { it.value }.take(5)
 
         // Last month summary
         val lastMonthStart = now.minusMonths(1).withDayOfMonth(1).atStartOfDay(shanghai).toInstant().toEpochMilli()
         val lastMonthBills = bills.filter { it.date in lastMonthStart until monthStart }
-        val lastMonthExpense = lastMonthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
+        val lastMonthExpense = Money.cents(lastMonthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount })
 
         // Last 10 bills
         val recentBills = bills.sortedByDescending { it.date }.take(10)
@@ -201,7 +197,7 @@ $recentBills
     data class TimeWindow(val label: String, val startHour: Int, val endHour: Int)
 
     fun suggestDailyPattern(userId: Long): Map<String, String>? {
-        val bills = transaction { billService.syncBills(userId, null).bills }
+        val bills = billService.allBills(userId)
         val config = loadSuggestConfig()
         if (!config.enabled) return null
 

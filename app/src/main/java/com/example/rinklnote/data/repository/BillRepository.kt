@@ -25,7 +25,6 @@ interface BillRepository {
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)
-    suspend fun insertAllBills(bills: List<Bill>)
     suspend fun updateAccount(account: Account)
     suspend fun getSubCategories(parentId: Long): List<SubCategory>
     suspend fun getBudget(monthStart: Long): Budget?

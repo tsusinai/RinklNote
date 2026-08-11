@@ -52,8 +52,6 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
         billDao.softDelete(bill.id, System.currentTimeMillis())
     }
 
-    override suspend fun insertAllBills(bills: List<Bill>) { billDao.insertAll(bills) }
-
     override suspend fun updateAccount(account: Account) = accountDao.update(account)
 
     override suspend fun getBudget(monthStart: Long): Budget? = budgetDao.getByMonth(monthStart)
@@ -69,7 +67,9 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
 
     override suspend fun clearLocalData() {
         // Wipe per-user data on logout. Keep categories/accounts (shared reference data).
-        billDao.deleteAll()
+        // Only server-synced bills are removed — never-pushed bills survive logout so
+        // they are not lost and get pushed after the next login.
+        billDao.deleteSynced()
         budgetDao.deleteAll()
         templateDao.deleteAll()
     }

@@ -27,6 +27,9 @@ data class BookkeepingState(
     val totalIncome: Double = 0.0,
     val isLoading: Boolean = false,
     val currentDate: Long = System.currentTimeMillis(),
+    // Offset of the month shown in the month-detail overlay: 0 = current month,
+    // -1 = previous, +1 = next. Lets users browse historical months.
+    val monthOffset: Int = 0,
     val editingBill: Bill? = null,
     val expenseCategories: List<Category> = emptyList(),
     val incomeCategories: List<Category> = emptyList(),
@@ -100,15 +103,22 @@ class BookkeepingViewModel(
         }
     }
 
-    private fun collectMonthBills() {
+    private fun collectMonthBills(offset: Int = 0) {
         monthBillCollectorJob?.cancel()
         monthBillCollectorJob = viewModelScope.launch {
-            val monthStart = getMonthStart()
-            val nextMonthStart = getNextMonthStart()
+            val monthStart = getMonthStart(offset)
+            val nextMonthStart = getNextMonthStart(offset)
             repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
                 _state.update { it.copy(monthBills = bills) }
             }
         }
+    }
+
+    /** Switches the month-detail overlay to a different month (offset from current). */
+    fun selectMonth(offset: Int) {
+        if (_state.value.monthOffset == offset) return
+        _state.update { it.copy(monthOffset = offset) }
+        collectMonthBills(offset)
     }
 
     private fun refreshTotals() {
