@@ -81,19 +81,20 @@ import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val tabs = listOf("计划", "记账", "资产", "我的")
+private val tabs = listOf("计划", "记账", "资产")
 
 private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minutes while on screen
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 4 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
     var showConfirmed by remember { mutableStateOf(false) }
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
+    var showProfile by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var showQqBotGuide by remember { mutableStateOf(false) }
 
@@ -103,7 +104,7 @@ fun AppNavigation(app: RinklNoteApp) {
     }
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val tabWidth = screenWidth / 4
+    val tabWidth = screenWidth / tabs.size
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
         factory = BookkeepingViewModel.Factory(app.repository, app.syncManager)
@@ -173,6 +174,7 @@ fun AppNavigation(app: RinklNoteApp) {
     // Back handler: dismiss drawer or keypad first
     BackHandler(enabled = showDrawer) { showDrawer = false }
     BackHandler(enabled = showKeypad) { showKeypad = false }
+    BackHandler(enabled = showProfile) { showProfile = false }
 
     // Voice input: bottom floating mini bar (device real-time recognition, server
     // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
@@ -217,19 +219,13 @@ fun AppNavigation(app: RinklNoteApp) {
                     0 -> PlanScreen(viewModel = budgetVM)
                     1 -> BookkeepingScreen(
                         onOpenDrawer = openDrawer,
+                        onFinanceClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                        },
+                        onMoreClick = { showProfile = true },
                         viewModel = bookkeepingVM
                     )
                     2 -> AssetsScreen(viewModel = assetsVM)
-                    3 -> ProfileScreen(
-                        authViewModel = authVM,
-                        settingsManager = app.settingsManager,
-                        tokenManager = app.tokenManager,
-                        syncManager = app.syncManager,
-                        repository = app.repository,
-                        onLoginClick = { showLogin = true },
-                        onBindQQClick = { showBindQQ = true },
-                        onQqBotGuideClick = { showQqBotGuide = true }
-                    )
                 }
             }
 
@@ -303,7 +299,21 @@ fun AppNavigation(app: RinklNoteApp) {
             }
         }
 
-        // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav
+        // Full-screen login / bind-QQ / profile pages — top-most so they cover the bottom nav.
+        // 我的页从底部导航移出，改为顶部「更多」图标进入。
+        if (showProfile) {
+            ProfileScreen(
+                authViewModel = authVM,
+                settingsManager = app.settingsManager,
+                tokenManager = app.tokenManager,
+                syncManager = app.syncManager,
+                repository = app.repository,
+                onLoginClick = { showLogin = true },
+                onBindQQClick = { showBindQQ = true },
+                onQqBotGuideClick = { showQqBotGuide = true },
+                onBack = { showProfile = false }
+            )
+        }
         if (showLogin) {
             LoginPage(viewModel = authVM, onDismiss = { showLogin = false })
         }

@@ -2,7 +2,6 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,8 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +48,8 @@ import java.time.ZoneId
 @Composable
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
+    onFinanceClick: () -> Unit,
+    onMoreClick: () -> Unit,
     viewModel: BookkeepingViewModel
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -65,7 +66,14 @@ fun BookkeepingScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            item(key = "topbar") { TopBar(date = state.currentDate) }
+            item(key = "topbar") {
+                TopBar(
+                    date = state.currentDate,
+                    onOpenDrawer = onOpenDrawer,
+                    onFinanceClick = onFinanceClick,
+                    onMoreClick = onMoreClick
+                )
+            }
             item(key = "chart") {
                 Spacer(modifier = Modifier.height(24.dp))
                 ChartBox(
@@ -168,26 +176,56 @@ fun BookkeepingScreen(
 }
 
 @Composable
-private fun TopBar(date: Long) {
-    Row(
+private fun TopBar(
+    date: Long,
+    onOpenDrawer: () -> Unit,
+    onFinanceClick: () -> Unit,
+    onMoreClick: () -> Unit
+) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Balanced spacers keep the date visually centered. The three original
-        // icons (更多/金融/登记) had no click handlers — they were dead UI.
-        Box(modifier = Modifier.size(30.dp))
+        // 更多 → 我的页；金融 → 资产页；登记 → 记账抽屉（对应原 Pixso 三图标）
+        Icon(
+            painter = painterResource(R.drawable.ic_more_menu),
+            contentDescription = "更多",
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .size(30.dp)
+                .clickable(onClick = onMoreClick),
+            tint = Color.Unspecified
+        )
         Text(
             text = date.toHeaderString(),
             fontSize = 24.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center
+            modifier = Modifier.align(Alignment.Center)
         )
-        Box(modifier = Modifier.size(30.dp))
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_finance),
+                contentDescription = "金融",
+                modifier = Modifier
+                    .size(30.dp)
+                    .clickable(onClick = onFinanceClick),
+                tint = Color.Unspecified
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_register),
+                contentDescription = "登记",
+                modifier = Modifier
+                    .size(30.dp)
+                    .clickable(onClick = onOpenDrawer),
+                tint = Color.Unspecified
+            )
+        }
     }
 }
 
