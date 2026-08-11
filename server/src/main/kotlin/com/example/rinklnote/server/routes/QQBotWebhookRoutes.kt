@@ -1,9 +1,11 @@
 package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQMessageProcessor
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -20,7 +22,9 @@ fun Route.qqBotWebhookRoutes(
     qqBotService: QQBotService,
     userService: UserService,
     billService: BillService,
-    nluService: NLUService
+    nluService: NLUService,
+    budgetService: BudgetService,
+    insightService: InsightService
 ) {
     val logger = LoggerFactory.getLogger("QQBotWebhook")
     val scope = CoroutineScope(Dispatchers.Default)
@@ -99,7 +103,7 @@ fun Route.qqBotWebhookRoutes(
                         scope.launch {
                             val dedupKey = "$eventType:$msgId"
                             if (QQMessageProcessor.isFirstEvent(dedupKey)) {
-                                QQMessageProcessor.process(eventType, d, qqBotService, userService, billService, nluService)
+                                QQMessageProcessor.process(eventType, d, qqBotService, userService, billService, nluService, budgetService, insightService)
                             } else {
                                 logger.info("Duplicate webhook event ignored: $dedupKey")
                             }

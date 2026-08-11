@@ -108,7 +108,7 @@ fun Application.module() {
 
     // QQ Official Bot gateway — long WebSocket connection (default receiving mode).
     // Shares message processing with the HTTP webhook path via QQMessageProcessor.
-    val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService)
+    val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
     qqWsClient.start(appScope)
 
     val templateService = TemplateService()
@@ -149,7 +149,7 @@ fun Application.module() {
         keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService, nluService)
         insightRoutes(insightService)
-        qqBotWebhookRoutes(qqBotService, userService, billService, nluService)
+        qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
         qqBotManageRoutes(qqBotService, userService)
         templateRoutes(templateService)
     }

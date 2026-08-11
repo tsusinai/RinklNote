@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.NLUService
 import com.example.rinklnote.server.tables.WebhookEventTable
 import kotlinx.serialization.json.JsonArray
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
+import java.security.MessageDigest
 
 /**
  * Shared QQ bot message processing for both receiving channels — the HTTP webhook
@@ -26,7 +28,9 @@ object QQMessageProcessor {
         qqBotService: QQBotService,
         userService: UserService,
         billService: BillService,
-        nluService: NLUService
+        nluService: NLUService,
+        budgetService: BudgetService,
+        insightService: InsightService
     ) {
         try {
             // Handle content as string or array
@@ -80,34 +84,16 @@ object QQMessageProcessor {
                 return
             }
 
-            // Parse message and create bill
-            val result = nluService.parse(content, user.id)
-
-            if (result.amount == null || result.amount <= 0) {
-                if (groupOpenid != null) {
-                    qqBotService.sendGroupMessage(groupOpenid, "无法识别金额，请说如'午餐20元'", msgId)
-                } else {
-                    qqBotService.sendC2CMessage(openid, "无法识别金额，请说如'午餐20元'", msgId)
-                }
-                return
-            }
-
-            val bill = billService.createBill(
-                userId = user.id,
-                amount = result.amount,
-                categoryName = result.categoryName,
-                remark = result.remark,
-                source = "QQ"
-            )
-
-            val reply = "已记录: ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"
+            // Route the message: query / delete / bookkeeping / help / LLM fallback.
+            val router = QQIntentRouter(billService, budgetService, insightService, nluService)
+            val reply = router.route(content, user.id)
             if (groupOpenid != null) {
                 qqBotService.sendGroupMessage(groupOpenid, reply, msgId)
             } else {
                 qqBotService.sendC2CMessage(openid, reply, msgId)
             }
 
-            logger.info("Bill created for user ${user.id}: $reply")
+            logger.info("QQ reply for user ${user.id}: ${reply.replace("\n", " / ")}")
         } catch (e: Exception) {
             logger.error("Error processing QQ Bot message", e)
         }
@@ -124,7 +110,10 @@ object QQMessageProcessor {
         return transaction {
             val inserted = try {
                 WebhookEventTable.insert {
-                    it[WebhookEventTable.eventId] = eventId
+                    // QQ event ids (ROBOT1.0_...) are 140+ chars but the column is
+                    // VARCHAR(64); raw inserts fail and every event looks like a
+                    // duplicate. Store a SHA-256 hex digest (exactly 64 chars) instead.
+                    it[WebhookEventTable.eventId] = hashEventId(eventId)
                     it[WebhookEventTable.processedAt] = now
                 }
                 true
@@ -139,4 +128,9 @@ object QQMessageProcessor {
             inserted
         }
     }
+
+    private fun hashEventId(eventId: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(eventId.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
 }

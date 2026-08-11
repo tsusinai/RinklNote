@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -48,7 +49,9 @@ class QQBotWebSocketClient(
     private val qqBotService: QQBotService,
     private val userService: UserService,
     private val billService: BillService,
-    private val nluService: NLUService
+    private val nluService: NLUService,
+    private val budgetService: BudgetService,
+    private val insightService: InsightService
 ) {
     private val logger = LoggerFactory.getLogger("QQBotWebSocket")
 
@@ -171,7 +174,7 @@ class QQBotWebSocketClient(
                 // Fire-and-forget processing so the read loop keeps draining frames.
                 session.launch {
                     if (QQMessageProcessor.isFirstEvent(dedupKey)) {
-                        QQMessageProcessor.process(t, d, qqBotService, userService, billService, nluService)
+                        QQMessageProcessor.process(t, d, qqBotService, userService, billService, nluService, budgetService, insightService)
                     } else {
                         logger.info("Duplicate WS event ignored: $dedupKey")
                     }
