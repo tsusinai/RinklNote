@@ -11,4 +11,5 @@ object VoiceKeywordsTable : Table("voice_keywords") {
     val createdAt = varchar("created_at", 30)
 
     override val primaryKey = PrimaryKey(id)
+    val uniqueUserKeyword = uniqueIndex("uq_voice_keywords_user_kw", userId, keyword)
 }

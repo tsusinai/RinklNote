@@ -12,7 +12,8 @@ import java.util.*
 data class UserInfo(
     val id: Long,
     val phone: String,
-    val qqNumber: String?
+    val qqNumber: String?,
+    val qqOpenid: String?
 )
 
 class UserService(
@@ -61,7 +62,7 @@ class UserService(
     fun findById(id: Long): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.id eq id }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
             }
         }
     }
@@ -69,7 +70,7 @@ class UserService(
     fun findByPhone(phone: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
             }
         }
     }
@@ -77,7 +78,35 @@ class UserService(
     fun findByQQ(qqNumber: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber])
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+            }
+        }
+    }
+
+    fun findByQqOpenid(openid: String): UserInfo? {
+        return transaction {
+            UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.let {
+                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid])
+            }
+        }
+    }
+
+    fun bindByQqOpenid(userId: Long, openid: String): Boolean {
+        return transaction {
+            val existing = UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()
+            if (existing != null && existing[UsersTable.id] != userId) return@transaction false
+
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.qqOpenid] = openid
+            }
+            true
+        }
+    }
+
+    fun unbindQq(userId: Long) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.qqOpenid] = null
             }
         }
     }

@@ -54,8 +54,17 @@ class DefaultNLUService(
     }
 
     private fun extractAmount(text: String): Double? {
-        val pattern = Regex("""(\d+\.?\d*)\s*[元块]?""")
-        return pattern.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+        // Prefer number with explicit 元/块 suffix, then the last number
+        val withSuffix = Regex("""(\d+\.?\d*)\s*[元块]""").find(text)
+        if (withSuffix != null) {
+            return withSuffix.groupValues[1].toDoubleOrNull()
+        }
+        // Fall back to last number (avoids date digits like "8月1日")
+        val allNumbers = Regex("""(\d+\.?\d*)""").findAll(text).toList()
+        if (allNumbers.isNotEmpty()) {
+            return allNumbers.last().groupValues[1].toDoubleOrNull()
+        }
+        return null
     }
 
     private fun getUserKeywords(userId: Long): List<UserKeyword> {
@@ -73,9 +82,10 @@ class DefaultNLUService(
     }
 
     private fun saveLearnedKeyword(userId: Long, text: String, categoryName: String) {
-        // Extract a keyword fragment from text (take first 2-6 chars as keyword)
-        val keyword = text.take(6).trim()
-        if (keyword.length < 1) return
+        // Strip amount and common suffixes before extracting keyword
+        val cleaned = text.replace(Regex("""\d+\.?\d*\s*[元块]?"""), "").trim()
+        val keyword = if (cleaned.length >= 2) cleaned.take(6) else text.take(6).trim()
+        if (keyword.length < 2) return
 
         transaction {
             val existing = VoiceKeywordsTable.selectAll()

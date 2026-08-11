@@ -15,6 +15,8 @@ object BillsTable : Table("bills") {
     val date = long("date") // epoch millis
     val billSource = varchar("source", 10) // "QQ" or "APP"
     val createdAt = long("created_at")
+    val updatedAt = long("updated_at").nullable()
+    val deleted = bool("deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)
 }

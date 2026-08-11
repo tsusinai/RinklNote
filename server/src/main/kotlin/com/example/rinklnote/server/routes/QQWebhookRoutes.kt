@@ -5,16 +5,11 @@ import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.plugins.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.security.MessageDigest
-
-@Serializable
-data class WebhookReply(val reply: String)
 
 fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billService: BillService, nluService: NLUService) {
     route("/api/qq") {
@@ -24,7 +19,11 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
                 if (headerSecret == null || !MessageDigest.isEqual(
                         headerSecret.toByteArray(), webhookSecret.toByteArray()
                     )) {
-                    call.respond(HttpStatusCode.Forbidden, WebhookReply("Unauthorized"))
+                    call.respondText(
+                        """{"reply":"Unauthorized"}""",
+                        status = HttpStatusCode.Forbidden,
+                        contentType = ContentType.Application.Json
+                    )
                     return@post
                 }
 
@@ -32,7 +31,10 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
                 val json = Json.parseToJsonElement(body).jsonObject
 
                 val userId = json["user_id"]?.jsonPrimitive?.longOrNull
-                    ?: return@post call.respond(HttpStatusCode.BadRequest, WebhookReply("无法获取用户ID"))
+                    ?: return@post call.respondText(
+                        """{"reply":"无法获取用户ID"}""",
+                        ContentType.Application.Json
+                    )
 
                 val messageArray = json["message"]?.jsonArray
                 val text = messageArray?.mapNotNull { element ->
@@ -43,24 +45,24 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
                 }?.joinToString("") ?: ""
 
                 if (text.isBlank()) {
-                    return@post call.respond(
-                        HttpStatusCode.BadRequest,
-                        WebhookReply("请发送文本消息，如：午餐20元")
+                    return@post call.respondText(
+                        """{"reply":"请发送文本消息，如：午餐20元"}""",
+                        ContentType.Application.Json
                     )
                 }
 
                 val user = userService.findByQQ(userId.toString())
-                    ?: return@post call.respond(
-                        HttpStatusCode.BadRequest,
-                        WebhookReply("未绑定账号，请先在App中绑定QQ号")
+                    ?: return@post call.respondText(
+                        """{"reply":"未绑定账号，请先在App中绑定QQ号"}""",
+                        ContentType.Application.Json
                     )
 
                 val result = nluService.parse(text, user.id)
 
                 if (result.amount == null || result.amount <= 0) {
-                    return@post call.respond(
-                        HttpStatusCode.BadRequest,
-                        WebhookReply("无法识别金额，请说如'午餐20元'")
+                    return@post call.respondText(
+                        """{"reply":"无法识别金额，请说如'午餐20元'"}""",
+                        ContentType.Application.Json
                     )
                 }
 
@@ -72,10 +74,16 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
                     source = "QQ"
                 )
 
-                call.respond(WebhookReply("已记录: ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"))
+                call.respondText(
+                    """{"reply":"已记录: ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"}""",
+                    ContentType.Application.Json
+                )
             } catch (e: Exception) {
                 call.application.environment.log.error("QQ Webhook error", e)
-                call.respond(HttpStatusCode.InternalServerError, WebhookReply("服务器内部错误"))
+                call.respondText(
+                    """{"reply":"服务器内部错误"}""",
+                    ContentType.Application.Json
+                )
             }
         }
     }

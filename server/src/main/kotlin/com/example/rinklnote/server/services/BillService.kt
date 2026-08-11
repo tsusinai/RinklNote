@@ -19,13 +19,23 @@ data class BillDTO(
     val remark: String?,
     val date: Long,
     val source: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val updatedAt: Long? = null,
+    val deleted: Boolean = false
 )
 
 @Serializable
 data class SyncResponse(
     val bills: List<BillDTO>,
-    val serverTime: Long
+    val serverTime: Long,
+    val hasMore: Boolean = false
+)
+
+@Serializable
+data class SubCategoryDTO(
+    val id: Long,
+    val name: String,
+    val parentCategoryId: Long
 )
 
 @Serializable
@@ -33,7 +43,8 @@ data class CategoryDTO(
     val id: Long,
     val name: String,
     val iconName: String,
-    val billType: String
+    val billType: String,
+    val subCategories: List<SubCategoryDTO> = emptyList()
 )
 
 @Serializable
@@ -52,67 +63,71 @@ class BillService {
         remark: String?,
         source: String = "QQ"
     ): BillDTO {
+        require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
+        val sanitizedRemark = remark?.take(500)
+
         val now = System.currentTimeMillis()
         val todayStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
             .toInstant()
             .toEpochMilli()
 
+        // Match category by name, supporting both EXPENSE and INCOME
         val category = if (categoryName != null) {
             transaction {
                 CategoriesTable.selectAll()
-                    .where { (CategoriesTable.name eq categoryName) and (CategoriesTable.billType eq "EXPENSE") }
+                    .where { CategoriesTable.name eq categoryName }
                     .singleOrNull()
             }
         } else null
 
         val catId: Long
         val catName: String
+        val billType: String
         if (category != null) {
             catId = category[CategoriesTable.id]
             catName = category[CategoriesTable.name]
+            billType = category[CategoriesTable.billType] // Use category's type (EXPENSE or INCOME)
         } else {
             val defaultCat = transaction {
                 CategoriesTable.selectAll()
                     .where { CategoriesTable.billType eq "EXPENSE" }
                     .orderBy(CategoriesTable.id)
-                    .first()
+                    .firstOrNull()
+                    ?: throw IllegalStateException("No default category found")
             }
             catId = defaultCat[CategoriesTable.id]
             catName = defaultCat[CategoriesTable.name]
+            billType = "EXPENSE"
         }
 
         val account = transaction {
-            AccountsTable.selectAll().orderBy(AccountsTable.id).first()
+            AccountsTable.selectAll().orderBy(AccountsTable.id).firstOrNull()
+                ?: throw IllegalStateException("No account found")
         }
 
         val billId = transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = userId
                 it[BillsTable.amount] = amount
-                it[BillsTable.billType] = "EXPENSE"
+                it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = catId
                 it[BillsTable.categoryName] = catName
                 it[BillsTable.accountId] = account[AccountsTable.id]
-                it[BillsTable.remark] = remark
+                it[BillsTable.remark] = sanitizedRemark
                 it[BillsTable.date] = todayStart
                 it[BillsTable.billSource] = source
                 it[BillsTable.createdAt] = now
+                it[BillsTable.updatedAt] = now
             } get BillsTable.id
         }
 
         return BillDTO(
-            id = billId,
-            amount = amount,
-            billType = "EXPENSE",
-            categoryId = catId,
-            categoryName = catName,
-            subCategoryName = null,
-            accountId = account[AccountsTable.id],
-            remark = remark,
-            date = todayStart,
-            source = source,
-            createdAt = now
+            id = billId, amount = amount, billType = billType,
+            categoryId = catId, categoryName = catName,
+            subCategoryName = null, accountId = account[AccountsTable.id],
+            remark = sanitizedRemark, date = todayStart, source = source,
+            createdAt = now, updatedAt = now
         )
     }
 
@@ -146,6 +161,7 @@ class BillService {
                 it[BillsTable.date] = billDate
                 it[BillsTable.billSource] = "WEB"
                 it[BillsTable.createdAt] = now
+                it[BillsTable.updatedAt] = now
             } get BillsTable.id
         }
 
@@ -153,22 +169,36 @@ class BillService {
             id = billId, amount = amount, billType = billType,
             categoryId = categoryId, categoryName = categoryName,
             subCategoryName = subCategoryName, accountId = accountId,
-            remark = remark, date = billDate, source = "WEB", createdAt = now
+            remark = remark, date = billDate, source = "WEB",
+            createdAt = now, updatedAt = now
         )
     }
 
-    fun syncBills(userId: Long, after: Long?): SyncResponse {
+    fun deleteBill(billId: Long, userId: Long): Boolean {
+        val now = System.currentTimeMillis()
+        return transaction {
+            val updated = BillsTable.update({
+                (BillsTable.id eq billId) and (BillsTable.userId eq userId)
+            }) {
+                it[deleted] = true
+                it[updatedAt] = now
+            }
+            updated > 0
+        }
+    }
+
+    fun syncBills(userId: Long, after: Long?, limit: Int = 200): SyncResponse {
         val now = System.currentTimeMillis()
         val bills = transaction {
             val query = BillsTable.selectAll()
                 .where { BillsTable.userId eq userId }
-                .orderBy(BillsTable.id, SortOrder.ASC)
+                .orderBy(BillsTable.updatedAt, SortOrder.ASC)
 
             if (after != null && after > 0) {
-                query.andWhere { BillsTable.id greater after }
+                query.andWhere { BillsTable.updatedAt greater after }
             }
 
-            query.map {
+            query.limit(limit + 1).map {
                 BillDTO(
                     id = it[BillsTable.id],
                     amount = it[BillsTable.amount],
@@ -180,17 +210,23 @@ class BillService {
                     remark = it[BillsTable.remark],
                     date = it[BillsTable.date],
                     source = it[BillsTable.billSource],
-                    createdAt = it[BillsTable.createdAt]
+                    createdAt = it[BillsTable.createdAt],
+                    updatedAt = it[BillsTable.updatedAt],
+                    deleted = it[BillsTable.deleted]
                 )
             }
         }
-        return SyncResponse(bills = bills, serverTime = now)
+        val hasMore = bills.size > limit
+        return SyncResponse(bills = bills.take(limit), serverTime = now, hasMore = hasMore)
     }
 
     fun seedIfNeeded() {
         transaction {
             if (CategoriesTable.selectAll().empty()) {
                 seedCategories()
+            }
+            if (SubCategoriesTable.selectAll().empty()) {
+                seedSubCategories()
             }
             if (AccountsTable.selectAll().empty()) {
                 seedAccounts()
@@ -231,6 +267,25 @@ class BillService {
         }
     }
 
+    private fun seedSubCategories() {
+        val subMap = mapOf(
+            "三餐" to listOf("早餐", "午餐", "晚餐", "零食"),
+            "交通" to listOf("公交", "地铁", "打车", "加油"),
+            "娱乐" to listOf("电影", "游戏", "旅游")
+        )
+        for ((catName, subNames) in subMap) {
+            val catId = CategoriesTable.selectAll()
+                .where { CategoriesTable.name eq catName }
+                .singleOrNull()?.get(CategoriesTable.id) ?: continue
+            for (subName in subNames) {
+                SubCategoriesTable.insert {
+                    it[SubCategoriesTable.name] = subName
+                    it[SubCategoriesTable.parentCategoryId] = catId
+                }
+            }
+        }
+    }
+
     private fun seedAccounts() {
         val accounts = listOf(
             Triple("微信", "#28C145", 0.0),
@@ -247,14 +302,26 @@ class BillService {
     }
 
     fun getCategories(): List<CategoryDTO> = transaction {
-        CategoriesTable.selectAll().map {
-            CategoryDTO(
-                id = it[CategoriesTable.id],
-                name = it[CategoriesTable.name],
-                iconName = it[CategoriesTable.iconName],
-                billType = it[CategoriesTable.billType]
-            )
-        }
+        CategoriesTable.selectAll()
+            .orderBy(CategoriesTable.billType to SortOrder.ASC, CategoriesTable.id to SortOrder.ASC)
+            .map { row ->
+                CategoryDTO(
+                    id = row[CategoriesTable.id],
+                    name = row[CategoriesTable.name],
+                    iconName = row[CategoriesTable.iconName],
+                    billType = row[CategoriesTable.billType],
+                    subCategories = SubCategoriesTable.selectAll()
+                        .where { SubCategoriesTable.parentCategoryId eq row[CategoriesTable.id] }
+                        .orderBy(SubCategoriesTable.id to SortOrder.ASC)
+                        .map {
+                            SubCategoryDTO(
+                                id = it[SubCategoriesTable.id],
+                                name = it[SubCategoriesTable.name],
+                                parentCategoryId = it[SubCategoriesTable.parentCategoryId]
+                            )
+                        }
+                )
+            }
     }
 
     fun getAccounts(): List<AccountDTO> = transaction {

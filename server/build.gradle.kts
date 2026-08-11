@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.ktor.server.auth.jwt)
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.call.logging)
+    implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.serialization.kotlinx.json)
 
     // Database
@@ -43,6 +44,9 @@ dependencies {
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
+
+    // Ed25519 crypto (QQ Bot webhook signature)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78")
 
     // Kotlin Serialization
     implementation(libs.kotlinx.serialization.json)
