@@ -174,6 +174,13 @@ fun AppNavigation(app: RinklNoteApp) {
     BackHandler(enabled = showDrawer) { showDrawer = false }
     BackHandler(enabled = showKeypad) { showKeypad = false }
 
+    // Popback: 记账页(1)是首页。在其他页按返回键回到记账页；
+    // 记账页上返回交给系统默认（退出 App）。页面内的弹窗
+    // （预算键盘/月明细/余额弹窗等）组合在本 handler 之后，优先级更高。
+    BackHandler(enabled = pagerState.currentPage != 1) {
+        coroutineScope.launch { pagerState.animateScrollToPage(1) }
+    }
+
     // Voice input: bottom floating mini bar (device real-time recognition, server
     // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
     val permissionLauncher = rememberLauncherForActivityResult(
