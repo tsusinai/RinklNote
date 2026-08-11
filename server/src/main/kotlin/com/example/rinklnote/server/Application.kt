@@ -5,6 +5,7 @@ import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.QQBotService
+import com.example.rinklnote.server.services.QQBotWebSocketClient
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.asr.AsrConfig
@@ -105,6 +106,11 @@ fun Application.module() {
         log.info("QQ Bot not yet configured — use Web settings page")
     }
 
+    // QQ Official Bot gateway — long WebSocket connection (default receiving mode).
+    // Shares message processing with the HTTP webhook path via QQMessageProcessor.
+    val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService)
+    qqWsClient.start(appScope)
+
     val templateService = TemplateService()
 
     // Speech-to-text (optional). Unconfigured → Android falls back to on-device recognition.
@@ -129,6 +135,7 @@ fun Application.module() {
     environment.monitor.subscribe(ApplicationStopped) {
         appScope.cancel()
         llmParser.shutdown()
+        qqWsClient.shutdown()
         qqBotService.shutdown()
         asrService.shutdown()
     }

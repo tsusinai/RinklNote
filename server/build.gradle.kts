@@ -45,6 +45,9 @@ dependencies {
     implementation(libs.ktor.client.cio)
     implementation(libs.ktor.client.content.negotiation)
 
+    // Ktor Client WebSockets (QQ Bot gateway connection)
+    implementation(libs.ktor.client.websockets)
+
     // Ed25519 crypto (QQ Bot webhook signature)
     implementation("org.bouncycastle:bcprov-jdk18on:1.78")
 

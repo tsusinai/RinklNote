@@ -34,6 +34,8 @@ data class SendMessageRequest(val content: String, val msg_id: String)
 class QQBotService {
     private val logger = LoggerFactory.getLogger(QQBotService::class.java)
     private val baseUrl = "https://api.sgroup.qq.com"
+    // Access token is issued by the auth host (bots.qq.com), NOT the api gateway.
+    private val authUrl = "https://bots.qq.com"
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -147,6 +149,8 @@ class QQBotService {
         return if (aid.length <= 4) aid else aid.take(4) + "****"
     }
 
+    fun getAppId(): String? = appId
+
     // ── Ed25519 ──
 
     fun sign(payload: ByteArray): ByteArray {
@@ -186,7 +190,7 @@ class QQBotService {
 
         logger.info("Refreshing QQ Bot access token...")
         val response: AccessTokenResponse = try {
-            client.post("$baseUrl/app/getAppAccessToken") {
+            client.post("$authUrl/app/getAppAccessToken") {
                 contentType(ContentType.Application.Json)
                 setBody(mapOf("appId" to aid, "clientSecret" to secret))
             }.body()
