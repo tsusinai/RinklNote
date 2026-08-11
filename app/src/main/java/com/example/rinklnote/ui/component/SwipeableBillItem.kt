@@ -1,7 +1,7 @@
 package com.example.rinklnote.ui.component
 
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.spring
+import com.example.rinklnote.ui.theme.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -50,7 +50,7 @@ fun SwipeableBillItem(
     // Gesture lambdas must not capture a stale callback
     val currentOnRevealChange by rememberUpdatedState(onRevealChange)
 
-    val settle = spring<Float>(dampingRatio = 0.8f, stiffness = 400f)
+    val settle = Motion.SwipeSettle
 
     // Parent-driven reveal change (e.g. opening another row closes this one)
     LaunchedEffect(revealed) {

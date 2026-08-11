@@ -9,18 +9,25 @@
 <script src="/js/recharts.js"></script>
 <link rel="icon" href="data:,">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
 :root {
   --primary: #7EC1FC; --expense: #CA3032; --income: #04A433;
   --bg: #F7F7F9; --card: #FFFFFF; --text: #1f2937; --muted: #6b7280;
-  --border: #e5e7eb; --border-light: #f3f4f6; --radius: 12px;
+  --border: #e5e7eb; --border-light: #f3f4f6; --radius: 15px; --radius-sm: 10px;
+  --primary-soft: #eff6ff; --primary-hover: #f8fbff;
+  --tag-web-bg: #dcfce7; --tag-web-fg: #16a34a;
+  --tag-qq-bg: #dbeafe; --tag-qq-fg: #2563eb;
+  --tag-app-bg: #f3f4f6; --tag-app-fg: #6b7280;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.04); --shadow: 0 1px 8px rgba(0,0,0,0.06);
+  --ease: cubic-bezier(.4,0,.2,1);          /* ≈ Android FastOutSlowInEasing */
+  --dur-fast: 120ms; --dur-med: 220ms; --dur-slow: 320ms;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+body { font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 input:focus, select:focus, button:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
 .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; }
-.btn { border: none; border-radius: 10px; padding: 10px 24px; font-weight: 500; cursor: pointer; transition: all 0.2s; font-size: 14px; font-family: inherit; }
+.btn { border: none; border-radius: var(--radius-sm); padding: 10px 24px; font-weight: 500; cursor: pointer; transition: transform var(--dur-fast) var(--ease), filter var(--dur-med) var(--ease), background var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease), color var(--dur-med) var(--ease); font-size: 14px; font-family: inherit; }
+.btn:active { transform: scale(.97); }
 .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 1px 3px rgba(126,193,252,0.4); }
 .btn-primary:hover { filter: brightness(0.92); transform: translateY(-1px); }
 .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--muted); }
@@ -33,36 +40,38 @@ input:focus, select:focus, button:focus { outline: 2px solid var(--primary); out
 #sidebar h1 { padding: 0 24px 28px; font-size: 18px; font-weight: 700; color: var(--primary); letter-spacing: -0.3px; }
 #sidebar .nav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
 #sidebar .nav button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); border-radius: 8px; text-align: left; width: 100%; font-family: inherit; transition: all 0.15s; }
-#sidebar .nav button.active { background: #7EC1FC12; color: var(--primary); font-weight: 600; }
+#sidebar .nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 #sidebar .nav button:hover:not(.active) { background: var(--border-light); color: var(--text); }
 #content { flex: 1; overflow: auto; padding: 36px 40px; }
 .page { display: none; max-width: 880px; margin: 0 auto; }
-.page.active { display: block; animation: fadeIn 0.3s ease; }
+.page.active { display: block; animation: fadeIn var(--dur-slow) var(--ease); }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 h2 { font-size: 22px; font-weight: 700; margin-bottom: 24px; letter-spacing: -0.3px; }
 h3 { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
-.cat-btn { padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; text-align: center; font-size: 13px; font-weight: 500; transition: all 0.15s; font-family: inherit; }
-.cat-btn:hover { border-color: var(--primary); background: #f8fbff; }
-.cat-btn.sel { border-color: var(--primary); background: #eff6ff; color: var(--primary); font-weight: 600; }
-.toggle { display: flex; background: #f3f4f6; border-radius: 10px; padding: 3px; width: fit-content; }
-.toggle button { padding: 8px 20px; border: none; background: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; color: var(--muted); font-family: inherit; }
+.cat-btn { padding: 10px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--card); cursor: pointer; text-align: center; font-size: 13px; font-weight: 500; transition: transform var(--dur-fast) var(--ease), background var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease), color var(--dur-med) var(--ease); font-family: inherit; }
+.cat-btn:hover { border-color: var(--primary); background: var(--primary-hover); }
+.cat-btn:active { transform: scale(.97); }
+.cat-btn.sel { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.toggle { display: flex; background: var(--border-light); border-radius: var(--radius-sm); padding: 3px; width: fit-content; }
+.toggle button { padding: 8px 20px; border: none; background: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: transform var(--dur-fast) var(--ease), background var(--dur-med) var(--ease), color var(--dur-med) var(--ease); color: var(--muted); font-family: inherit; }
+.toggle button:active { transform: scale(.95); }
 .toggle button.on { color: #fff; }
 .toggle button.on.exp { background: var(--expense); }
 .toggle button.on.inc { background: var(--income); }
-input[type="text"], input[type="number"], input[type="password"], input[type="date"], select { width: 100%; padding: 10px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 14px; background: #fff; font-family: inherit; transition: border-color 0.15s; }
-input[type="text"]:hover, select:hover { border-color: #c4c8cf; }
+input[type="text"], input[type="number"], input[type="password"], input[type="date"], select { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); font-size: 14px; background: var(--card); font-family: inherit; transition: border-color var(--dur-med) var(--ease), background var(--dur-med) var(--ease); }
+input[type="text"]:hover, select:hover { border-color: var(--border); }
 .amount-input { font-size: 48px; font-weight: 700; padding: 16px 0; border: none; border-bottom: 2px solid var(--border); border-radius: 0; background: transparent; width: 100%; }
 .amount-input:focus { outline: none; border-bottom-color: var(--primary); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
 .tag { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-.tag-web { background: #dcfce7; color: #16a34a; }
-.tag-qq { background: #dbeafe; color: #2563eb; }
-.tag-app { background: #f3f4f6; color: #6b7280; }
+.tag-web { background: var(--tag-web-bg); color: var(--tag-web-fg); }
+.tag-qq { background: var(--tag-qq-bg); color: var(--tag-qq-fg); }
+.tag-app { background: var(--tag-app-bg); color: var(--tag-app-fg); }
 .msg { padding: 8px 0; font-size: 13px; text-align: center; }
 .msg.ok { color: var(--income); }
 .msg.err { color: var(--expense); }
@@ -92,6 +101,25 @@ td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
 .budget-bar > div { height: 100%; background: var(--primary); border-radius: 4px; transition: width .3s; }
 .budget-bar.over > div { background: var(--expense); }
 .budget-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Recharts theme tokens (container adapts via --card/--border) */
+.recharts-text, .recharts-cartesian-axis-tick text { fill: var(--muted); }
+.recharts-default-tooltip { background: var(--card) !important; border: 1px solid var(--border) !important; }
+.recharts-default-tooltip .recharts-tooltip-label { color: var(--muted); }
+.recharts-surface { background: transparent; }
+
+/* Dark mode — mirrors Android DarkColorScheme (#1A1A1E bg / #252528 surface) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1A1A1E; --card: #252528; --text: #EAEAEA; --muted: #AAAAAA;
+    --border: #333333; --border-light: #2D2D30;
+    --primary-soft: rgba(126,193,252,.14); --primary-hover: rgba(126,193,252,.08);
+    --tag-web-bg: #0f2e1c; --tag-web-fg: #4ade80;
+    --tag-qq-bg: #12294a; --tag-qq-fg: #60a5fa;
+    --tag-app-bg: #2D2D30; --tag-app-fg: #AAAAAA;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.4); --shadow: 0 1px 8px rgba(0,0,0,.45);
+  }
+}
 </style>
 </head>
 <body>
@@ -310,9 +338,13 @@ function renderBills(pg) {
   const inc = f.filter(b=>b.billType==='INCOME').reduce((s,b)=>s+b.amount,0);
 
   const sg = h('div', { className: 'grid-3' });
-  [{l:'支出',v:'-¥'+exp.toFixed(2),c:'var(--expense)'},{l:'收入',v:'¥'+inc.toFixed(2),c:'var(--income)'},{l:'结余',v:'¥'+(inc-exp).toFixed(2),c:inc>=exp?'var(--income)':'var(--expense)'}].forEach(s => {
+  [{l:'支出',k:'bills:exp',v:exp,fmt:v=>'-¥'+v.toFixed(2),c:'var(--expense)'},
+   {l:'收入',k:'bills:inc',v:inc,fmt:v=>'¥'+v.toFixed(2),c:'var(--income)'},
+   {l:'结余',k:'bills:bal',v:inc-exp,fmt:v=>'¥'+v.toFixed(2),c:inc>=exp?'var(--income)':'var(--expense)'}].forEach(s => {
     const card = h('div', { className: 'card summary-card' });
-    card.append(h('div', { className: 'label' }, s.l), h('div', { className: 'val amount', style: 'color:'+s.c }, s.v));
+    const val = h('div', { className: 'val amount', style: 'color:'+s.c });
+    card.append(h('div', { className: 'label' }, s.l), val);
+    countUp(val, s.v, s.k, s.fmt);
     sg.appendChild(card);
   });
   pg.appendChild(sg);
@@ -862,8 +894,9 @@ function renderBudgetSection(box) {
       // Month expense summary
       const sum = h('div', { className:'summary-card', style:'margin:6px 0 12px' });
       sum.appendChild(h('div', { className:'label' }, '本月支出'));
-      sum.appendChild(h('div', { className:'val', style:'color:'+(cur && expense > cur.amount ? 'var(--expense)' : 'var(--text)') },
-        h('span', { className:'budget-num' }, '¥'+expense.toFixed(2))));
+      const expVal = h('span', { className:'budget-num' });
+      sum.appendChild(h('div', { className:'val', style:'color:'+(cur && expense > cur.amount ? 'var(--expense)' : 'var(--text)') }, expVal));
+      countUp(expVal, expense, 'budget:exp', v => '¥'+v.toFixed(2));
       box.appendChild(sum);
 
       if (cur && cur.amount > 0) {
@@ -899,6 +932,22 @@ function renderBudgetSection(box) {
 
 // ── Helpers ──
 function fmtDate(ts) { return new Date(ts).toLocaleDateString('zh-CN',{month:'short',day:'numeric'}); }
+
+// Number count-up with cubic-out easing. Guarded by key so full-page re-renders
+// (e.g. typing in the search filter) don't replay the animation when the value
+// hasn't changed.
+const _countupLast = {};
+function countUp(el, target, key, fmt, dur=400) {
+  if (key && _countupLast[key] === target) { el.textContent = fmt(target); return; }
+  if (key) _countupLast[key] = target;
+  const start = performance.now();
+  (function frame(now){
+    const t = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = fmt(target * eased);
+    if (t < 1) requestAnimationFrame(frame);
+  })(performance.now());
+}
 
 async function loadData() {
   // Load categories & accounts first (public, no auth needed), then bills (needs valid JWT)

@@ -4,8 +4,6 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -56,6 +54,7 @@ import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
@@ -96,17 +95,11 @@ fun QuickAddDrawer(
     AnimatedVisibility(
         visible = isVisible,
         enter = slideInHorizontally(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessLow
-            ),
+            animationSpec = Motion.DrawerEnter,
             initialOffsetX = { it }
         ),
         exit = slideOutHorizontally(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessLow
-            ),
+            animationSpec = Motion.DrawerExit,
             targetOffsetX = { it }
         ),
         modifier = modifier
@@ -551,7 +544,7 @@ private fun CountAfter(state: QuickAddState, onConfirm: () -> Unit, onAmountTap:
     LaunchedEffect(Unit) {
         checkScale.animateTo(
             targetValue = 1f,
-            animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow)
+            animationSpec = Motion.CheckPop
         )
     }
     Row(

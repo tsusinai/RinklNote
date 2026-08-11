@@ -2,9 +2,9 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import com.example.rinklnote.ui.theme.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,8 +47,8 @@ fun MonthDetailOverlay(
 
     AnimatedVisibility(
         visible = visible,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(250)),
-        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(250))
+        enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
+        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
     ) {
         Column(
             modifier = Modifier

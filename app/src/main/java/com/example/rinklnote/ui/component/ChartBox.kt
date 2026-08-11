@@ -25,7 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
+import com.example.rinklnote.ui.theme.Motion
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
@@ -87,7 +87,7 @@ fun ChartBox(
             perIndexValue.forEach { it.snapTo(0f) }
             coroutineScope {
                 perIndexValue.forEachIndexed { i, anim ->
-                    launch { anim.animateTo(expenseData[i], tween(1000)) }
+                    launch { anim.animateTo(expenseData[i], Motion.ChartDraw) }
                 }
             }
         } else {
@@ -97,7 +97,7 @@ fun ChartBox(
                 val newVal = expenseData[i]
                 if (oldVal != newVal) {
                     perIndexValue[i].snapTo(oldVal)
-                    launch { perIndexValue[i].animateTo(newVal, tween(500)) }
+                    launch { perIndexValue[i].animateTo(newVal, Motion.ChartUpdate) }
                 }
             }
         }

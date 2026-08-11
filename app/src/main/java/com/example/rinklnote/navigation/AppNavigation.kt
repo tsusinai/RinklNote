@@ -9,10 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -65,6 +62,7 @@ import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
@@ -233,11 +231,11 @@ fun AppNavigation(app: RinklNoteApp) {
         AnimatedVisibility(
             visible = showKeypad,
             enter = slideInVertically(
-                animationSpec = spring(dampingRatio = 0.8f, stiffness = 300f),
+                animationSpec = Motion.SheetEnter,
                 initialOffsetY = { it }
             ),
             exit = slideOutVertically(
-                animationSpec = tween(250),
+                animationSpec = Motion.SheetExit,
                 targetOffsetY = { it }
             )
         ) {
@@ -279,7 +277,7 @@ private fun CustomBottomBar(
 ) {
     val indicatorOffset by animateDpAsState(
         targetValue = tabWidth * currentIndex + (tabWidth - 60.dp) / 2,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        animationSpec = Motion.Indicator,
         label = "indicator"
     )
 
