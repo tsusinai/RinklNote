@@ -125,7 +125,11 @@ class AuthViewModel(
                 _state.update { it.copy(isLoggedIn = true, isLoading = false, error = null) }
                 fetchProfile()
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = "注册失败: ${e.message}") }
+                // Server rejects re-registering an existing phone with 409 — tell the
+                // user the account exists and to log in instead of a raw HTTP code.
+                val msg = if (e is retrofit2.HttpException && e.code() == 409) "该手机号已注册，请直接登录"
+                else "注册失败: ${e.message}"
+                _state.update { it.copy(isLoading = false, error = msg) }
             }
         }
     }
