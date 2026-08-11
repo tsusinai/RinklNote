@@ -16,12 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -68,8 +65,7 @@ fun ProfileScreen(
     repository: BillRepository,
     onLoginClick: () -> Unit,
     onBindQQClick: () -> Unit,
-    onQqBotGuideClick: () -> Unit,
-    onBack: (() -> Unit)? = null
+    onQqBotGuideClick: () -> Unit
 ) {
     val state by authViewModel.state.collectAsStateWithLifecycle()
     val themeMode by settingsManager.themeMode.collectAsStateWithLifecycle(ThemeMode.SYSTEM)
@@ -94,31 +90,6 @@ fun ProfileScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 从顶部「更多」图标进入时显示返回栏；从底部导航进入时为 null 不显示
-        if (onBack != null) {
-            item(key = "back") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clickable { onBack() },
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "我的",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
         item(key = "userbox") {
             UserBox(state = state, onLogin = onLoginClick)
         }

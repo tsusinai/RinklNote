@@ -87,14 +87,13 @@ private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minute
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
     var showConfirmed by remember { mutableStateOf(false) }
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
-    var showProfile by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var showQqBotGuide by remember { mutableStateOf(false) }
 
@@ -174,7 +173,6 @@ fun AppNavigation(app: RinklNoteApp) {
     // Back handler: dismiss drawer or keypad first
     BackHandler(enabled = showDrawer) { showDrawer = false }
     BackHandler(enabled = showKeypad) { showKeypad = false }
-    BackHandler(enabled = showProfile) { showProfile = false }
 
     // Voice input: bottom floating mini bar (device real-time recognition, server
     // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
@@ -222,10 +220,22 @@ fun AppNavigation(app: RinklNoteApp) {
                         onFinanceClick = {
                             coroutineScope.launch { pagerState.animateScrollToPage(2) }
                         },
-                        onMoreClick = { showProfile = true },
+                        onMoreClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(3) }
+                        },
                         viewModel = bookkeepingVM
                     )
                     2 -> AssetsScreen(viewModel = assetsVM)
+                    3 -> ProfileScreen(
+                        authViewModel = authVM,
+                        settingsManager = app.settingsManager,
+                        tokenManager = app.tokenManager,
+                        syncManager = app.syncManager,
+                        repository = app.repository,
+                        onLoginClick = { showLogin = true },
+                        onBindQQClick = { showBindQQ = true },
+                        onQqBotGuideClick = { showQqBotGuide = true }
+                    )
                 }
             }
 
@@ -299,21 +309,7 @@ fun AppNavigation(app: RinklNoteApp) {
             }
         }
 
-        // Full-screen login / bind-QQ / profile pages — top-most so they cover the bottom nav.
-        // 我的页从底部导航移出，改为顶部「更多」图标进入。
-        if (showProfile) {
-            ProfileScreen(
-                authViewModel = authVM,
-                settingsManager = app.settingsManager,
-                tokenManager = app.tokenManager,
-                syncManager = app.syncManager,
-                repository = app.repository,
-                onLoginClick = { showLogin = true },
-                onBindQQClick = { showBindQQ = true },
-                onQqBotGuideClick = { showQqBotGuide = true },
-                onBack = { showProfile = false }
-            )
-        }
+        // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav
         if (showLogin) {
             LoginPage(viewModel = authVM, onDismiss = { showLogin = false })
         }
@@ -441,15 +437,18 @@ private fun CustomBottomBar(
             }
         }
 
-        // Blue indicator — align to bottom-start then offset
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .offset(x = indicatorOffset)
-                .width(60.dp)
-                .height(5.dp)
-                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+        // Blue indicator — align to bottom-start then offset. Hidden on the 我的 page
+        // (index 3) which has no bottom tab.
+        if (currentIndex < tabs.size) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = indicatorOffset)
+                    .width(60.dp)
+                    .height(5.dp)
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
             )
+        }
         }
     }
 }
