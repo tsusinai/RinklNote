@@ -473,53 +473,30 @@ function renderBills(pg) {
 
   const tbl = h('table');
   const thead = h('thead');
-  ['日期','分类','子分类','金额','备注','来源'].forEach(l => thead.append(h('th',null,l)));
+  ['日期','分类','子分类','金额','备注','来源','操作'].forEach(l => thead.append(h('th',null,l)));
   tbl.appendChild(thead);
   const tbody = h('tbody');
   f.forEach(b => {
     const tr = h('tr');
     tr.append(h('td',null, fmtDate(b.date)));
-    const catCell = h('td',null);
-    const catSpan = h('span',{style:'cursor:pointer;border-bottom:1px dashed var(--muted)',onclick:()=>{
-      // Show quick category selector
-      const origCat = b.categoryName;
-      const sel = h('select',{style:'font-size:12px;padding:4px',onchange:async(e)=>{
-        if(e.target.value && e.target.value!==origCat){
-          const parts = e.target.value.split('||');
-          const newCatName = parts[0];
-          const newSubName = parts[1] || null;
-          const displayVal = newSubName ? newCatName + ' / ' + newSubName : newCatName;
-          // Record correction
-          await api('/api/corrections',{method:'POST',body:JSON.stringify({
-            originalText:b.remark||'',originalCategory:origCat,correctedCategory:displayVal
-          })});
-          // Update bill
-          const newCat = S.cats.find(c => c.name === newCatName);
-          await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
-            amount:b.amount,billType:b.billType,categoryId:(newCat?newCat.id:b.categoryId),categoryName:newCatName,subCategoryName:newSubName,
-            accountId:b.accountId,remark:b.remark
-          })});
-          S.msg='分类更新成功';await loadData();
-        }
-      }});
-      sel.append(h('option',{value:''},'修改分类'));
-      S.cats.filter(c=>c.billType===b.billType).forEach(c=>{
-        sel.append(h('option',{value:c.name,selected:c.name===b.categoryName&&!b.subCategoryName},c.name));
-        if (c.subCategories) c.subCategories.forEach(sc => {
-          const val = c.name + '||' + sc.name;
-          sel.append(h('option',{value:val,selected:c.name===b.categoryName&&sc.name===b.subCategoryName},'  └ ' + sc.name));
-        });
-      });
-      catCell.innerHTML='';catCell.appendChild(sel);
-    }}, b.categoryName);
-    catCell.appendChild(catSpan);
-    if (b.subCategoryName) catSpan.textContent = b.categoryName + ' / ' + b.subCategoryName;
+    const catCell = h('td', null, b.categoryName);
+    if (b.subCategoryName) catCell.textContent = b.categoryName + ' / ' + b.subCategoryName;
     tr.appendChild(catCell);
     tr.append(h('td',{style:'color:var(--muted)'}, b.subCategoryName || '-'));
     tr.append(h('td',{className:'amount',style:'text-align:right;font-weight:700;color:'+(b.billType==='EXPENSE'?'var(--expense)':'var(--income)')}, (b.billType==='EXPENSE'?'-':'')+'¥'+b.amount.toFixed(2)));
     tr.append(h('td',{style:'color:var(--muted)'}, b.remark||'-'));
     const tagCls = b.source==='QQ'?'tag tag-qq':b.source==='WEB'?'tag tag-web':'tag tag-app';
     tr.append(h('td',null, h('span',{className:tagCls},b.source)));
+    // Actions: edit / delete
+    const ops = h('td', null,
+      h('button',{className:'btn btn-outline',style:'padding:3px 8px;font-size:11px;margin-right:6px',onclick:()=>openEditBill(b)},'编辑'),
+      h('button',{className:'btn btn-outline danger',style:'padding:3px 8px;font-size:11px',onclick:async()=>{
+        if(!confirm('确定删除该账单？')) return;
+        const r = await api('/api/bills/'+b.id,{method:'DELETE'});
+        S.msg = r.message || '已删除'; await loadData();
+      }},'删除')
+    );
+    tr.appendChild(ops);
     tbody.appendChild(tr);
   });
   tbl.appendChild(tbody);
@@ -528,6 +505,72 @@ function renderBills(pg) {
   pg.appendChild(wrap);
 
   if (S.msg) { pg.append(h('p', { className: msgClass(), style: 'margin-top:12px' }, S.msg)); S.msg = ''; }
+}
+
+function openEditBill(b) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center';
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:var(--card);border-radius:15px;padding:24px;width:90%;max-width:420px;max-height:90vh;overflow:auto';
+  const st = { amount:String(b.amount), billType:b.billType, catId:String(b.categoryId), subCatName:b.subCategoryName||'', acctId:String(b.accountId), remark:b.remark||'' };
+
+  function renderSubs(selCat) {
+    const subRow = modal.querySelector('#edit_sub');
+    if (!subRow || !selCat || !selCat.subCategories || !selCat.subCategories.length) return;
+    subRow.innerHTML = '';
+    subRow.appendChild(h('p',{style:'font-size:12px;color:var(--muted);margin:0 0 6px'},'子分类'));
+    const sg = h('div',{className:'grid-4'});
+    sg.appendChild(h('button',{className:'cat-btn'+(!st.subCatName?' sel':''),onclick:()=>{st.subCatName='';renderSubs(selCat);}},'全部'));
+    selCat.subCategories.forEach(sc=>{
+      sg.appendChild(h('button',{className:'cat-btn'+(st.subCatName===sc.name?' sel':''),onclick:()=>{st.subCatName=sc.name;renderSubs(selCat);}},sc.name));
+    });
+    subRow.appendChild(sg);
+  }
+
+  function render() {
+    modal.innerHTML = '';
+    modal.appendChild(h('h3',{style:'margin-bottom:16px'},'编辑账单'));
+    const tog = h('div',{className:'toggle',style:'margin-bottom:12px'});
+    ['EXPENSE','INCOME'].forEach(t=>{
+      tog.appendChild(h('button',{className:st.billType===t?'on '+(t==='EXPENSE'?'exp':'inc'):'',onclick:()=>{st.billType=t;st.catId='';st.subCatName='';render();}},t==='EXPENSE'?'支出':'收入'));
+    });
+    modal.appendChild(tog);
+    modal.appendChild(h('input',{type:'number',step:'0.01',placeholder:'0.00',value:st.amount,oninput:e=>st.amount=e.target.value,style:'width:100%;margin-bottom:12px;font-size:20px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border)'}));
+    modal.appendChild(h('p',{style:'font-size:12px;color:var(--muted);margin:8px 0 6px'},'分类'));
+    const catSel = h('select',{onchange:e=>{const p=e.target.value.split('||');st.catId=p[0];st.subCatName='';render();}});
+    catSel.append(h('option',{value:''},'选择分类'));
+    S.cats.filter(c=>c.billType===st.billType).forEach(c=>{
+      catSel.append(h('option',{value:c.id+'||'+c.name,selected:c.id==st.catId},c.name));
+    });
+    modal.appendChild(catSel);
+    const subRow = h('div',{id:'edit_sub',style:'margin-top:8px'});
+    modal.appendChild(subRow);
+    const selCat = S.cats.find(c=>c.id==st.catId);
+    if (selCat && selCat.subCategories && selCat.subCategories.length) renderSubs(selCat);
+    modal.appendChild(h('p',{style:'font-size:12px;color:var(--muted);margin:12px 0 6px'},'账户'));
+    const acctSel = h('select',{onchange:e=>st.acctId=e.target.value});
+    acctSel.append(h('option',{value:''},'选择账户'));
+    S.accts.forEach(a=>{acctSel.append(h('option',{value:a.id,selected:a.id==st.acctId},a.name));});
+    modal.appendChild(acctSel);
+    modal.appendChild(h('input',{type:'text',placeholder:'备注 (可选)',value:st.remark,oninput:e=>st.remark=e.target.value,style:'width:100%;margin-top:12px'}));
+    const btnRow = h('div',{style:'display:flex;gap:10px;margin-top:16px'});
+    btnRow.appendChild(h('button',{className:'btn btn-outline',style:'flex:1',onclick:()=>overlay.remove()},'取消'));
+    btnRow.appendChild(h('button',{className:'btn btn-primary',style:'flex:1',onclick:async()=>{
+      if(!st.amount||!st.catId||!st.acctId){S.msg='请填写完整';overlay.remove();render();return;}
+      const cat = S.cats.find(c=>c.id==st.catId);
+      const r = await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
+        amount:parseFloat(st.amount),billType:st.billType,categoryId:parseInt(st.catId),categoryName:cat.name,
+        subCategoryName:st.subCatName||null,accountId:parseInt(st.acctId),remark:st.remark||null
+      })});
+      if(r.id){S.msg='账单已更新';overlay.remove();await loadData();}
+      else{S.msg=r.message||'更新失败';overlay.remove();render();}
+    }},'保存'));
+    modal.appendChild(btnRow);
+  }
+  render();
+  overlay.appendChild(modal);
+  overlay.onclick = (e)=>{ if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
 }
 
 // ── Charts ──
