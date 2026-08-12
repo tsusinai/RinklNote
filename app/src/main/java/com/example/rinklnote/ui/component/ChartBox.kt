@@ -73,7 +73,7 @@ fun ChartBox(
     val surfaceColor = MaterialTheme.colorScheme.surface
     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
 
-    val perIndexValue = remember { List(10) { Animatable(0f) } }
+    val perIndexValue = remember(expenseData.size) { List(expenseData.size) { Animatable(0f) } }
 
     // Track previous data to detect which indices changed
     var prevExpenseData by remember { mutableStateOf(emptyList<Float>()) }

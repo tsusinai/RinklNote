@@ -101,6 +101,7 @@ fun BookkeepingScreen(
                     totalExpense = state.totalExpense,
                     totalIncome = state.totalIncome,
                     labels = chartLabels,
+                    currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     onDetailClick = { showMonthDetail = true }
                 )
             }
