@@ -9,6 +9,7 @@ import com.example.rinklnote.data.network.dto.QueryRequest
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,6 +60,7 @@ class AiViewModel(private val api: ApiService) : ViewModel() {
                 val r = api.getMonthlySummary(month)
                 _state.update { it.copy(monthlySummary = r.summary, highlights = r.highlights, isLoading = false, error = null) }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _state.update { it.copy(isLoading = false, error = friendlyError(e, "加载总结失败")) }
             }
         }
@@ -70,6 +72,7 @@ class AiViewModel(private val api: ApiService) : ViewModel() {
                 val r = api.getAnomalyAlerts()
                 _state.update { it.copy(alerts = r.alerts, error = null) }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _state.update { it.copy(error = friendlyError(e, "加载异常提醒失败")) }
             }
         }
@@ -84,6 +87,7 @@ class AiViewModel(private val api: ApiService) : ViewModel() {
                 val r = api.queryBillData(QueryRequest(text))
                 _state.update { it.copy(answer = r.answer, isQuerying = false, error = null) }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _state.update { it.copy(isQuerying = false, error = friendlyError(e, "提问失败")) }
             }
         }
