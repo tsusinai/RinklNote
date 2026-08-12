@@ -148,6 +148,10 @@ fun AppNavigation(app: RinklNoteApp) {
             quickAddVM.reset()
             quickAddVM.resetConfirming()
         }
+        // 离开 AI 页(4)时丢弃未消费的记账在途标记，避免后续抽屉/语音记账被误判为聊天发起
+        if (pagerState.currentPage != 4) {
+            aiVM.consumeBookingPending()
+        }
     }
 
     // AI 页(index 4)进入时注入欢迎语；已登录时按需注入月总结/异常提醒。

@@ -164,7 +164,7 @@ class AiViewModel(
                 throw e
             } catch (e: Exception) {
                 repository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = "summary", content = friendlyError(e, "加载总结失败"), createdAt = now())
+                    ChatMessage(role = "assistant", kind = "text", content = friendlyError(e, "加载总结失败"), createdAt = now())
                 )
             }
         }
@@ -192,7 +192,7 @@ class AiViewModel(
                 throw e
             } catch (e: Exception) {
                 repository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = "anomaly", content = friendlyError(e, "加载异常提醒失败"), createdAt = now())
+                    ChatMessage(role = "assistant", kind = "text", content = friendlyError(e, "加载异常提醒失败"), createdAt = now())
                 )
             }
         }

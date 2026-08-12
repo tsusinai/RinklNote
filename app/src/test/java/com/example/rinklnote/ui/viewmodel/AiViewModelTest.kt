@@ -175,6 +175,30 @@ class AiViewModelTest {
         assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
     }
 
+    @Test
+    fun `summary api failure does not consume dedup slot and retries on next entry`() = runTest(dispatcher) {
+        fake.monthlyError = retrofit2.HttpException(
+            retrofit2.Response.error<String>(500, "".toResponseBody(null))
+        )
+        val vm = newVM()
+        vm.onEnter(true)
+        advanceUntilIdle()
+
+        // 失败时错误气泡用 kind=text，且 summary 去重位未被占用
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
+        assertTrue(
+            repo.chatMessages.value.any {
+                it.role == "assistant" && it.kind == "text" && it.content.contains("加载总结失败")
+            }
+        )
+
+        // 下次进入重试成功
+        fake.monthlyError = null
+        vm.onEnter(true)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
+    }
+
     /** 仓库 fake：支持聊天 Flow + countSince 去重计数，同时驱动 QuickAdd 记账。 */
     private class FakeBillRepository : BillRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
@@ -231,6 +255,7 @@ class AiViewModelTest {
     private class FakeApiService : ApiService {
         var monthlyResult: MonthlySummaryResponse =
             MonthlySummaryResponse(summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"))
+        var monthlyError: Exception? = null
         var anomalyResult: AnomalyResponse =
             AnomalyResponse(alerts = listOf(AnomalyAlert("HIGH", "周末支出异常偏高", "spike")))
         var queryResult: QueryResponse = QueryResponse(answer = "8 月交通共支出 156 元，共 12 笔。")
@@ -239,7 +264,10 @@ class AiViewModelTest {
         override suspend fun parseBill(request: ParseRequest): ParseResponse =
             ParseResponse(amount = "28", categoryName = "三餐", remark = request.text)
 
-        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse = monthlyResult
+        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse {
+            monthlyError?.let { throw it }
+            return monthlyResult
+        }
         override suspend fun getAnomalyAlerts(): AnomalyResponse = anomalyResult
         override suspend fun queryBillData(request: QueryRequest): QueryResponse {
             queryError?.let { throw it }
