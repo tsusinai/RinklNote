@@ -269,12 +269,14 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
             }
 
-            // Custom bottom navigation
-            CustomBottomBar(
-                currentIndex = pagerState.currentPage,
-                tabWidth = tabWidth,
-                onTabClick = onTabClick
-            )
+            // Custom bottom navigation — 仅 计划/记账/资产(0-2) 显示；我的(3)/AI(4) 整条隐藏
+            if (pagerState.currentPage < tabs.size) {
+                CustomBottomBar(
+                    currentIndex = pagerState.currentPage,
+                    tabWidth = tabWidth,
+                    onTabClick = onTabClick
+                )
+            }
         }
 
         // QuickAdd Drawer overlay
