@@ -266,12 +266,11 @@ class BillService {
             if (CategoriesTable.selectAll().empty()) {
                 seedCategories()
             }
-            if (SubCategoriesTable.selectAll().empty()) {
-                seedSubCategories()
-            }
             if (AccountsTable.selectAll().empty()) {
                 seedAccounts()
             }
+            // 幂等补齐二级分类：每次启动检查缺失项；既有库（子分类表非空时旧逻辑会跳过）也补全
+            seedSubCategories()
         }
     }
 
@@ -312,13 +311,25 @@ class BillService {
         val subMap = mapOf(
             "三餐" to listOf("早餐", "午餐", "晚餐", "零食"),
             "交通" to listOf("公交", "地铁", "打车", "加油"),
-            "娱乐" to listOf("电影", "游戏", "旅游")
+            "日用" to listOf("洗衣", "洗漱", "家居"),
+            "学习" to listOf("书籍", "文具", "培训"),
+            "运动" to listOf("健身", "跑步", "球类"),
+            "娱乐" to listOf("电影", "游戏", "旅游"),
+            "网购" to listOf("淘宝", "京东", "快递"),
+            "工资" to listOf("基本工资", "奖金", "补贴"),
+            "兼职" to listOf("劳务", "项目", "其他"),
+            "理财" to listOf("利息", "基金", "股票"),
+            "其他" to listOf("红包", "返还", "其他收入")
         )
+        val existing = SubCategoriesTable.selectAll()
+            .map { it[SubCategoriesTable.parentCategoryId] to it[SubCategoriesTable.name] }
+            .toSet()
         for ((catName, subNames) in subMap) {
             val catId = CategoriesTable.selectAll()
                 .where { CategoriesTable.name eq catName }
                 .singleOrNull()?.get(CategoriesTable.id) ?: continue
             for (subName in subNames) {
+                if (catId to subName in existing) continue
                 SubCategoriesTable.insert {
                     it[SubCategoriesTable.name] = subName
                     it[SubCategoriesTable.parentCategoryId] = catId

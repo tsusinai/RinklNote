@@ -180,4 +180,31 @@ class BillServiceTest {
     fun `updateAccountBalance returns null for unknown id`() {
         assertNull(service.updateAccountBalance(99999, 1.0))
     }
+
+    @Test
+    fun `seed creates the full sub category set for all categories and is idempotent`() {
+        val byName = service.getCategories().associateBy { it.name }
+        assertEquals(11, byName.size)
+        fun subs(cat: String): List<String> =
+            (byName[cat]?.subCategories ?: emptyList()).map { it.name }
+
+        assertEquals(listOf("早餐", "午餐", "晚餐", "零食"), subs("三餐"))
+        assertEquals(listOf("公交", "地铁", "打车", "加油"), subs("交通"))
+        assertEquals(listOf("洗衣", "洗漱", "家居"), subs("日用"))
+        assertEquals(listOf("书籍", "文具", "培训"), subs("学习"))
+        assertEquals(listOf("健身", "跑步", "球类"), subs("运动"))
+        assertEquals(listOf("电影", "游戏", "旅游"), subs("娱乐"))
+        assertEquals(listOf("淘宝", "京东", "快递"), subs("网购"))
+        assertEquals(listOf("基本工资", "奖金", "补贴"), subs("工资"))
+        assertEquals(listOf("劳务", "项目", "其他"), subs("兼职"))
+        assertEquals(listOf("利息", "基金", "股票"), subs("理财"))
+        assertEquals(listOf("红包", "返还", "其他收入"), subs("其他"))
+
+        // Idempotent: a second seed pass must not duplicate any sub-category.
+        service.seedIfNeeded()
+        val again = service.getCategories().associateBy { it.name }
+        fun subCount(cat: String): Int = (again[cat]?.subCategories ?: emptyList()).size
+        listOf("三餐", "交通", "日用", "学习", "运动", "娱乐", "网购", "工资", "兼职", "理财", "其他")
+            .forEach { assertEquals(subs(it).size, subCount(it)) }
+    }
 }

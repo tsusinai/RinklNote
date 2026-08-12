@@ -96,12 +96,11 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override suspend fun seedIfNeeded() {
         val catCount = categoryDao.count()
         val accCount = accountDao.count()
-        if (catCount > 0 && accCount > 0) {
-            loadReferenceData()
-            return
-        }
         if (catCount == 0) seedCategories()
         if (accCount == 0) seedAccounts()
+        // 幂等补齐二级分类：全新安装由 seedCategories 建类后经此补齐；
+        // 已有安装（类已存在、跳过 seedCategories）也在此补上缺失的二级分类。
+        seedSubCategories()
         loadReferenceData()
     }
 
@@ -115,20 +114,7 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
             Category(name = "娱乐", iconName = "entertainment", billType = "EXPENSE"),
             Category(name = "网购", iconName = "shopping", billType = "EXPENSE"),
         )
-        for (c in expenseCategories) {
-            val categoryId = categoryDao.insert(c)
-            when (c.name) {
-                "三餐" -> listOf("早餐", "午餐", "晚餐", "零食").forEach {
-                    categoryDao.insertSubCategory(SubCategory(name = it, parentCategoryId = categoryId))
-                }
-                "交通" -> listOf("公交", "地铁", "打车", "加油").forEach {
-                    categoryDao.insertSubCategory(SubCategory(name = it, parentCategoryId = categoryId))
-                }
-                "娱乐" -> listOf("电影", "游戏", "旅游").forEach {
-                    categoryDao.insertSubCategory(SubCategory(name = it, parentCategoryId = categoryId))
-                }
-            }
-        }
+        for (c in expenseCategories) categoryDao.insert(c)
 
         val incomeCategories = listOf(
             Category(name = "工资", iconName = "salary", billType = "INCOME"),
@@ -136,8 +122,32 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
             Category(name = "理财", iconName = "finance", billType = "INCOME"),
             Category(name = "其他", iconName = "other", billType = "INCOME"),
         )
-        for (c in incomeCategories) {
-            categoryDao.insert(c)
+        for (c in incomeCategories) categoryDao.insert(c)
+    }
+
+    /** 完整二级分类（FEATURES.md「分类管理 · 首次启动 seed 数据」）。幂等：仅插入缺失项。 */
+    private suspend fun seedSubCategories() {
+        val subMap = mapOf(
+            "三餐" to listOf("早餐", "午餐", "晚餐", "零食"),
+            "交通" to listOf("公交", "地铁", "打车", "加油"),
+            "日用" to listOf("洗衣", "洗漱", "家居"),
+            "学习" to listOf("书籍", "文具", "培训"),
+            "运动" to listOf("健身", "跑步", "球类"),
+            "娱乐" to listOf("电影", "游戏", "旅游"),
+            "网购" to listOf("淘宝", "京东", "快递"),
+            "工资" to listOf("基本工资", "奖金", "补贴"),
+            "兼职" to listOf("劳务", "项目", "其他"),
+            "理财" to listOf("利息", "基金", "股票"),
+            "其他" to listOf("红包", "返还", "其他收入")
+        )
+        val existing = categoryDao.getAllSubCategories()
+            .mapTo(mutableSetOf()) { it.parentCategoryId to it.name }
+        for ((catName, subNames) in subMap) {
+            val catId = categoryDao.getIdByName(catName) ?: continue
+            for (subName in subNames) {
+                if (catId to subName in existing) continue
+                categoryDao.insertSubCategory(SubCategory(name = subName, parentCategoryId = catId))
+            }
         }
     }
 

@@ -18,6 +18,12 @@ interface CategoryDao {
     @Query("SELECT * FROM sub_categories WHERE parent_category_id = :parentId ORDER BY id ASC")
     suspend fun getSubCategories(parentId: Long): List<SubCategory>
 
+    @Query("SELECT * FROM sub_categories ORDER BY id ASC")
+    suspend fun getAllSubCategories(): List<SubCategory>
+
+    @Query("SELECT id FROM categories WHERE name = :name")
+    suspend fun getIdByName(name: String): Long?
+
     @Insert
     suspend fun insertSubCategory(subCategory: SubCategory): Long
 
