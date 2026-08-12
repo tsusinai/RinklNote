@@ -86,6 +86,8 @@ import kotlinx.coroutines.launch
 
 private val tabs = listOf("计划", "记账", "资产")
 
+private enum class VoiceTarget { QUICK_ADD, AI }
+
 private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minutes while on screen
 
 @Composable
@@ -97,6 +99,7 @@ fun AppNavigation(app: RinklNoteApp) {
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
+    var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
     var showQqBotGuide by remember { mutableStateOf(false) }
     var showRemarkSheet by remember { mutableStateOf(false) }
 
@@ -214,7 +217,8 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    val onVoiceInput: () -> Unit = {
+    val startVoice: (VoiceTarget) -> Unit = { target ->
+        voiceTarget = target
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
@@ -264,7 +268,8 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
                     4 -> AiScreen(
                         viewModel = aiVM,
-                        isLoggedIn = authState.isLoggedIn
+                        isLoggedIn = authState.isLoggedIn,
+                        onVoiceInput = { startVoice(VoiceTarget.AI) }
                     )
                 }
             }
@@ -289,7 +294,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 quickAddVM.reset()
             },
             onBillAdded = { bookkeepingVM.onEvent(BookkeepingEvent.Refresh) },
-            onVoiceInput = onVoiceInput,
+            onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
             onAmountTap = {
                 showKeypad = true
                 quickAddVM.resetConfirming()
@@ -370,9 +375,16 @@ fun AppNavigation(app: RinklNoteApp) {
                     api = app.apiService,
                     onResult = { text ->
                         voiceActive = false
-                        // Voice is the NLP entry: server parse (with local fallback in the VM)
-                        quickAddVM.onEvent(QuickAddEvent.NlpInput(text))
-                        quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
+                        val target = voiceTarget
+                        voiceTarget = VoiceTarget.QUICK_ADD
+                        if (target == VoiceTarget.AI) {
+                            // 语音在 AI 页发起 → 走聊天路由（记账/问账自动判定）
+                            aiVM.send(text)
+                        } else {
+                            // 抽屉语音记账：NLP 直填并提交
+                            quickAddVM.onEvent(QuickAddEvent.NlpInput(text))
+                            quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
+                        }
                     },
                     onDismiss = { voiceActive = false }
                 )

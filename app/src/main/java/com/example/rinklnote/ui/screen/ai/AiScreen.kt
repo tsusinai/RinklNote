@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,10 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
@@ -40,7 +44,8 @@ import com.example.rinklnote.ui.viewmodel.AiViewModel
 @Composable
 fun AiScreen(
     viewModel: AiViewModel,
-    isLoggedIn: Boolean
+    isLoggedIn: Boolean,
+    onVoiceInput: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -87,18 +92,26 @@ fun AiScreen(
             }
         }
 
-        // 输入栏
+        // 输入栏：麦克风 + 圆角胶囊输入框 + 发送
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onVoiceInput) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_mic),
+                    contentDescription = "语音输入",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             OutlinedTextField(
                 value = state.input,
                 onValueChange = { viewModel.onEvent(AiEvent.InputChanged(it)) },
                 placeholder = { Text("输入记账或问题，如「午餐28元」", fontSize = 13.sp) },
                 singleLine = true,
+                shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.weight(1f)
             )
             Spacer(modifier = Modifier.width(8.dp))
