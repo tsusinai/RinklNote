@@ -3,11 +3,20 @@ package com.example.rinklnote.ui.screen.quickadd
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -30,7 +39,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -169,57 +177,67 @@ private fun DrawerContent(
         modifier = Modifier
             .fillMaxSize()
             .padding(12.dp)
-            .verticalScroll(rememberScrollState())
     ) {
-        // Top bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 可滚动内容区
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
         ) {
-            Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-            Icon(
-                painter = painterResource(R.drawable.ic_register),
-                contentDescription = "登记",
-                modifier = Modifier.size(30.dp),
-                tint = Color.Unspecified
-            )
-        }
+            // Top bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                Icon(
+                    painter = painterResource(R.drawable.ic_register),
+                    contentDescription = "登记",
+                    modifier = Modifier.size(30.dp),
+                    tint = Color.Unspecified
+                )
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        state.suggestion?.let { suggestion ->
-            SuggestionSection(
-                label = suggestion.label,
-                onUse = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
-                onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) }
-            )
             Spacer(modifier = Modifier.height(16.dp))
-        }
 
-        if (state.templates.isNotEmpty()) {
-            TemplatesSection(
-                templates = state.templates,
-                onTemplateClick = { viewModel.onEvent(QuickAddEvent.TemplateClick(it)) }
-            )
+            state.suggestion?.let { suggestion ->
+                SuggestionSection(
+                    label = suggestion.label,
+                    onUse = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
+                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            if (state.templates.isNotEmpty()) {
+                TemplatesSection(
+                    templates = state.templates,
+                    onTemplateClick = { viewModel.onEvent(QuickAddEvent.TemplateClick(it)) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.subCategories, state.selectedSubCategory, viewModel)
+
             Spacer(modifier = Modifier.height(16.dp))
+
+            AccountSection(state.accounts, state.selectedAccount, balanceHidden, viewModel)
+
+            Spacer(modifier = Modifier.height(17.dp))
+
+            // Count area — single-step amount box
+            CountBefore(state, onAmountTap)
         }
 
-        CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.subCategories, state.selectedSubCategory, viewModel)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        AccountSection(state.accounts, state.selectedAccount, balanceHidden, viewModel)
-
-        Spacer(modifier = Modifier.height(17.dp))
-
-        // Count area — single-step amount box
-        CountBefore(state, onAmountTap)
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // AI Voice button
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // AI Voice button — 固定在抽屉底部上方，不随内容滚动，避开底部手势区
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 36.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -343,6 +361,8 @@ private fun CategorySection(
             Text("长按呼出二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(modifier = Modifier.height(8.dp))
+        // 当前展开的母标签：由已加载的二级分类推断其父级 id
+        val expandedParentId = if (showSubCategories) subCategories.firstOrNull()?.parentCategoryId else null
         categories.forEach { category ->
             CategoryRow(
                 category = category,
@@ -350,18 +370,35 @@ private fun CategorySection(
                 onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
                 onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
             )
-        }
-        if (showSubCategories && subCategories.isNotEmpty()) {
-            SubCategoryPopup(
-                subCategories = subCategories,
-                selected = selectedSubCategory,
-                onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) },
-                onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSubCategories) }
-            )
+            // 二级分类紧跟母标签正下方展示，左缘与标签文字对齐。
+            // AnimatedVisibility 始终在组合中（不能靠 if 守卫，否则进入组合即 visible=true，
+            // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
+            AnimatedVisibility(
+                visible = expandedParentId == category.id && subCategories.isNotEmpty(),
+                enter = expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeIn(tween(200)),
+                exit = shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeOut(tween(150))
+            ) {
+                SubCategoryPopup(
+                    subCategories = subCategories,
+                    selected = selectedSubCategory,
+                    onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryRow(
     category: Category,
@@ -372,7 +409,7 @@ private fun CategoryRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -405,20 +442,36 @@ private fun CategoryRow(
 private fun SubCategoryPopup(
     subCategories: List<SubCategory>,
     selected: SubCategory?,
-    onSelect: (SubCategory?) -> Unit,
-    onDismiss: () -> Unit
+    onSelect: (SubCategory?) -> Unit
 ) {
     Column(
         modifier = Modifier
-            .padding(top = 4.dp)
+            // 32.dp 缩进：与母标签行内图标(24dp)+间距(8dp)对齐，弹层左缘正对标签文字
+            .padding(start = 32.dp, top = 2.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(8.dp)
+            .padding(vertical = 4.dp, horizontal = 10.dp)
     ) {
         subCategories.forEach { sub ->
-            TextButton(onClick = { onSelect(sub) }, modifier = Modifier.fillMaxWidth()) {
-                Text(sub.name, fontSize = 14.sp, color = if (selected?.id == sub.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            val isSelected = selected?.id == sub.id
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(sub) }
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = sub.name,
+                    fontSize = 14.sp,
+                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                if (isSelected) {
+                    Text("✓", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }

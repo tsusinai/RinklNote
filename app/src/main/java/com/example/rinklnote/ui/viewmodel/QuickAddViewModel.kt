@@ -165,7 +165,8 @@ class QuickAddViewModel(
     }
 
     private fun showSubCategories(category: Category) {
-        _state.update { it.copy(showSubCategories = true) }
+        // 先清空旧二级分类：切换母标签时旧弹层先收起，新数据加载后再展开，避免闪到错误父级下方
+        _state.update { it.copy(showSubCategories = true, subCategories = emptyList()) }
         viewModelScope.launch {
             val subs = repository.getSubCategories(category.id)
             _state.update { it.copy(subCategories = subs) }
@@ -173,7 +174,8 @@ class QuickAddViewModel(
     }
 
     private fun selectSubCategory(subCategory: SubCategory?) {
-        _state.update { it.copy(selectedSubCategory = subCategory, showSubCategories = false) }
+        // 选中后保持二级分类弹层展开，便于查看/切换；点母标签或长按其它分类时再收起。
+        _state.update { it.copy(selectedSubCategory = subCategory) }
     }
 
     private fun dismissSubCategories() {
