@@ -1,12 +1,9 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,13 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,12 +30,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
@@ -49,7 +42,6 @@ import com.example.rinklnote.ui.component.ChartBox
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.util.toDayOfWeek
-import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -63,7 +55,6 @@ fun BookkeepingScreen(
     viewModel: BookkeepingViewModel
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     val monthLabel = remember(state.selectedMonthOffset) {
         val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
@@ -71,26 +62,14 @@ fun BookkeepingScreen(
     }
 
     // Interaction state
-    var searchQuery by remember { mutableStateOf("") }
-    var categoryFilter by remember { mutableStateOf<String?>(null) }
     var revealedBillId by remember { mutableStateOf<Long?>(null) }
     var menuBill by remember { mutableStateOf<Bill?>(null) }
     var deleteTarget by remember { mutableStateOf<Bill?>(null) }
     var showMonthDetail by remember { mutableStateOf(false) }
     var showMonthNav by remember { mutableStateOf(false) }
 
-    // Client-side filter over the selected month's bills (search + category)
-    val filteredBills = remember(state.bills, searchQuery, categoryFilter) {
-        state.bills.filter { b ->
-            (searchQuery.isBlank() || (b.remark ?: "").contains(searchQuery) || b.categoryName.contains(searchQuery)) &&
-                (categoryFilter == null || b.categoryName == categoryFilter)
-        }
-    }
     // Cache grouped bills to avoid recomputation on every recomposition
-    val groupedBills = remember(filteredBills) { groupBillsByDate(filteredBills) }
-    val filterCategories = remember(state.bills) {
-        state.bills.map { it.categoryName }.distinct().sorted()
-    }
+    val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
     val (chartData, chartLabels) = remember(state.bills, state.selectedMonthOffset) {
         computeMonthChartData(state.bills, state.selectedMonthOffset)
     }
@@ -127,17 +106,6 @@ fun BookkeepingScreen(
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     onDetailClick = { showMonthDetail = true }
                 )
-            }
-            item(key = "filterbar") {
-                FilterBar(
-                    searchQuery = searchQuery,
-                    onSearchChange = { searchQuery = it },
-                    categoryFilter = categoryFilter,
-                    categories = filterCategories,
-                    onCategoryChange = { categoryFilter = it },
-                    onExport = { exportBills(context, filteredBills) }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
             }
             item(key = "spacer") { Spacer(modifier = Modifier.height(20.dp)) }
 
@@ -334,60 +302,6 @@ private fun MonthNavigator(
     }
 }
 
-@Composable
-private fun FilterBar(
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    categoryFilter: String?,
-    categories: List<String>,
-    onCategoryChange: (String?) -> Unit,
-    onExport: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchChange,
-                singleLine = true,
-                placeholder = { Text("搜索备注/分类", fontSize = 13.sp) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onExport) { Text("导出", fontSize = 14.sp) }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(text = "全部", selected = categoryFilter == null, onClick = { onCategoryChange(null) })
-            categories.forEach { c ->
-                FilterChip(text = c, selected = categoryFilter == c, onClick = { onCategoryChange(c) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(15.dp))
-            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 13.sp,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
 private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
     return bills.groupBy { it.date }.toList()
         .sortedByDescending { it.first }
@@ -408,30 +322,4 @@ private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Flo
     }
     val labels = data.map { "${it.monthValue}.${it.dayOfMonth}" }
     return values to labels
-}
-
-private fun exportBills(context: android.content.Context, bills: List<Bill>) {
-    val sb = StringBuilder("\uFEFF")
-    sb.appendLine("日期,类型,分类,子分类,金额,备注,来源")
-    val zone = ZoneId.systemDefault()
-    bills.forEach { b ->
-        val date = java.time.Instant.ofEpochMilli(b.date).atZone(zone).toLocalDate().toString()
-        sb.appendLine(
-            listOf(date, b.billType, b.categoryName, b.subCategoryName ?: "", b.amount, b.remark ?: "", b.source)
-                .joinToString(",") { "\"" + it.toString().replace("\"", "\"\"") + "\"" }
-        )
-    }
-    val dir = File(context.cacheDir, "exports").apply { mkdirs() }
-    val file = File(dir, "rinklnote.csv").apply { writeText(sb.toString(), Charsets.UTF_8) }
-    val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/csv"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    try {
-        context.startActivity(Intent.createChooser(intent, "导出账单"))
-    } catch (_: Exception) {
-        android.widget.Toast.makeText(context, "未找到可分享的应用", android.widget.Toast.LENGTH_SHORT).show()
-    }
 }

@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.profile
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,11 +38,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.data.local.TokenManager
@@ -51,7 +55,9 @@ import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -72,6 +78,7 @@ fun ProfileScreen(
     val autoSync by settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
     val lastSync by tokenManager.lastSyncTime.collectAsStateWithLifecycle(initialValue = 0L)
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var showPassword by remember { mutableStateOf(false) }
     var showUnbindQQ by remember { mutableStateOf(false) }
@@ -114,6 +121,12 @@ fun ProfileScreen(
                             is SyncResult.Success -> "同步完成 (推送${r.pushed}条, 拉取${r.pulled}条)"
                             is SyncResult.Error -> r.message
                         }
+                    }
+                },
+                onExportClick = {
+                    coroutineScope.launch {
+                        val bills = repository.observeAllBills().first()
+                        exportBills(context, bills)
                     }
                 },
                 onLogoutClick = { showLogout = true }
@@ -253,6 +266,7 @@ private fun FuncBox(
     onThemeClick: () -> Unit,
     onAutoSyncChange: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
+    onExportClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     Column(
@@ -271,6 +285,8 @@ private fun FuncBox(
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         FuncRow(label = "QQ 机器人绑定引导", onClick = onQqBotGuideClick)
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        FuncRow(label = "导出账单 (CSV)", onClick = onExportClick)
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         FuncRow(label = "主题", value = themeLabel(themeMode), onClick = onThemeClick)
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
@@ -409,4 +425,30 @@ private fun formatSyncTime(epochMillis: Long): String {
     return Instant.ofEpochMilli(epochMillis)
         .atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
+}
+
+private fun exportBills(context: android.content.Context, bills: List<Bill>) {
+    val sb = StringBuilder("\uFEFF")
+    sb.appendLine("日期,类型,分类,子分类,金额,备注,来源")
+    val zone = ZoneId.systemDefault()
+    bills.forEach { b ->
+        val date = Instant.ofEpochMilli(b.date).atZone(zone).toLocalDate().toString()
+        sb.appendLine(
+            listOf(date, b.billType, b.categoryName, b.subCategoryName ?: "", b.amount, b.remark ?: "", b.source)
+                .joinToString(",") { "\"" + it.toString().replace("\"", "\"\"") + "\"" }
+        )
+    }
+    val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+    val file = File(dir, "rinklnote.csv").apply { writeText(sb.toString(), Charsets.UTF_8) }
+    val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/csv"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    try {
+        context.startActivity(Intent.createChooser(intent, "导出账单"))
+    } catch (_: Exception) {
+        android.widget.Toast.makeText(context, "未找到可分享的应用", android.widget.Toast.LENGTH_SHORT).show()
+    }
 }
