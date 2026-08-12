@@ -13,6 +13,8 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -161,5 +163,21 @@ class BillServiceTest {
                 .map { it[BillsTable.amount] }
             assertEquals(listOf(20.0, 30.0, 10.0), rows)
         }
+    }
+
+    @Test
+    fun `updateAccountBalance updates and returns the account`() {
+        val before = service.getAccounts().firstOrNull { it.name == "微信" } ?: error("微信 missing")
+        val updated = service.updateAccountBalance(before.id, 500.0)
+        assertNotNull(updated)
+        assertEquals(before.id, updated!!.id)
+        assertEquals(500.0, updated.balance, 0.0001)
+        val after = service.getAccounts().first { it.id == before.id }
+        assertEquals(500.0, after.balance, 0.0001)
+    }
+
+    @Test
+    fun `updateAccountBalance returns null for unknown id`() {
+        assertNull(service.updateAccountBalance(99999, 1.0))
     }
 }

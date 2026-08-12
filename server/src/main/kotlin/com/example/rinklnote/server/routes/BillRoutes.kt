@@ -30,6 +30,9 @@ data class CreateBillRequest(
 @Serializable
 data class ParseRequest(val text: String)
 
+@Serializable
+data class UpdateBalanceRequest(val balance: Double)
+
 fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
     // Public endpoints — reference data, no auth required
     get("/api/bills/categories") {
@@ -158,6 +161,24 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     call.respond(mapOf("message" to "已删除"))
                 } else {
                     call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
+                }
+            }
+        }
+
+        route("/api/accounts") {
+            put("/{id}") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@put call.respond(HttpStatusCode.Unauthorized)
+                val id = call.parameters["id"]?.toLongOrNull()
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
+                val body = call.receive<UpdateBalanceRequest>()
+                require(body.balance >= 0 && body.balance.isFinite()) { "余额不能为负" }
+                val updated = billService.updateAccountBalance(id, body.balance)
+                if (updated != null) {
+                    call.respond(updated)
+                } else {
+                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "账户不存在"))
                 }
             }
         }

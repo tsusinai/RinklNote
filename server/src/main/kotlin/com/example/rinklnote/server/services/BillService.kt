@@ -427,4 +427,20 @@ class BillService {
             )
         }
     }
+
+    fun updateAccountBalance(id: Long, balance: Double): AccountDTO? = transaction {
+        val row = AccountsTable.selectAll()
+            .where { AccountsTable.id eq id }
+            .singleOrNull()
+            ?: return@transaction null
+        AccountsTable.update({ AccountsTable.id eq id }) {
+            it[AccountsTable.balance] = balance
+        }
+        AccountDTO(
+            id = id,
+            name = row[AccountsTable.name],
+            balance = balance,
+            iconColor = row[AccountsTable.iconColor]
+        )
+    }
 }
