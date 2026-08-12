@@ -62,6 +62,7 @@ import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
@@ -95,6 +96,7 @@ fun AppNavigation(app: RinklNoteApp) {
     var showBindQQ by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var showQqBotGuide by remember { mutableStateOf(false) }
+    var showRemarkSheet by remember { mutableStateOf(false) }
 
     val openDrawer: () -> Unit = {
         showDrawer = true
@@ -295,11 +297,24 @@ fun AppNavigation(app: RinklNoteApp) {
                         onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },
                         onBackspace = { quickAddVM.onEvent(QuickAddEvent.Backspace) },
                         onToggleType = { quickAddVM.onEvent(QuickAddEvent.ToggleType) },
-                        onRemarkClick = { onVoiceInput() },
+                        onRemarkClick = { showRemarkSheet = true },
                         onConfirm = { quickAddVM.onEvent(QuickAddEvent.Confirm) }
                     )
                 }
             }
+        }
+
+        // Remark bottom sheet — overlaid on top of the keypad so users can type a
+        // remark instead of (or in addition to) voice input.
+        if (showRemarkSheet) {
+            RemarkInputSheet(
+                initialText = quickAddState.remark,
+                onConfirm = { text ->
+                    showRemarkSheet = false
+                    quickAddVM.onEvent(QuickAddEvent.RemarkChanged(text))
+                },
+                onDismiss = { showRemarkSheet = false }
+            )
         }
 
         // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav

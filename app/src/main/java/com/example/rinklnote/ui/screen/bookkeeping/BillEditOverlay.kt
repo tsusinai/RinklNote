@@ -37,6 +37,7 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.RemarkInputSheet
 
 @Composable
 fun BillEditOverlay(
@@ -59,6 +60,7 @@ fun BillEditOverlay(
         mutableStateOf(accounts.firstOrNull { it.id == bill.accountId } ?: accounts.firstOrNull())
     }
     var remark by remember(bill.id) { mutableStateOf(bill.remark ?: "") }
+    var showRemark by remember { mutableStateOf(false) }
 
     val visibleCategories = if (billType == "EXPENSE") expenseCategories else incomeCategories
 
@@ -87,13 +89,14 @@ fun BillEditOverlay(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-    ) {
-        // Title bar
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
+        ) {
+            // Title bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -187,8 +190,20 @@ fun BillEditOverlay(
                 onClear = { amount = "" },
                 onBackspace = { amount = amount.dropLast(1) },
                 onToggleType = onToggleType,
-                onRemarkClick = {},
+                onRemarkClick = { showRemark = true },
                 onConfirm = ::confirmEdit
+            )
+        }
+        }
+
+        if (showRemark) {
+            RemarkInputSheet(
+                initialText = remark,
+                onConfirm = { text ->
+                    showRemark = false
+                    remark = text
+                },
+                onDismiss = { showRemark = false }
             )
         }
     }
