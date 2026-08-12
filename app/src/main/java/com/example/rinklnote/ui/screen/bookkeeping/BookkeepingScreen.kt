@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +42,6 @@ import com.example.rinklnote.ui.component.ChartBox
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.util.toDayOfWeek
-import com.example.rinklnote.util.toHeaderString
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -54,25 +55,44 @@ fun BookkeepingScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    val monthLabel = remember(state.selectedMonthOffset) {
+        val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
+        "${d.year}年${d.monthValue}月"
+    }
+
     // Cache grouped bills to avoid recomputation on every recomposition
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
-    val (chartData, chartLabels) = remember(state.bills) { computeChartData(state.bills) }
+    val (chartData, chartLabels) = remember(state.bills, state.selectedMonthOffset) {
+        computeMonthChartData(state.bills, state.selectedMonthOffset)
+    }
 
     // Interaction state
     var revealedBillId by remember { mutableStateOf<Long?>(null) }
     var menuBill by remember { mutableStateOf<Bill?>(null) }
     var deleteTarget by remember { mutableStateOf<Bill?>(null) }
     var showMonthDetail by remember { mutableStateOf(false) }
+    var showMonthNav by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item(key = "topbar") {
                 TopBar(
-                    date = state.currentDate,
+                    monthLabel = monthLabel,
+                    onMonthClick = { showMonthNav = !showMonthNav },
                     onOpenDrawer = onOpenDrawer,
                     onFinanceClick = onFinanceClick,
                     onMoreClick = onMoreClick
                 )
+            }
+            if (showMonthNav) {
+                item(key = "monthnav") {
+                    MonthNavigator(
+                        offset = state.selectedMonthOffset,
+                        onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
+                        onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
+                        onBackToNow = { viewModel.selectMonth(0) }
+                    )
+                }
             }
             item(key = "chart") {
                 Spacer(modifier = Modifier.height(24.dp))
@@ -159,24 +179,20 @@ fun BookkeepingScreen(
             )
         }
 
-        // Month detail overlay — browse historical months with the ‹ › arrows
+        // Month detail overlay — shows the currently selected month's summary
         MonthDetailOverlay(
             visible = showMonthDetail,
-            monthBills = state.bills,
-            monthOffset = state.selectedMonthOffset,
-            onPrevMonth = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
-            onNextMonth = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
-            onDismiss = {
-                showMonthDetail = false
-                if (state.selectedMonthOffset != 0) viewModel.selectMonth(0)
-            }
+            monthLabel = monthLabel,
+            bills = state.bills,
+            onDismiss = { showMonthDetail = false }
         )
     }
 }
 
 @Composable
 private fun TopBar(
-    date: Long,
+    monthLabel: String,
+    onMonthClick: () -> Unit,
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit
@@ -197,11 +213,13 @@ private fun TopBar(
             tint = Color.Unspecified
         )
         Text(
-            text = date.toHeaderString(),
+            text = monthLabel,
             fontSize = 24.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.align(Alignment.Center)
+            modifier = Modifier
+                .align(Alignment.Center)
+                .clickable(onClick = onMonthClick)
         )
         Row(
             modifier = Modifier.align(Alignment.CenterEnd),
@@ -228,25 +246,67 @@ private fun TopBar(
     }
 }
 
+@Composable
+private fun MonthNavigator(
+    offset: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onBackToNow: () -> Unit
+) {
+    val d = LocalDate.now().plusMonths(offset.toLong())
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 4.dp, vertical = 0.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onPrev) {
+            Text("‹", fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
+        }
+        Text(
+            text = "${d.year}年${d.monthValue}月",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        TextButton(onClick = onNext, enabled = offset < 0) {
+            Text(
+                "›",
+                fontSize = 26.sp,
+                color = if (offset < 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (offset != 0) {
+            TextButton(onClick = onBackToNow) {
+                Text("回本月", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
 private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
     return bills.groupBy { it.date }.toList()
         .sortedByDescending { it.first }
         .associate { it.first to it.second }
 }
 
-private fun computeChartData(bills: List<Bill>): Pair<List<Float>, List<String>> {
-    val today = LocalDate.now()
+private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Float>, List<String>> {
     val zone = ZoneId.systemDefault()
-    val data = List(10) { offset ->
-        val targetDate = today.minusDays((9 - offset).toLong())
+    val firstDay = LocalDate.now().plusMonths(offset.toLong()).withDayOfMonth(1)
+    val lastDay = if (offset == 0) LocalDate.now() else firstDay.plusMonths(1).minusDays(1)
+    val days = (java.time.temporal.ChronoUnit.DAYS.between(firstDay, lastDay).toInt()) + 1
+    val data = List(days) { firstDay.plusDays(it.toLong()) }
+    val values = data.map { d ->
         bills.filter { bill ->
-            val billDate = Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate()
-            billDate == targetDate && bill.billType == "EXPENSE"
+            bill.billType == "EXPENSE" &&
+                Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate() == d
         }.sumOf { it.amount }.toFloat()
     }
-    val labels = List(10) { offset ->
-        val targetDate = today.minusDays((9 - offset).toLong())
-        "${targetDate.monthValue}.${targetDate.dayOfMonth}"
-    }
-    return data to labels
+    val labels = data.map { "${it.monthValue}.${it.dayOfMonth}" }
+    return values to labels
 }

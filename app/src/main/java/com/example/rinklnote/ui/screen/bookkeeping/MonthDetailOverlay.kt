@@ -36,15 +36,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.theme.IncomeGreen
-import java.time.LocalDate
 
 @Composable
 fun MonthDetailOverlay(
     visible: Boolean,
-    monthBills: List<Bill>,
-    monthOffset: Int,
-    onPrevMonth: () -> Unit,
-    onNextMonth: () -> Unit,
+    monthLabel: String,
+    bills: List<Bill>,
     onDismiss: () -> Unit
 ) {
     BackHandler(enabled = visible) { onDismiss() }
@@ -67,30 +64,20 @@ fun MonthDetailOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onPrevMonth, enabled = true) {
-                        Text("‹", fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
-                    }
-                    Text(
-                        text = monthTitle(monthOffset),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    // Next is disabled at the current month — the browser only
-                    // navigates into the past.
-                    TextButton(onClick = onNextMonth, enabled = monthOffset < 0) {
-                        Text("›", fontSize = 26.sp, color = if (monthOffset < 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                Text(
+                    text = monthLabel,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 TextButton(onClick = onDismiss) {
                     Text("关闭", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
-            val expenseTotal = monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
-            val incomeTotal = monthBills.filter { it.billType == "INCOME" }.sumOf { it.amount }
-            val grouped = monthBills.groupBy { it.categoryName }
+            val expenseTotal = bills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
+            val incomeTotal = bills.filter { it.billType == "INCOME" }.sumOf { it.amount }
+            val grouped = bills.groupBy { it.categoryName }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -99,7 +86,7 @@ fun MonthDetailOverlay(
                 item(key = "totals") { TotalsCard(expenseTotal, incomeTotal) }
                 item { Spacer(modifier = Modifier.height(12.dp)) }
 
-                if (monthBills.isEmpty()) {
+                if (bills.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
@@ -124,12 +111,6 @@ fun MonthDetailOverlay(
             }
         }
     }
-}
-
-/** Title for the month-detail overlay, e.g. "2026年8月" or "2026年7月" (offset -1). */
-private fun monthTitle(offset: Int): String {
-    val d = LocalDate.now().plusMonths(offset.toLong())
-    return "${d.year}年${d.monthValue}月"
 }
 
 @Composable
