@@ -120,7 +120,7 @@ fun AppNavigation(app: RinklNoteApp) {
         factory = BudgetViewModel.Factory(app.repository, app.syncManager)
     )
     val aiVM: AiViewModel = viewModel(
-        factory = AiViewModel.Factory(app.apiService)
+        factory = AiViewModel.Factory(app.apiService, app.repository, quickAddVM)
     )
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
@@ -150,11 +150,11 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    // AI 页(index 4)进入且已登录时拉取月总结/异常提醒。
+    // AI 页(index 4)进入时注入欢迎语；已登录时按需注入月总结/异常提醒。
     // 用 currentPage==4 门控，避免 beyondViewportPageCount=1 预组合时误触发。
     LaunchedEffect(pagerState.currentPage, authState.isLoggedIn) {
-        if (pagerState.currentPage == 4 && authState.isLoggedIn) {
-            aiVM.loadAll()
+        if (pagerState.currentPage == 4) {
+            aiVM.onEnter(authState.isLoggedIn)
         }
     }
 
@@ -169,7 +169,14 @@ fun AppNavigation(app: RinklNoteApp) {
         quickAddVM.effects.collect { effect ->
             when (effect) {
                 is QuickAddEffect.FinalConfirmCompleted -> {
-                    Toast.makeText(context, "已记账", Toast.LENGTH_SHORT).show()
+                    if (aiVM.consumeBookingPending()) {
+                        // 必须先读 state 再 reset——确认文本来自记账成功时的 amount/分类
+                        val s = quickAddVM.state.value
+                        val cat = s.selectedCategory?.name ?: ""
+                        aiVM.appendBookingConfirmed("已记账：${s.amount}元（$cat）")
+                    } else {
+                        Toast.makeText(context, "已记账", Toast.LENGTH_SHORT).show()
+                    }
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
                     showDrawer = false
@@ -253,7 +260,6 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
                     4 -> AiScreen(
                         viewModel = aiVM,
-                        quickAddVM = quickAddVM,
                         isLoggedIn = authState.isLoggedIn
                     )
                 }
