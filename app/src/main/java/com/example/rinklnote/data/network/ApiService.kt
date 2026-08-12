@@ -74,4 +74,14 @@ interface ApiService {
 
     @PUT("api/insights/suggest-config")
     suspend fun updateSuggestConfig(@Body config: Map<String, String>): MessageResponse
+
+    // Insights (综合助手) — JWT-protected
+    @GET("api/insights/monthly")
+    suspend fun getMonthlySummary(@Query("month") month: String): MonthlySummaryResponse
+
+    @GET("api/insights/anomaly")
+    suspend fun getAnomalyAlerts(): AnomalyResponse
+
+    @POST("api/insights/query")
+    suspend fun queryBillData(@Body request: QueryRequest): QueryResponse
 }

@@ -105,3 +105,25 @@ data class TranscribeResponse(
     val text: String = "",
     val available: Boolean = true
 )
+
+@Serializable
+data class QueryRequest(val query: String)
+
+@Serializable
+data class QueryResponse(val answer: String = "")
+
+@Serializable
+data class MonthlySummaryResponse(
+    val summary: String = "",
+    val highlights: List<String> = emptyList()
+)
+
+@Serializable
+data class AnomalyResponse(val alerts: List<AnomalyAlert> = emptyList())
+
+@Serializable
+data class AnomalyAlert(
+    val level: String = "",
+    val message: String = "",
+    val type: String = ""
+)
