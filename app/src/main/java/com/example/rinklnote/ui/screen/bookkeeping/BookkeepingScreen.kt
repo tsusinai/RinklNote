@@ -162,14 +162,13 @@ fun BookkeepingScreen(
         // Month detail overlay — browse historical months with the ‹ › arrows
         MonthDetailOverlay(
             visible = showMonthDetail,
-            monthBills = state.monthBills,
-            monthOffset = state.monthOffset,
-            onPrevMonth = { viewModel.selectMonth(state.monthOffset - 1) },
-            onNextMonth = { viewModel.selectMonth(state.monthOffset + 1) },
+            monthBills = state.bills,
+            monthOffset = state.selectedMonthOffset,
+            onPrevMonth = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
+            onNextMonth = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
             onDismiss = {
                 showMonthDetail = false
-                // Reset back to the current month so reopening always starts fresh
-                if (state.monthOffset != 0) viewModel.selectMonth(0)
+                if (state.selectedMonthOffset != 0) viewModel.selectMonth(0)
             }
         )
     }

@@ -11,8 +11,6 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.Job
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,14 +20,13 @@ import kotlinx.coroutines.launch
 @androidx.compose.runtime.Immutable
 data class BookkeepingState(
     val bills: List<Bill> = emptyList(),
-    val monthBills: List<Bill> = emptyList(),
     val totalExpense: Double = 0.0,
     val totalIncome: Double = 0.0,
     val isLoading: Boolean = false,
     val currentDate: Long = System.currentTimeMillis(),
-    // Offset of the month shown in the month-detail overlay: 0 = current month,
-    // -1 = previous, +1 = next. Lets users browse historical months.
-    val monthOffset: Int = 0,
+    // Offset of the month currently shown: 0 = current month, -1 = previous.
+    // Drives the main list, the chart and the totals together.
+    val selectedMonthOffset: Int = 0,
     val editingBill: Bill? = null,
     val expenseCategories: List<Category> = emptyList(),
     val incomeCategories: List<Category> = emptyList(),
@@ -45,6 +42,7 @@ sealed interface BookkeepingEvent {
     data object CancelEdit : BookkeepingEvent
     data class ConfirmEdit(val bill: Bill) : BookkeepingEvent
     data class DeleteBill(val bill: Bill) : BookkeepingEvent
+    data class SelectMonth(val offset: Int) : BookkeepingEvent
 }
 
 class BookkeepingViewModel(
@@ -56,12 +54,10 @@ class BookkeepingViewModel(
     val state: StateFlow<BookkeepingState> = _state.asStateFlow()
 
     private var billCollectorJob: Job? = null
-    private var monthBillCollectorJob: Job? = null
 
     init {
         // Single long-lived bill collector — never leaks
         collectBills()
-        collectMonthBills()
         refreshTotals()
 
         // Reference data for the edit overlay
@@ -89,46 +85,39 @@ class BookkeepingViewModel(
             is BookkeepingEvent.CancelEdit -> _state.update { it.copy(editingBill = null) }
             is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
             is BookkeepingEvent.DeleteBill -> deleteBill(event.bill)
+            is BookkeepingEvent.SelectMonth -> selectMonth(event.offset)
         }
     }
 
     private fun collectBills() {
         billCollectorJob?.cancel()
+        val offset = _state.value.selectedMonthOffset
         billCollectorJob = viewModelScope.launch {
-            val startDate = LocalDate.now().minusDays(10).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val nextMonthStart = getNextMonthStart()
-            repository.observeBillsByMonth(startDate, nextMonthStart).collect { bills ->
+            val monthStart = getMonthStart(offset)
+            val nextMonthStart = getNextMonthStart(offset)
+            repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
                 _state.update { it.copy(bills = bills, isLoading = false) }
             }
         }
     }
 
-    private fun collectMonthBills(offset: Int = 0) {
-        monthBillCollectorJob?.cancel()
-        monthBillCollectorJob = viewModelScope.launch {
-            val monthStart = getMonthStart(offset)
-            val nextMonthStart = getNextMonthStart(offset)
-            repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
-                _state.update { it.copy(monthBills = bills) }
-            }
-        }
-    }
-
-    /** Switches the month-detail overlay to a different month (offset from current). */
+    /** Switches every month-scoped view (list/chart/totals) to a different month. */
     fun selectMonth(offset: Int) {
-        if (_state.value.monthOffset == offset) return
-        _state.update { it.copy(monthOffset = offset) }
-        collectMonthBills(offset)
+        if (_state.value.selectedMonthOffset == offset) return
+        _state.update { it.copy(selectedMonthOffset = offset) }
+        collectBills()
+        refreshTotals()
     }
 
     private fun refreshTotals() {
         viewModelScope.launch {
+            val offset = _state.value.selectedMonthOffset
             _state.update { it.copy(isLoading = true) }
-            val monthStart = getMonthStart()
-            val nextMonthStart = getNextMonthStart()
+            val monthStart = getMonthStart(offset)
+            val nextMonthStart = getNextMonthStart(offset)
             val expense = repository.getTotalExpense(monthStart, nextMonthStart)
             val income = repository.getTotalIncome(monthStart, nextMonthStart)
-            _state.update { it.copy(totalExpense = expense, totalIncome = income) }
+            _state.update { it.copy(totalExpense = expense, totalIncome = income, isLoading = false) }
         }
     }
 
