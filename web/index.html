@@ -513,6 +513,7 @@ function openEditBill(b) {
   const modal = document.createElement('div');
   modal.style.cssText = 'background:var(--card);border-radius:15px;padding:24px;width:90%;max-width:420px;max-height:90vh;overflow:auto';
   const st = { amount:String(b.amount), billType:b.billType, catId:String(b.categoryId), subCatName:b.subCategoryName||'', acctId:String(b.accountId), remark:b.remark||'' };
+  let errMsg = '';
 
   function renderSubs(selCat) {
     const subRow = modal.querySelector('#edit_sub');
@@ -556,16 +557,18 @@ function openEditBill(b) {
     const btnRow = h('div',{style:'display:flex;gap:10px;margin-top:16px'});
     btnRow.appendChild(h('button',{className:'btn btn-outline',style:'flex:1',onclick:()=>overlay.remove()},'取消'));
     btnRow.appendChild(h('button',{className:'btn btn-primary',style:'flex:1',onclick:async()=>{
-      if(!st.amount||!st.catId||!st.acctId){S.msg='请填写完整';overlay.remove();render();return;}
+      if(!st.amount||!st.catId||!st.acctId){errMsg='请填写完整';render();return;}
       const cat = S.cats.find(c=>c.id==st.catId);
+      if(!cat){errMsg='分类已不存在';render();return;}
       const r = await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
         amount:parseFloat(st.amount),billType:st.billType,categoryId:parseInt(st.catId),categoryName:cat.name,
         subCategoryName:st.subCatName||null,accountId:parseInt(st.acctId),remark:st.remark||null
       })});
       if(r.id){S.msg='账单已更新';overlay.remove();await loadData();}
-      else{S.msg=r.message||'更新失败';overlay.remove();render();}
+      else{errMsg=r.message||'更新失败';render();}
     }},'保存'));
     modal.appendChild(btnRow);
+    if (errMsg) modal.appendChild(h('p',{style:'color:var(--expense);font-size:13px;margin-top:12px'},errMsg));
   }
   render();
   overlay.appendChild(modal);
@@ -776,7 +779,7 @@ function renderAssets(pg) {
           const val = prompt('修改 '+a.name+' 余额', (a.balance||0));
           if(val===null) return;
           const num = parseFloat(val);
-          if(isNaN(num)||num<0){S.msg='请输入有效余额';render();return;}
+          if(isNaN(num)||num<0||!isFinite(num)){S.msg='请输入有效余额';render();return;}
           const r = await api('/api/accounts/'+a.id,{method:'PUT',body:JSON.stringify({balance:num})});
           S.msg = (r.balance!==undefined) ? '余额已更新' : (r.message||'更新失败');
           render();

@@ -120,7 +120,7 @@ fun ChartBox(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (chartType == ChartType.LINE) "近十天支出走势" else "近十天支出柱状",
+                text = if (chartType == ChartType.LINE) "月度支出走势" else "月度支出柱状",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface
