@@ -6,6 +6,7 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     private val accountDao = db.accountDao()
     private val templateDao = db.billTemplateDao()
     private val budgetDao = db.budgetDao()
+    private val chatDao = db.chatMessageDao()
 
     private val _expenseCategories = MutableStateFlow<List<Category>>(emptyList())
     override val expenseCategories: StateFlow<List<Category>> = _expenseCategories.asStateFlow()
@@ -36,6 +38,13 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override fun observeTemplates(): Flow<List<BillTemplate>> = templateDao.observeAll()
 
     override fun observeBudgets(): Flow<List<Budget>> = budgetDao.observeAll()
+
+    override fun observeChatMessages(): Flow<List<ChatMessage>> = chatDao.observeAll()
+
+    override suspend fun insertChatMessage(message: ChatMessage): Long = chatDao.insert(message)
+
+    override suspend fun countChatMessages(kind: String, since: Long): Long =
+        chatDao.countSince(kind, since)
 
     override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double =
         billDao.getTotalExpense(monthStart, nextMonthStart) ?: 0.0
@@ -72,6 +81,7 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
         billDao.deleteSynced()
         budgetDao.deleteAll()
         templateDao.deleteAll()
+        chatDao.deleteAll()
     }
 
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =

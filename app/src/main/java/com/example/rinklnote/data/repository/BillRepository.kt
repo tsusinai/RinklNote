@@ -5,6 +5,7 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,10 @@ interface BillRepository {
     fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>>
     fun observeTemplates(): Flow<List<BillTemplate>>
     fun observeBudgets(): Flow<List<Budget>>
+    fun observeChatMessages(): Flow<List<ChatMessage>>
+
+    suspend fun insertChatMessage(message: ChatMessage): Long
+    suspend fun countChatMessages(kind: String, since: Long): Long
 
     suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double
     suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double

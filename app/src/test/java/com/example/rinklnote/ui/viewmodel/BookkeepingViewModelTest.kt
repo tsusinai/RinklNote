@@ -5,6 +5,7 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.util.getMonthStart
@@ -105,6 +106,9 @@ class BookkeepingViewModelTest {
         override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())
         override fun observeTemplates(): Flow<List<BillTemplate>> = flowOf(emptyList())
         override fun observeBudgets(): Flow<List<Budget>> = flowOf(emptyList())
+        override fun observeChatMessages(): Flow<List<ChatMessage>> = flowOf(emptyList())
+        override suspend fun insertChatMessage(message: ChatMessage): Long = 0
+        override suspend fun countChatMessages(kind: String, since: Long): Long = 0
         override suspend fun addBill(bill: Bill): Long = 1
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}

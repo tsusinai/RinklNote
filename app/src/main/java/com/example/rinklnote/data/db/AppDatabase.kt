@@ -8,19 +8,21 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.rinklnote.data.db.dao.AccountDao
 import com.example.rinklnote.data.db.dao.BillDao
+import com.example.rinklnote.data.db.dao.BillTemplateDao
+import com.example.rinklnote.data.db.dao.BudgetDao
 import com.example.rinklnote.data.db.dao.CategoryDao
+import com.example.rinklnote.data.db.dao.ChatMessageDao
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
-import com.example.rinklnote.data.db.entity.Category
-import com.example.rinklnote.data.db.entity.SubCategory
-import com.example.rinklnote.data.db.dao.BillTemplateDao
 import com.example.rinklnote.data.db.entity.Budget
-import com.example.rinklnote.data.db.dao.BudgetDao
+import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.ChatMessage
+import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
-    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class],
-    version = 8,
+    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class],
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun billTemplateDao(): BillTemplateDao
     abstract fun budgetDao(): BudgetDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         @Volatile
@@ -102,6 +105,19 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_budgets_server_id ON budgets(server_id)")
             }
         }
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS chat_messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        role TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        created_at INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
 
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
@@ -109,7 +125,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration()
                 .build()
         }
