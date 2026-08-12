@@ -79,32 +79,40 @@ class QuickAddViewModelTest {
     }
 
     @Test
-    fun `confirm requires selected category and account`() = runTest(dispatcher) {
+    fun `confirm saves the bill directly`() = runTest(dispatcher) {
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Digit("20"))
         vm.onEvent(QuickAddEvent.Confirm)
-        assertTrue(vm.state.value.confirmed)
-        assertEquals(QuickAddEffect.ConfirmRequested, vm.effects.first())
+        advanceUntilIdle()
+
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(20.0, repo.addedBills[0].amount, 0.0001)
+        assertEquals("三餐", repo.addedBills[0].categoryName)
+        assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
     }
 
     @Test
-    fun `confirm without account stays unconfirmed`() = runTest(dispatcher) {
+    fun `confirm without account saves nothing`() = runTest(dispatcher) {
         repo.accounts.value = emptyList()
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Digit("20"))
         vm.onEvent(QuickAddEvent.Confirm)
-        assertFalse(vm.state.value.confirmed)
+        advanceUntilIdle()
+
+        assertEquals(0, repo.addedBills.size)
     }
 
     @Test
     fun `confirm with missing amount is ignored`() = runTest(dispatcher) {
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Confirm)
-        assertFalse(vm.state.value.confirmed)
+        advanceUntilIdle()
+
+        assertEquals(0, repo.addedBills.size)
     }
 
     @Test
-    fun `nlp local parse fills amount and category and requests confirm`() = runTest(dispatcher) {
+    fun `nlp local parse fills amount and category and saves`() = runTest(dispatcher) {
         val vm = newVM() // api = null → local VoiceParser fallback
         vm.onEvent(QuickAddEvent.NlpInput("午餐20元"))
         vm.onEvent(QuickAddEvent.NlpSubmit)
@@ -115,11 +123,12 @@ class QuickAddViewModelTest {
         assertEquals("三餐", s.selectedCategory?.name)
         assertEquals("", s.nlpInput)
         assertFalse(s.isParsing)
-        assertEquals(QuickAddEffect.ConfirmRequested, vm.effects.first())
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
     }
 
     @Test
-    fun `nlp local parse without a recognized category does not request confirm`() = runTest(dispatcher) {
+    fun `nlp local parse without a recognized category does not save`() = runTest(dispatcher) {
         val vm = newVM()
         vm.onEvent(QuickAddEvent.NlpInput("普通消费30元"))
         vm.onEvent(QuickAddEvent.NlpSubmit)
@@ -127,10 +136,8 @@ class QuickAddViewModelTest {
 
         val s = vm.state.value
         assertEquals("30", s.amount)
-        // Unrecognized category → keeps the default pre-selected category, but no
-        // ConfirmRequested is sent (NLP intent is only confirmed when a category matches).
         assertEquals("三餐", s.selectedCategory?.name)
-        assertFalse(s.confirmed)
+        assertEquals(0, repo.addedBills.size)
     }
 
     @Test

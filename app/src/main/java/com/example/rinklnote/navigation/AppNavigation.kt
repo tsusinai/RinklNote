@@ -91,7 +91,6 @@ fun AppNavigation(app: RinklNoteApp) {
     val coroutineScope = rememberCoroutineScope()
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
-    var showConfirmed by remember { mutableStateOf(false) }
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
@@ -99,7 +98,6 @@ fun AppNavigation(app: RinklNoteApp) {
 
     val openDrawer: () -> Unit = {
         showDrawer = true
-        showConfirmed = false
     }
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -139,7 +137,6 @@ fun AppNavigation(app: RinklNoteApp) {
         if (pagerState.currentPage != 1) {
             showDrawer = false
             showKeypad = false
-            showConfirmed = false
             voiceActive = false
             quickAddVM.reset()
             quickAddVM.resetConfirming()
@@ -156,15 +153,11 @@ fun AppNavigation(app: RinklNoteApp) {
     LaunchedEffect(quickAddVM) {
         quickAddVM.effects.collect { effect ->
             when (effect) {
-                is QuickAddEffect.ConfirmRequested -> {
-                    showKeypad = false
-                    showConfirmed = true
-                }
                 is QuickAddEffect.FinalConfirmCompleted -> {
+                    Toast.makeText(context, "已记账", Toast.LENGTH_SHORT).show()
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
                     showDrawer = false
-                    showConfirmed = false
                 }
             }
         }
@@ -192,10 +185,6 @@ fun AppNavigation(app: RinklNoteApp) {
         } else {
             Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    val onFinalConfirm: () -> Unit = {
-        quickAddVM.finalConfirm()
     }
 
     val onVoiceInput: () -> Unit = {
@@ -257,20 +246,16 @@ fun AppNavigation(app: RinklNoteApp) {
         // QuickAdd Drawer overlay
         QuickAddDrawer(
             isVisible = showDrawer,
-            confirmed = showConfirmed,
             viewModel = quickAddVM,
             onDismiss = {
                 showDrawer = false
-                showConfirmed = false
                 voiceActive = false
                 quickAddVM.reset()
             },
-            onFinalConfirm = onFinalConfirm,
             onBillAdded = { bookkeepingVM.onEvent(BookkeepingEvent.Refresh) },
             onVoiceInput = onVoiceInput,
             onAmountTap = {
                 showKeypad = true
-                showConfirmed = false
                 quickAddVM.resetConfirming()
             }
         )

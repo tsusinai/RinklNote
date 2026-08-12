@@ -37,7 +37,6 @@ data class QuickAddState(
     val remark: String = "",
     val showSubCategories: Boolean = false,
     val isConfirmEnabled: Boolean = false,
-    val confirmed: Boolean = false,
     val templates: List<BillTemplate> = emptyList(),
     val nlpInput: String = "",
     val isParsing: Boolean = false,
@@ -70,7 +69,6 @@ sealed interface QuickAddEvent {
 }
 
 sealed interface QuickAddEffect {
-    data object ConfirmRequested : QuickAddEffect
     data object FinalConfirmCompleted : QuickAddEffect
 }
 
@@ -183,13 +181,12 @@ class QuickAddViewModel(
     }
 
     private fun confirm() {
-        // Only mark confirmed — shows CountAfter, bill NOT saved yet
+        // One-step: keypad confirm saves immediately (anti-misclick two-phase removed).
         val s = _state.value
         if (s.amount.toDoubleOrNull() == null) return
         if (s.selectedCategory == null) return
         if (s.selectedAccount == null) return
-        _state.update { it.copy(confirmed = true) }
-        _effects.trySend(QuickAddEffect.ConfirmRequested)
+        finalConfirm()
     }
 
     // ── NLP ──
@@ -218,8 +215,8 @@ class QuickAddViewModel(
                                 isParsing = false
                             )
                         }
-                        // Skip two-step: NLP intent is explicit enough
-                        _effects.trySend(QuickAddEffect.ConfirmRequested)
+                        // One-step: NLP intent saves directly
+                        finalConfirm()
                         return@launch
                     }
                 }
@@ -254,9 +251,9 @@ class QuickAddViewModel(
                 isParsing = false
             )
         }
-        // Category auto-selected → proceed to CountAfter (fixes voice category bug)
+        // Category auto-selected → save directly (one-step)
         if (cat != null) {
-            _effects.trySend(QuickAddEffect.ConfirmRequested)
+            finalConfirm()
         }
     }
 

@@ -3,7 +3,6 @@ package com.example.rinklnote.ui.screen.quickadd
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -41,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -81,10 +79,8 @@ private fun accountIconRes(name: String): Int = when (name) {
 @Composable
 fun QuickAddDrawer(
     isVisible: Boolean,
-    confirmed: Boolean = false,
     viewModel: QuickAddViewModel,
     onDismiss: () -> Unit,
-    onFinalConfirm: () -> Unit = {},
     onBillAdded: () -> Unit,
     onVoiceInput: () -> Unit = {},
     onAmountTap: () -> Unit = {},
@@ -139,8 +135,6 @@ fun QuickAddDrawer(
             ) {
                 DrawerContent(
                     viewModel = viewModel,
-                    confirmed = confirmed,
-                    onFinalConfirm = onFinalConfirm,
                     onDismiss = onDismiss,
                     onBillAdded = onBillAdded,
                     onVoiceInput = onVoiceInput,
@@ -154,8 +148,6 @@ fun QuickAddDrawer(
 @Composable
 private fun DrawerContent(
     viewModel: QuickAddViewModel,
-    confirmed: Boolean,
-    onFinalConfirm: () -> Unit,
     onDismiss: () -> Unit,
     onBillAdded: () -> Unit,
     onVoiceInput: () -> Unit,
@@ -221,12 +213,8 @@ private fun DrawerContent(
 
         Spacer(modifier = Modifier.height(17.dp))
 
-        // Count area — CountBefore or CountAfter
-        if (confirmed) {
-            CountAfter(state, onFinalConfirm, onAmountTap)
-        } else {
-            CountBefore(state, onAmountTap)
-        }
+        // Count area — single-step amount box
+        CountBefore(state, onAmountTap)
 
         Spacer(modifier = Modifier.weight(1f))
 
@@ -538,59 +526,3 @@ private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
     }
 }
 
-@Composable
-private fun CountAfter(state: QuickAddState, onConfirm: () -> Unit, onAmountTap: () -> Unit) {
-    val checkScale = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        checkScale.animateTo(
-            targetValue = 1f,
-            animationSpec = Motion.CheckPop
-        )
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Amount box — clickable to re-edit
-        Box(
-            modifier = Modifier
-                .weight(130f / 199f)
-                .height(36.dp)
-                .shadow(4.dp, RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable {
-                    onAmountTap()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = state.amount.ifEmpty { "0.00" },
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.tertiary
-            )
-        }
-        // Check box — clickable confirm button
-        Box(
-            modifier = Modifier
-                .weight(65f / 199f)
-                .height(36.dp)
-                .graphicsLayer { scaleX = checkScale.value; scaleY = checkScale.value }
-                .shadow(4.dp, RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable { onConfirm() },
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "√",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Normal,
-                color = IncomeGreen
-            )
-        }
-    }
-}
