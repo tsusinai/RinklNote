@@ -1,5 +1,12 @@
 package com.example.rinklnote.ui.viewmodel
 
+import com.example.rinklnote.data.db.entity.Account
+import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.BillTemplate
+import com.example.rinklnote.data.db.entity.Budget
+import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.ChatMessage
+import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AnomalyAlert
 import com.example.rinklnote.data.network.dto.AnomalyResponse
@@ -21,9 +28,12 @@ import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.TranscribeResponse
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
-import java.io.IOException
+import com.example.rinklnote.data.repository.BillRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -35,25 +45,25 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 /**
- * JVM unit tests for AiViewModel: query/submit happy path & failure, blank no-op,
- * loadAll population, and the 401 → friendly login error mapping.
+ * AiViewModel 聊天版测试：记账路由 + pendingBooking 握手、问账/异常路径、
+ * 去重注入（欢迎语/月总结/异常）、路由判定（含数字的问句不误判为记账）。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AiViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
+    private lateinit var repo: FakeBillRepository
     private lateinit var fake: FakeApiService
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        repo = FakeBillRepository()
         fake = FakeApiService()
     }
 
@@ -63,99 +73,174 @@ class AiViewModelTest {
     }
 
     private fun TestScope.newVM(): AiViewModel {
-        val vm = AiViewModel(fake)
+        val quick = QuickAddViewModel(repo, syncManager = null, api = fake)
+        val vm = AiViewModel(fake, repo, quick)
         advanceUntilIdle()
         return vm
     }
 
     @Test
-    fun `query sets answer on success`() = runTest(dispatcher) {
+    fun `booking routes to quick add and marks pending`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.onEvent(AiEvent.QueryInputChanged("上个月交通花多少"))
-        vm.onEvent(AiEvent.SubmitQuery)
+        vm.send("午餐28元")
         advanceUntilIdle()
 
-        assertEquals(fake.queryResult.answer, vm.state.value.answer)
-        assertFalse(vm.state.value.isQuerying)
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(28.0, repo.addedBills[0].amount, 0.0001)
+        assertEquals("三餐", repo.addedBills[0].categoryName)
+        assertTrue(vm.consumeBookingPending())
+        assertFalse(vm.consumeBookingPending())
     }
 
     @Test
-    fun `query surfaces error and clears answer on failure`() = runTest(dispatcher) {
-        fake.queryError = IOException("network down")
+    fun `booking confirmation is appended as assistant message`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.onEvent(AiEvent.QueryInputChanged("上个月交通花多少"))
-        vm.onEvent(AiEvent.SubmitQuery)
+        vm.send("午餐28元")
+        advanceUntilIdle()
+        vm.appendBookingConfirmed("已记账：28元（三餐）")
         advanceUntilIdle()
 
-        val s = vm.state.value
-        assertNotNull(s.error)
-        assertNull(s.answer)
-        assertFalse(s.isQuerying)
+        val msg = repo.chatMessages.value.last { it.kind == "booking" }
+        assertEquals("assistant", msg.role)
+        assertEquals("已记账：28元（三餐）", msg.content)
     }
 
     @Test
-    fun `query with blank input is a no-op`() = runTest(dispatcher) {
+    fun `question is answered by api`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.onEvent(AiEvent.QueryInputChanged("   "))
-        vm.onEvent(AiEvent.SubmitQuery)
+        vm.send("上个月交通花了多少")
         advanceUntilIdle()
 
-        val s = vm.state.value
-        assertFalse(s.isQuerying)
-        assertNull(s.answer)
+        assertEquals(0, repo.addedBills.size)
+        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind == "text" }
+        assertEquals(fake.queryResult.answer, msg.content)
     }
 
     @Test
-    fun `loadAll populates monthly summary and alerts`() = runTest(dispatcher) {
+    fun `month-digit question is not routed to booking`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.loadAll()
+        vm.send("8月花了多少")
         advanceUntilIdle()
 
-        val s = vm.state.value
-        assertEquals(fake.monthlyResult.summary, s.monthlySummary)
-        assertEquals(fake.monthlyResult.highlights, s.highlights)
-        assertEquals(fake.anomalyResult.alerts, s.alerts)
-        assertFalse(s.isLoading)
+        assertEquals(0, repo.addedBills.size)
+        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind == "text" }
+        assertEquals(fake.queryResult.answer, msg.content)
     }
 
     @Test
-    fun `unauthorized monthly maps to friendly login error`() = runTest(dispatcher) {
-        val unauthorized = retrofit2.HttpException(
+    fun `blank input is a no-op`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.send("   ")
+        advanceUntilIdle()
+
+        assertEquals(0, repo.chatMessages.value.size)
+    }
+
+    @Test
+    fun `401 question maps to friendly login error`() = runTest(dispatcher) {
+        fake.queryError = retrofit2.HttpException(
             retrofit2.Response.error<String>(401, "".toResponseBody(null))
         )
-        // loadAnomaly's success path clears error, so both must fail with 401 for the
-        // final state to surface the friendly login message.
-        fake.monthlyError = unauthorized
-        fake.anomalyError = unauthorized
         val vm = newVM()
-        vm.loadAll()
+        vm.send("上个月花了多少")
         advanceUntilIdle()
 
-        assertTrue(vm.state.value.error?.contains("登录") == true)
+        val msg = repo.chatMessages.value.last()
+        assertTrue(msg.content.contains("登录"))
     }
 
-    /** Hand-written ApiService fake — overrides only the 3 insights methods; stubs the rest. */
-    private class FakeApiService : ApiService {
+    @Test
+    fun `onEnter inserts greeting summary and anomaly once`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEnter(true)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "anomaly" })
 
+        vm.onEnter(true)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "anomaly" })
+    }
+
+    @Test
+    fun `onEnter logged out does not load summary or anomaly`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEnter(false)
+        advanceUntilIdle()
+
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
+    }
+
+    /** 仓库 fake：支持聊天 Flow + countSince 去重计数，同时驱动 QuickAdd 记账。 */
+    private class FakeBillRepository : BillRepository {
+        override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
+            listOf(Category(1, "三餐", "meals", "EXPENSE"), Category(2, "交通", "transport", "EXPENSE"))
+        )
+        override val incomeCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
+            listOf(Category(11, "工资", "salary", "INCOME"))
+        )
+        override val accounts: MutableStateFlow<List<Account>> = MutableStateFlow(
+            listOf(Account(1, "微信", 0.0, "#28C145"))
+        )
+
+        val addedBills = mutableListOf<Bill>()
+        val chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
+        private var nextBillId = 100L
+        private var nextChatId = 1L
+
+        override suspend fun addBill(bill: Bill): Long {
+            addedBills += bill
+            return ++nextBillId
+        }
+
+        override fun observeChatMessages(): Flow<List<ChatMessage>> = chatMessages
+        override suspend fun insertChatMessage(message: ChatMessage): Long {
+            val m = message.copy(id = nextChatId++)
+            chatMessages.value = chatMessages.value + m
+            return m.id
+        }
+        override suspend fun countChatMessages(kind: String, since: Long): Long =
+            chatMessages.value.count { it.kind == kind && it.createdAt >= since }.toLong()
+
+        override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())
+        override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> =
+            flowOf(emptyList())
+        override fun observeTemplates(): Flow<List<BillTemplate>> = flowOf(emptyList())
+        override fun observeBudgets(): Flow<List<Budget>> = flowOf(emptyList())
+        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double = 0.0
+        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double = 0.0
+        override suspend fun updateBill(bill: Bill) {}
+        override suspend fun deleteBill(bill: Bill) {}
+        override suspend fun updateAccount(account: Account) {}
+        override suspend fun getSubCategories(parentId: Long): List<SubCategory> = emptyList()
+        override suspend fun getBudget(monthStart: Long): Budget? = null
+        override suspend fun upsertBudget(budget: Budget) {}
+        override suspend fun getUnsyncedBudgets(): List<Budget> = emptyList()
+        override suspend fun markBudgetSynced(localId: Long, serverId: Long, updatedAt: Long) {}
+        override suspend fun deleteBudgetByServerId(serverId: Long) {}
+        override suspend fun clearLocalData() {}
+        override suspend fun loadReferenceData() {}
+        override suspend fun seedIfNeeded() {}
+    }
+
+    /** ApiService fake：覆写 parseBill + 3 个 insights 方法，其余桩。 */
+    private class FakeApiService : ApiService {
         var monthlyResult: MonthlySummaryResponse =
-            MonthlySummaryResponse(summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%", "交通同比 -20%"))
+            MonthlySummaryResponse(summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"))
         var anomalyResult: AnomalyResponse =
             AnomalyResponse(alerts = listOf(AnomalyAlert("HIGH", "周末支出异常偏高", "spike")))
         var queryResult: QueryResponse = QueryResponse(answer = "8 月交通共支出 156 元，共 12 笔。")
         var queryError: Exception? = null
-        var monthlyError: Exception? = null
-        var anomalyError: Exception? = null
 
-        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse {
-            monthlyError?.let { throw it }
-            return monthlyResult
-        }
+        override suspend fun parseBill(request: ParseRequest): ParseResponse =
+            ParseResponse(amount = "28", categoryName = "三餐", remark = request.text)
 
-        override suspend fun getAnomalyAlerts(): AnomalyResponse {
-            anomalyError?.let { throw it }
-            return anomalyResult
-        }
-
+        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse = monthlyResult
+        override suspend fun getAnomalyAlerts(): AnomalyResponse = anomalyResult
         override suspend fun queryBillData(request: QueryRequest): QueryResponse {
             queryError?.let { throw it }
             return queryResult
@@ -174,7 +259,6 @@ class AiViewModelTest {
         override suspend fun deleteBill(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
         override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(0, 0L, 0.0, 0L)
-        override suspend fun parseBill(request: ParseRequest): ParseResponse = ParseResponse()
         override suspend fun transcribe(file: MultipartBody.Part): TranscribeResponse = TranscribeResponse()
         override suspend fun getTemplates(): List<TemplateDTO> = emptyList()
         override suspend fun createTemplate(template: TemplateDTO): TemplateDTO =
