@@ -771,6 +771,17 @@ function renderAssets(pg) {
       info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' },
         S.revealBalance ? '¥'+(a.balance||0).toFixed(2) : '***'));
       c.appendChild(info);
+      info.append(h('div',{style:'margin-top:8px'},
+        h('button',{className:'btn btn-outline',style:'padding:4px 12px;font-size:11px',onclick:async()=>{
+          const val = prompt('修改 '+a.name+' 余额', (a.balance||0));
+          if(val===null) return;
+          const num = parseFloat(val);
+          if(isNaN(num)||num<0){S.msg='请输入有效余额';render();return;}
+          const r = await api('/api/accounts/'+a.id,{method:'PUT',body:JSON.stringify({balance:num})});
+          S.msg = (r.balance!==undefined) ? '余额已更新' : (r.message||'更新失败');
+          render();
+        }},'编辑余额')
+      ));
       cards.appendChild(c);
     });
   }
