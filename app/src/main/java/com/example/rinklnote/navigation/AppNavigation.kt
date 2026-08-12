@@ -158,6 +158,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
                     showDrawer = false
+                    showKeypad = false
                 }
             }
         }
