@@ -64,6 +64,7 @@ import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.component.VoiceInputBar
+import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.login.LoginPage
@@ -72,6 +73,7 @@ import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
@@ -88,7 +90,7 @@ private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minute
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 4 })
+    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 5 })
     val coroutineScope = rememberCoroutineScope()
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
@@ -117,6 +119,9 @@ fun AppNavigation(app: RinklNoteApp) {
     val budgetVM: BudgetViewModel = viewModel(
         factory = BudgetViewModel.Factory(app.repository, app.syncManager)
     )
+    val aiVM: AiViewModel = viewModel(
+        factory = AiViewModel.Factory(app.apiService)
+    )
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
     )
@@ -142,6 +147,14 @@ fun AppNavigation(app: RinklNoteApp) {
             voiceActive = false
             quickAddVM.reset()
             quickAddVM.resetConfirming()
+        }
+    }
+
+    // AI 页(index 4)进入且已登录时拉取月总结/异常提醒。
+    // 用 currentPage==4 门控，避免 beyondViewportPageCount=1 预组合时误触发。
+    LaunchedEffect(pagerState.currentPage, authState.isLoggedIn) {
+        if (pagerState.currentPage == 4 && authState.isLoggedIn) {
+            aiVM.loadAll()
         }
     }
 
@@ -222,6 +235,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         onMoreClick = {
                             coroutineScope.launch { pagerState.animateScrollToPage(3) }
                         },
+                        onAiClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(4) }
+                        },
                         viewModel = bookkeepingVM
                     )
                     2 -> AssetsScreen(viewModel = assetsVM)
@@ -234,6 +250,11 @@ fun AppNavigation(app: RinklNoteApp) {
                         onLoginClick = { showLogin = true },
                         onBindQQClick = { showBindQQ = true },
                         onQqBotGuideClick = { showQqBotGuide = true }
+                    )
+                    4 -> AiScreen(
+                        viewModel = aiVM,
+                        quickAddVM = quickAddVM,
+                        isLoggedIn = authState.isLoggedIn
                     )
                 }
             }

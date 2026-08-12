@@ -59,6 +59,7 @@ fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
+    onAiClick: () -> Unit,
     viewModel: BookkeepingViewModel
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -102,7 +103,8 @@ fun BookkeepingScreen(
                     onMonthClick = { showMonthNav = !showMonthNav },
                     onOpenDrawer = onOpenDrawer,
                     onFinanceClick = onFinanceClick,
-                    onMoreClick = onMoreClick
+                    onMoreClick = onMoreClick,
+                    onAiClick = onAiClick
                 )
             }
             if (showMonthNav) {
@@ -228,7 +230,8 @@ private fun TopBar(
     onMonthClick: () -> Unit,
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
-    onMoreClick: () -> Unit
+    onMoreClick: () -> Unit,
+    onAiClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -273,6 +276,15 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onOpenDrawer),
+                tint = Color.Unspecified
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_ai),
+                contentDescription = "AI 记账",
+                modifier = Modifier
+                    .size(30.dp)
+                    .clickable(onClick = onAiClick),
                 tint = Color.Unspecified
             )
         }
