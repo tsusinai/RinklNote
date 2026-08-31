@@ -113,6 +113,7 @@ fun ProfileScreen(
                 onUnbindQQ = { showUnbindQQ = true },
                 onThemeClick = { showTheme = true },
                 onAutoSyncChange = { coroutineScope.launch { settingsManager.setAutoSync(it) } },
+                onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) },
                 onSyncNow = {
                     coroutineScope.launch {
                         syncStatus = "同步中..."
@@ -265,6 +266,7 @@ private fun FuncBox(
     onUnbindQQ: () -> Unit,
     onThemeClick: () -> Unit,
     onAutoSyncChange: (Boolean) -> Unit,
+    onSetAiDisabled: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     onExportClick: () -> Unit,
     onLogoutClick: () -> Unit
@@ -289,6 +291,17 @@ private fun FuncBox(
         FuncRow(label = "导出账单 (CSV)", onClick = onExportClick)
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         FuncRow(label = "主题", value = themeLabel(themeMode), onClick = onThemeClick)
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("关闭 AI 主动推送", fontSize = 15.sp)
+            Switch(checked = state.aiDisabled, onCheckedChange = onSetAiDisabled)
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         Row(
             modifier = Modifier

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.BindQQRequest
 import com.example.rinklnote.data.network.dto.ChangePasswordRequest
 import com.example.rinklnote.data.network.dto.LoginRequest
@@ -26,6 +27,7 @@ data class AuthState(
     val botBound: Boolean = false,
     val oldPassword: String = "",
     val newPassword: String = "",
+    val aiDisabled: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val successMessage: String? = null
@@ -44,6 +46,7 @@ sealed interface AuthEvent {
     data object ChangePassword : AuthEvent
     data object UnbindQQ : AuthEvent
     data object Logout : AuthEvent
+    data class SetAiDisabled(val disabled: Boolean) : AuthEvent
     data object ClearError : AuthEvent
     data object ClearSuccess : AuthEvent
 }
@@ -84,6 +87,7 @@ class AuthViewModel(
             is AuthEvent.FetchProfile -> fetchProfile()
             is AuthEvent.ChangePassword -> changePassword()
             is AuthEvent.UnbindQQ -> unbindQQ()
+            is AuthEvent.SetAiDisabled -> setAiDisabled(event.disabled)
             is AuthEvent.Logout -> logout()
         }
     }
@@ -164,6 +168,7 @@ class AuthViewModel(
                         createdAt = me.createdAt ?: "",
                         botBound = !me.qqOpenid.isNullOrBlank(),
                         isQQBound = !me.qqNumber.isNullOrBlank(),
+                        aiDisabled = me.aiDisabled,
                         isLoggedIn = true
                     )
                 }
@@ -208,6 +213,17 @@ class AuthViewModel(
                 _state.update { it.copy(isLoading = false, isQQBound = false, qqNumber = "", successMessage = "QQ号已解绑") }
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, error = "解绑失败: ${e.message}") }
+            }
+        }
+    }
+
+    private fun setAiDisabled(disabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                api.setAiDisabled(AiDisabledRequest(disabled))
+                _state.update { it.copy(aiDisabled = disabled) }
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "设置失败: ${e.message}") }
             }
         }
     }

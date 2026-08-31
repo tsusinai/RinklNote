@@ -23,6 +23,12 @@ interface ApiService {
     @POST("api/auth/unbind-qq")
     suspend fun unbindQQ(): MessageResponse
 
+    @GET("api/auth/ai")
+    suspend fun getAiDisabled(): Map<String, Boolean>
+
+    @PUT("api/auth/ai")
+    suspend fun setAiDisabled(@Body request: AiDisabledRequest): Map<String, Boolean>
+
     @GET("api/bills/sync")
     suspend fun syncBills(
         @Query("after") after: Long? = null,

@@ -20,11 +20,15 @@ data class MeResponse(
     val phone: String,
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val aiDisabled: Boolean = false
 )
 
 @Serializable
 data class ChangePasswordRequest(val oldPassword: String, val newPassword: String)
+
+@Serializable
+data class AiDisabledRequest(val disabled: Boolean)
 
 @Serializable
 data class BillDTO(
