@@ -15,8 +15,10 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -132,5 +134,24 @@ class InsightServiceTest {
         // 仅 2 笔 < minOccurrences(3) → null
 
         assertNull(insight.habitReminder(1L, now))
+    }
+
+    @Test
+    fun `habitForApp returns content when habit present`() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 25))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 26))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 27))
+        // polishHabitCopy 用 dummy LLM 会失败 → 回退模板文案，content 仍非空且含分类
+        val r = runBlocking { insight.habitForApp(1L, now) }
+        assertNotNull(r.content)
+        assertTrue(r.content!!.contains("三餐"))
+    }
+
+    @Test
+    fun `habitForApp returns null content when no habit`() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
+        val r = runBlocking { insight.habitForApp(1L, now) }
+        assertNull(r.content)
     }
 }

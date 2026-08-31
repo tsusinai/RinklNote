@@ -38,6 +38,11 @@ data class QueryResponse(
     val answer: String
 )
 
+@Serializable
+data class HabitResponse(
+    val content: String? = null
+)
+
 class InsightService(
     private val llmParser: LLMParser,
     private val billService: BillService,
@@ -278,6 +283,13 @@ class InsightService(
         } catch (_: Exception) {
             "「${habit.label}」你常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记了吗？"
         }
+    }
+
+    /** App 端习惯提醒：无习惯 → null；有习惯 → 已润色文案。与 QQ 端算法/文案一致。 */
+    suspend fun habitForApp(userId: Long, now: ZonedDateTime = ZonedDateTime.now(SHANGHAI)): HabitResponse {
+        val habit = habitReminder(userId, now)
+        if (habit == null) return HabitResponse(null)
+        return HabitResponse(polishHabitCopy(habit))
     }
 
     companion object {

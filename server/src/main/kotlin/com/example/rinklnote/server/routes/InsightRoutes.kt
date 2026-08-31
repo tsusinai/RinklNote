@@ -53,6 +53,15 @@ fun Route.insightRoutes(insightService: InsightService) {
                 call.respond(result)
             }
 
+            get("/habit") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val result = insightService.habitForApp(userId)
+                call.respond(result)
+            }
+
             get("/suggest") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()
