@@ -72,9 +72,10 @@ class AiViewModel(
 
     /**
      * AppNavigation 每次进入 AI 页时调用。
-     * 欢迎语全局一次（kind=greeting）；已登录时按需注入本月总结（每月一次）与异常提醒（每天一次）。
+     * 欢迎语全局一次（kind=greeting）；已登录且未关闭 AI 主动推送时按需注入本月总结（每月一次）、
+     * 异常提醒（每天一次）与习惯提醒（每天一次）。
      */
-    fun onEnter(isLoggedIn: Boolean) {
+    fun onEnter(isLoggedIn: Boolean, aiDisabled: Boolean = false) {
         viewModelScope.launch {
             if (repository.countChatMessages("greeting", 0L) == 0L) {
                 repository.insertChatMessage(
@@ -85,9 +86,10 @@ class AiViewModel(
                     )
                 )
             }
-            if (isLoggedIn) {
+            if (isLoggedIn && !aiDisabled) {
                 loadMonthlyIfStale()
                 loadAnomalyIfStale()
+                loadHabitIfStale()
             }
         }
     }
@@ -177,13 +179,10 @@ class AiViewModel(
             if (repository.countChatMessages("anomaly", dayStart) > 0) return@launch
             try {
                 val r = api.getAnomalyAlerts()
-                val content = if (r.alerts.isEmpty()) {
-                    "暂无异常提醒"
-                } else {
-                    buildString {
-                        append("异常提醒\n")
-                        r.alerts.forEach { a -> append("• ").append(a.message).append("\n") }
-                    }
+                if (r.alerts.isEmpty()) return@launch   // 无异常不插「暂无」，不占去重位
+                val content = buildString {
+                    append("异常提醒\n")
+                    append(r.alerts.joinToString("\n") { "• " + it.message })
                 }
                 repository.insertChatMessage(
                     ChatMessage(role = "assistant", kind = "anomaly", content = content, createdAt = now())
@@ -194,6 +193,27 @@ class AiViewModel(
                 repository.insertChatMessage(
                     ChatMessage(role = "assistant", kind = "text", content = friendlyError(e, "加载异常提醒失败"), createdAt = now())
                 )
+            }
+        }
+    }
+
+    /** 习惯提醒：每天一次；无内容/失败静默（soft 提醒，不打扰）。 */
+    private fun loadHabitIfStale() {
+        viewModelScope.launch {
+            val zone = bookkeepingZone()
+            val dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+            if (repository.countChatMessages("habit", dayStart) > 0) return@launch
+            try {
+                val r = api.getHabit()
+                val content = r.content
+                if (content.isNullOrBlank()) return@launch   // 今日无习惯 → 不插，不占去重位
+                repository.insertChatMessage(
+                    ChatMessage(role = "assistant", kind = "habit", content = content, createdAt = now())
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 静默：习惯提醒加载失败不打扰用户，下次进入重试
             }
         }
     }

@@ -204,6 +204,47 @@ class AiViewModelTest {
         assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
     }
 
+    @Test
+    fun `habit is injected once per day when logged in`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEnter(true, false)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "habit" })
+
+        vm.onEnter(true, false)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "habit" })
+    }
+
+    @Test
+    fun `aiDisabled suppresses summary anomaly and habit but not greeting`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEnter(true, true)
+        advanceUntilIdle()
+        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "habit" })
+    }
+
+    @Test
+    fun `empty anomaly is not injected`() = runTest(dispatcher) {
+        fake.anomalyResult = AnomalyResponse(alerts = emptyList())
+        val vm = newVM()
+        vm.onEnter(true, false)
+        advanceUntilIdle()
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
+    }
+
+    @Test
+    fun `habit with null content is not injected`() = runTest(dispatcher) {
+        fake.habitContent = null
+        val vm = newVM()
+        vm.onEnter(true, false)
+        advanceUntilIdle()
+        assertEquals(0, repo.chatMessages.value.count { it.kind == "habit" })
+    }
+
     /** 仓库 fake：支持聊天 Flow + countSince 去重计数，同时驱动 QuickAdd 记账。 */
     private class FakeBillRepository : BillRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
