@@ -13,8 +13,8 @@ import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.VoiceParser
+import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -344,7 +344,7 @@ class QuickAddViewModel(
                 subCategoryName = s.selectedSubCategory?.name,
                 accountId = account.id,
                 remark = s.remark.ifBlank { null },
-                date = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
             )
             val savedId = repository.addBill(bill)
             _effects.send(QuickAddEffect.FinalConfirmCompleted)

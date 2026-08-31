@@ -41,10 +41,10 @@ import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.ChartBox
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
+import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 
 @Composable
 fun BookkeepingScreen(
@@ -309,8 +309,8 @@ private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
 }
 
 private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Float>, List<String>> {
-    val zone = ZoneId.systemDefault()
-    val firstDay = LocalDate.now().plusMonths(offset.toLong()).withDayOfMonth(1)
+    val zone = bookkeepingZone()
+    val firstDay = LocalDate.now(zone).plusMonths(offset.toLong()).withDayOfMonth(1)
     val lastDay = if (offset == 0) LocalDate.now() else firstDay.plusMonths(1).minusDays(1)
     val days = (java.time.temporal.ChronoUnit.DAYS.between(firstDay, lastDay).toInt()) + 1
     val data = List(days) { firstDay.plusDays(it.toLong()) }

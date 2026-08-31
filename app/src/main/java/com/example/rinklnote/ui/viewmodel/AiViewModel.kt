@@ -8,8 +8,8 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.QueryRequest
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.util.VoiceParser
+import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,7 +146,7 @@ class AiViewModel(
 
     private fun loadMonthlyIfStale() {
         viewModelScope.launch {
-            val zone = ZoneId.of("Asia/Shanghai")
+            val zone = bookkeepingZone()
             val monthStart = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
             if (repository.countChatMessages("summary", monthStart) > 0) return@launch
             val month = LocalDate.now(zone).format(DateTimeFormatter.ofPattern("yyyy-MM"))
@@ -172,7 +172,7 @@ class AiViewModel(
 
     private fun loadAnomalyIfStale() {
         viewModelScope.launch {
-            val zone = ZoneId.of("Asia/Shanghai")
+            val zone = bookkeepingZone()
             val dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
             if (repository.countChatMessages("anomaly", dayStart) > 0) return@launch
             try {

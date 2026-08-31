@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
+import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import java.time.LocalDate
@@ -33,7 +34,7 @@ data class BudgetState(
 
     val remainingDays: Int
         get() {
-            val today = LocalDate.now()
+            val today = LocalDate.now(bookkeepingZone())
             return today.lengthOfMonth() - today.dayOfMonth + 1
         }
 }

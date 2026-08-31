@@ -58,8 +58,8 @@ import com.example.rinklnote.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
+import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -423,14 +423,14 @@ private fun maskPhone(phone: String): String =
 private fun formatSyncTime(epochMillis: Long): String {
     if (epochMillis <= 0) return "从未"
     return Instant.ofEpochMilli(epochMillis)
-        .atZone(ZoneId.systemDefault())
+        .atZone(bookkeepingZone())
         .format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
 }
 
 private fun exportBills(context: android.content.Context, bills: List<Bill>) {
     val sb = StringBuilder("\uFEFF")
     sb.appendLine("日期,类型,分类,子分类,金额,备注,来源")
-    val zone = ZoneId.systemDefault()
+    val zone = bookkeepingZone()
     bills.forEach { b ->
         val date = Instant.ofEpochMilli(b.date).atZone(zone).toLocalDate().toString()
         sb.appendLine(

@@ -117,7 +117,7 @@ fun AppNavigation(app: RinklNoteApp) {
         factory = QuickAddViewModel.Factory(app.repository, app.syncManager, app.apiService)
     )
     val assetsVM: AssetsViewModel = viewModel(
-        factory = AssetsViewModel.Factory(app.repository)
+        factory = AssetsViewModel.Factory(app.repository, app.syncManager)
     )
     val budgetVM: BudgetViewModel = viewModel(
         factory = BudgetViewModel.Factory(app.repository, app.syncManager)
