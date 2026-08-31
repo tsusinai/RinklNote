@@ -113,6 +113,14 @@ class BookkeepingViewModelTest {
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
         override suspend fun updateAccount(account: Account) {}
+        override fun observeAccounts(): Flow<List<Account>> = accounts
+        override suspend fun insertAccount(account: Account): Long = 0
+        override suspend fun updateAccountLocal(account: Account) {}
+        override suspend fun softDeleteAccount(account: Account) {}
+        override suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long) {}
+        override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
+        override suspend fun getAccountByServerId(serverId: Long): Account? = null
+        override suspend fun deleteAccountByServerId(serverId: Long) {}
         override suspend fun getSubCategories(parentId: Long): List<SubCategory> = emptyList()
         override suspend fun getBudget(monthStart: Long): Budget? = null
         override suspend fun upsertBudget(budget: Budget) {}

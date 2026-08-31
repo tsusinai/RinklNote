@@ -61,8 +61,25 @@ data class CreateBillRequest(
     val subCategoryName: String? = null,
     val accountId: Long,
     val remark: String? = null,
-    val date: Long? = null
+    val date: Long? = null,
+    val baseUpdatedAt: Long? = null // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
 )
+
+@Serializable
+data class AccountDTO(
+    val id: Long,
+    val name: String,
+    val balance: Double,
+    val iconColor: String,
+    val updatedAt: Long? = null,
+    val deleted: Boolean = false
+)
+
+@Serializable
+data class CreateAccountRequest(val name: String, val iconColor: String, val balance: Double = 0.0)
+
+@Serializable
+data class UpdateAccountRequest(val name: String? = null, val iconColor: String? = null, val balance: Double? = null)
 
 @Serializable
 data class TemplateDTO(

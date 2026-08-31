@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 interface BillRepository {
     val expenseCategories: StateFlow<List<Category>>
     val incomeCategories: StateFlow<List<Category>>
-    val accounts: StateFlow<List<Account>>
+    val accounts: Flow<List<Account>>
 
     fun observeAllBills(): Flow<List<Bill>>
     fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>>
@@ -30,7 +30,18 @@ interface BillRepository {
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)
+
+    // Accounts — reactive source + per-user CRUD/sync
+    fun observeAccounts(): Flow<List<Account>>
+    suspend fun insertAccount(account: Account): Long
     suspend fun updateAccount(account: Account)
+    suspend fun updateAccountLocal(account: Account)
+    suspend fun softDeleteAccount(account: Account)
+    suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long)
+    suspend fun getUnsyncedAccounts(): List<Account>
+    suspend fun getAccountByServerId(serverId: Long): Account?
+    suspend fun deleteAccountByServerId(serverId: Long)
+
     suspend fun getSubCategories(parentId: Long): List<SubCategory>
     suspend fun getBudget(monthStart: Long): Budget?
     suspend fun upsertBudget(budget: Budget)

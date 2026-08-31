@@ -28,8 +28,9 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     private val _incomeCategories = MutableStateFlow<List<Category>>(emptyList())
     override val incomeCategories: StateFlow<List<Category>> = _incomeCategories.asStateFlow()
 
-    private val _accounts = MutableStateFlow<List<Account>>(emptyList())
-    override val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
+    override val accounts: Flow<List<Account>> = accountDao.observeAll()
+
+    override fun observeAccounts(): Flow<List<Account>> = accountDao.observeAll()
 
     override fun observeAllBills(): Flow<List<Bill>> = billDao.observeAll()
     override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> =
@@ -61,7 +62,16 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
         billDao.softDelete(bill.id, System.currentTimeMillis())
     }
 
+    override suspend fun insertAccount(account: Account): Long = accountDao.insert(account)
     override suspend fun updateAccount(account: Account) = accountDao.update(account)
+    override suspend fun updateAccountLocal(account: Account) = accountDao.update(account)
+    override suspend fun softDeleteAccount(account: Account) =
+        accountDao.softDelete(account.id, System.currentTimeMillis())
+    override suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long) =
+        accountDao.updateServerId(localId, serverId, updatedAt)
+    override suspend fun getUnsyncedAccounts(): List<Account> = accountDao.getUnsynced()
+    override suspend fun getAccountByServerId(serverId: Long): Account? = accountDao.getByServerId(serverId)
+    override suspend fun deleteAccountByServerId(serverId: Long) = accountDao.deleteByServerId(serverId)
 
     override suspend fun getBudget(monthStart: Long): Budget? = budgetDao.getByMonth(monthStart)
 
@@ -75,13 +85,14 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override suspend fun deleteBudgetByServerId(serverId: Long) = budgetDao.deleteByServerId(serverId)
 
     override suspend fun clearLocalData() {
-        // Wipe per-user data on logout. Keep categories/accounts (shared reference data).
-        // Only server-synced bills are removed — never-pushed bills survive logout so
-        // they are not lost and get pushed after the next login.
+        // Wipe per-user data on logout. Keep categories (shared reference data).
+        // Only server-synced rows are removed — never-pushed bills/accounts survive
+        // logout so they are not lost and get pushed after the next login.
         billDao.deleteSynced()
         budgetDao.deleteAll()
         templateDao.deleteAll()
         chatDao.deleteAll()
+        accountDao.deleteSyncedClean()
     }
 
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
@@ -90,7 +101,7 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override suspend fun loadReferenceData() {
         _expenseCategories.value = categoryDao.getAllByType("EXPENSE")
         _incomeCategories.value = categoryDao.getAllByType("INCOME")
-        _accounts.value = accountDao.getAll()
+        // accounts 已改为 Room Flow 暴露（observeAll），无需再写 StateFlow。
     }
 
     override suspend fun seedIfNeeded() {

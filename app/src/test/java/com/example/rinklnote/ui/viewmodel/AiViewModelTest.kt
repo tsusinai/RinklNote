@@ -8,12 +8,14 @@ import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.AccountDTO
 import com.example.rinklnote.data.network.dto.AnomalyAlert
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
 import com.example.rinklnote.data.network.dto.BindQQRequest
 import com.example.rinklnote.data.network.dto.BudgetDTO
 import com.example.rinklnote.data.network.dto.ChangePasswordRequest
+import com.example.rinklnote.data.network.dto.CreateAccountRequest
 import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.LoginRequest
 import com.example.rinklnote.data.network.dto.LoginResponse
@@ -27,6 +29,7 @@ import com.example.rinklnote.data.network.dto.QueryResponse
 import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.TranscribeResponse
+import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import com.example.rinklnote.data.repository.BillRepository
 import kotlinx.coroutines.Dispatchers
@@ -240,6 +243,14 @@ class AiViewModelTest {
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
         override suspend fun updateAccount(account: Account) {}
+        override fun observeAccounts(): Flow<List<Account>> = accounts
+        override suspend fun insertAccount(account: Account): Long = 0
+        override suspend fun updateAccountLocal(account: Account) {}
+        override suspend fun softDeleteAccount(account: Account) {}
+        override suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long) {}
+        override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
+        override suspend fun getAccountByServerId(serverId: Long): Account? = null
+        override suspend fun deleteAccountByServerId(serverId: Long) {}
         override suspend fun getSubCategories(parentId: Long): List<SubCategory> = emptyList()
         override suspend fun getBudget(monthStart: Long): Budget? = null
         override suspend fun upsertBudget(budget: Budget) {}
@@ -285,6 +296,13 @@ class AiViewModelTest {
         override suspend fun uploadBill(bill: CreateBillRequest): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
         override suspend fun updateBill(id: Long, bill: CreateBillRequest): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
         override suspend fun deleteBill(id: Long): MessageResponse = MessageResponse("")
+        override suspend fun getBill(id: Long): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
+        override suspend fun getAccounts(): List<AccountDTO> = emptyList()
+        override suspend fun createAccount(request: CreateAccountRequest): AccountDTO =
+            AccountDTO(0, "", 0.0, "")
+        override suspend fun updateAccount(id: Long, request: UpdateAccountRequest): AccountDTO =
+            AccountDTO(0, "", 0.0, "")
+        override suspend fun deleteAccount(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
         override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(0, 0L, 0.0, 0L)
         override suspend fun transcribe(file: MultipartBody.Part): TranscribeResponse = TranscribeResponse()

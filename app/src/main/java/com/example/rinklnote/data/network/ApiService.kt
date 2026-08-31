@@ -39,6 +39,22 @@ interface ApiService {
     @DELETE("api/bills/{id}")
     suspend fun deleteBill(@Path("id") id: Long): MessageResponse
 
+    @GET("api/bills/{id}")
+    suspend fun getBill(@Path("id") id: Long): BillDTO
+
+    // Accounts — per-user, JWT-protected
+    @GET("api/accounts")
+    suspend fun getAccounts(): List<AccountDTO>
+
+    @POST("api/accounts")
+    suspend fun createAccount(@Body request: CreateAccountRequest): AccountDTO
+
+    @PUT("api/accounts/{id}")
+    suspend fun updateAccount(@Path("id") id: Long, @Body request: UpdateAccountRequest): AccountDTO
+
+    @DELETE("api/accounts/{id}")
+    suspend fun deleteAccount(@Path("id") id: Long): MessageResponse
+
     // Budgets
     @GET("api/budgets")
     suspend fun getBudgets(): List<BudgetDTO>
