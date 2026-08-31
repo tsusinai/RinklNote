@@ -157,11 +157,11 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    // AI 页(index 4)进入时注入欢迎语；已登录时按需注入月总结/异常提醒。
+    // AI 页(index 4)进入时注入欢迎语；已登录且未关闭 AI 主动推送时按需注入月总结/异常/习惯提醒。
     // 用 currentPage==4 门控，避免 beyondViewportPageCount=1 预组合时误触发。
-    LaunchedEffect(pagerState.currentPage, authState.isLoggedIn) {
+    LaunchedEffect(pagerState.currentPage, authState.isLoggedIn, authState.aiDisabled) {
         if (pagerState.currentPage == 4) {
-            aiVM.onEnter(authState.isLoggedIn)
+            aiVM.onEnter(authState.isLoggedIn, authState.aiDisabled)
         }
     }
 
