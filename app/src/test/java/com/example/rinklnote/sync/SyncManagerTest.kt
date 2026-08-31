@@ -1,25 +1,36 @@
 package com.example.rinklnote.sync
 
+import com.example.rinklnote.data.db.dao.AccountDao
 import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BudgetDao
+import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.AccountDTO
 import com.example.rinklnote.data.network.dto.BillDTO
 import com.example.rinklnote.data.network.dto.BudgetDTO
+import com.example.rinklnote.data.network.dto.CreateAccountRequest
+import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.SyncResponse
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import retrofit2.HttpException
+import retrofit2.Response
 
 /**
  * JVM unit tests for SyncManager (Phase 4 + Phase 1 regressions):
@@ -32,6 +43,7 @@ class SyncManagerTest {
     private lateinit var tokenManager: TokenManager
     private lateinit var billDao: BillDao
     private lateinit var budgetDao: BudgetDao
+    private lateinit var accountDao: AccountDao
     private lateinit var manager: SyncManager
 
     @Before
@@ -40,12 +52,22 @@ class SyncManagerTest {
         tokenManager = mock()
         billDao = mock()
         budgetDao = mock()
-        manager = SyncManager(api, tokenManager, billDao, templateDao = null, budgetDao = budgetDao)
+        accountDao = mock()
+        manager = SyncManager(api, tokenManager, billDao, templateDao = null, budgetDao = budgetDao, accountDao = accountDao)
         whenever(tokenManager.lastSyncTime).thenReturn(flowOf(0L))
     }
 
     private suspend fun stubLoggedIn(loggedIn: Boolean) {
         whenever(tokenManager.isLoggedIn()).thenReturn(loggedIn)
+    }
+
+    /**
+     * Mockito returns null for un-stubbed suspend functions that return List, which
+     * NPEs the forEach loops in sync(). Provide the account-sync empties by default.
+     */
+    private suspend fun stubAccountSyncDefaults() {
+        whenever(accountDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getAccounts()).thenReturn(emptyList())
     }
 
     private fun bill(id: Long, deleted: Boolean = false, serverId: Long? = null) = Bill(
@@ -101,6 +123,7 @@ class SyncManagerTest {
     @Test
     fun `sync pages through the composite cursor until hasMore is false`() = runTest {
         stubLoggedIn(true)
+        stubAccountSyncDefaults()
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.getBudgets()).thenReturn(emptyList())
@@ -128,6 +151,7 @@ class SyncManagerTest {
     @Test
     fun `sync removes server-side deleted bills locally`() = runTest {
         stubLoggedIn(true)
+        stubAccountSyncDefaults()
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.getBudgets()).thenReturn(emptyList())
@@ -144,6 +168,7 @@ class SyncManagerTest {
     @Test
     fun `budget merge overwrites local when the server copy is newer`() = runTest {
         stubLoggedIn(true)
+        stubAccountSyncDefaults()
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.syncBills(after = null, afterId = null, limit = 200))
             .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
@@ -164,6 +189,7 @@ class SyncManagerTest {
     @Test
     fun `budget merge keeps local when the local copy is newer`() = runTest {
         stubLoggedIn(true)
+        stubAccountSyncDefaults()
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.syncBills(after = null, afterId = null, limit = 200))
             .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
@@ -177,5 +203,86 @@ class SyncManagerTest {
         manager.sync()
 
         verify(budgetDao, never()).upsert(any())
+    }
+
+    @Test
+    fun `account create pushes and stamps the returned server id`() = runTest {
+        stubLoggedIn(true)
+        val newAcct = Account(id = 5, name = "招商", balance = 0.0, iconColor = "#123456")
+        whenever(accountDao.getUnsynced()).thenReturn(listOf(newAcct))
+        whenever(api.createAccount(any())).thenReturn(
+            AccountDTO(id = 500, name = "招商", balance = 0.0, iconColor = "#123456", updatedAt = 2000)
+        )
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(emptyList(), serverTime = 0))
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.getAccounts()).thenReturn(emptyList())
+
+        val result = manager.sync()
+        assertTrue("sync returned ${result}", result is SyncResult.Success)
+
+        verify(api).createAccount(CreateAccountRequest(name = "招商", iconColor = "#123456", balance = 0.0))
+        verify(accountDao).updateServerId(5, 500, 2000)
+    }
+
+    @Test
+    fun `account pull LWW never overwrites a local dirty row`() = runTest {
+        stubLoggedIn(true)
+        // Local account 501 is dirty (unsynced edit) and older than the server copy.
+        val dirtyLocal = Account(id = 6, serverId = 501, name = "余额宝", balance = 100.0, iconColor = "#000000", updatedAt = 3000, dirty = true)
+        whenever(accountDao.getUnsynced()).thenReturn(emptyList())
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.syncBills(any(), any(), any())).thenReturn(SyncResponse(emptyList(), serverTime = 0))
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(accountDao.getByServerId(501L)).thenReturn(dirtyLocal)
+        whenever(api.getAccounts()).thenReturn(
+            listOf(AccountDTO(id = 501, name = "余额宝", balance = 999.0, iconColor = "#000000", updatedAt = 4000))
+        )
+
+        manager.sync()
+
+        // Server copy is newer but the local row is dirty → never clobbered.
+        verify(accountDao, never()).upsert(any())
+    }
+
+    @Test
+    fun `bill pull skips a local dirty row`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.getAccounts()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200)).thenReturn(
+            SyncResponse(listOf(billDTO(9, 900)), serverTime = 1000)
+        )
+        val dirtyLocal = bill(id = 9, serverId = 9).copy(dirty = true)
+        whenever(billDao.getByServerId(9L)).thenReturn(dirtyLocal)
+
+        manager.sync()
+
+        // The local dirty invoice is preserved — the server row is not upserted.
+        verify(billDao).upsertAll(argThat<List<Bill>> { bills -> bills.none { b -> b.serverId == 9L } })
+    }
+
+    @Test
+    fun `bill update on 409 re-bases and replays exactly once`() = runTest {
+        val b = bill(id = 7, deleted = false, serverId = 99).copy(baseUpdatedAt = 1000)
+        val ok = BillDTO(id = 99, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+            categoryName = "三餐", accountId = 1, date = 100, source = "APP",
+            createdAt = 100, updatedAt = 2000)
+        val conflict = HttpException(Response.error<Any>(409, "conflict".toResponseBody()))
+        whenever(api.updateBill(any(), any())).thenThrow(conflict).thenReturn(ok)
+        whenever(api.getBill(99L)).thenReturn(ok)
+
+        manager.pushBill(b)
+
+        verify(api).updateBill(eq(99L), argThat<CreateBillRequest> { req -> req.baseUpdatedAt == 1000L })
+        verify(api).getBill(99L)
+        verify(api).updateBill(eq(99L), argThat<CreateBillRequest> { req -> req.baseUpdatedAt == 2000L })
+        verify(billDao).updateServerId(7, 99, 2000)
     }
 }

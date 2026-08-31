@@ -40,6 +40,9 @@ interface AccountDao {
     @Query("DELETE FROM accounts WHERE server_id = :serverId")
     suspend fun deleteByServerId(serverId: Long)
 
+    @Query("DELETE FROM accounts WHERE id = :id")
+    suspend fun hardDeleteById(id: Long)
+
     @Query("UPDATE accounts SET server_id = :serverId, updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
 

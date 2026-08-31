@@ -1,19 +1,25 @@
 package com.example.rinklnote.sync
 
+import com.example.rinklnote.data.db.dao.AccountDao
 import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BillTemplateDao
 import com.example.rinklnote.data.db.dao.BudgetDao
+import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.BillDTO
+import com.example.rinklnote.data.network.dto.CreateAccountRequest
 import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.TemplateDTO
+import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import retrofit2.HttpException
 
 sealed class SyncResult {
     data object NotLoggedIn : SyncResult()
@@ -26,7 +32,8 @@ class SyncManager(
     private val tokenManager: TokenManager,
     private val billDao: BillDao,
     private val templateDao: BillTemplateDao? = null,
-    private val budgetDao: BudgetDao? = null
+    private val budgetDao: BudgetDao? = null,
+    private val accountDao: AccountDao? = null
 ) {
     // Serialize push/sync so a QuickAdd push and an automatic sync can never run
     // concurrently and double-submit the same bill.
@@ -67,9 +74,16 @@ class SyncManager(
                 // Delete locally-removed bills
                 deleted.forEach { billDao.deleteByServerId(it.id) }
 
-                // Upsert changed bills (Room @Upsert handles insert-or-update)
-                val merged = alive.map { dto ->
-                    Bill(
+                // Upsert changed bills (Room @Upsert handles insert-or-update).
+                // Skip any server row that the local device has a dirty (unsynced)
+                // edit for — never clobber a local edit that hasn't been pushed yet.
+                // baseUpdatedAt records the server version so the next conditional
+                // PUT is guarded against concurrent edits.
+                val merged = mutableListOf<Bill>()
+                for (dto in alive) {
+                    val local = billDao.getByServerId(dto.id)
+                    if (local != null && local.dirty) continue
+                    merged += Bill(
                         amount = dto.amount,
                         billType = dto.billType,
                         categoryId = dto.categoryId,
@@ -82,6 +96,7 @@ class SyncManager(
                         source = dto.source,
                         serverId = dto.id,
                         updatedAt = dto.updatedAt,
+                        baseUpdatedAt = dto.updatedAt,
                         deleted = false
                     )
                 }
@@ -107,6 +122,9 @@ class SyncManager(
 
             // 4. Sync budgets (push unsynced, then pull all + LWW merge)
             syncBudgets()
+
+            // 5. Sync accounts (push unsynced, then pull all + LWW merge)
+            syncAccounts()
 
             SyncResult.Success(pushed, pulled)
         } catch (e: Exception) {
@@ -136,7 +154,11 @@ class SyncManager(
                 true
             }
             bill.serverId != null -> {
-                val dto = api.updateBill(bill.serverId, bill.toRequest())
+                // Conditional PUT: the local baseUpdatedAt guards against a version
+                // the server already superseded. On 409, re-base on the server's
+                // current DTO and replay ONCE — so a lost/late device can't clobber
+                // a newer edit.
+                val dto = updateWithReplay(bill)
                 billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
                 true
             }
@@ -144,6 +166,26 @@ class SyncManager(
                 val dto = api.uploadBill(bill.toRequest())
                 billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
                 true
+            }
+        }
+    }
+
+    /**
+     * PUT a bill; on 409 (version conflict) fetch the server's current row to re-base
+     * and push exactly once more. Returning the final DTO lets the caller stamp the
+     * new base for the next conditional PUT.
+     */
+    private suspend fun updateWithReplay(bill: Bill): BillDTO {
+        val serverId = bill.serverId ?: error("bill has no server id")
+        val base = bill.toRequest().copy(baseUpdatedAt = bill.baseUpdatedAt)
+        return try {
+            api.updateBill(serverId, base)
+        } catch (e: HttpException) {
+            if (e.code() == 409) {
+                val fresh = api.getBill(serverId)
+                api.updateBill(serverId, base.copy(baseUpdatedAt = fresh.updatedAt ?: fresh.createdAt))
+            } else {
+                throw e
             }
         }
     }
@@ -216,6 +258,94 @@ class SyncManager(
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    /** Upload a single local account (non-blocking, called after create/edit/delete). */
+    suspend fun pushAccount(account: Account) = syncMutex.withLock {
+        val dao = accountDao ?: return@withLock
+        try {
+            pushOneAccount(account)
+        } catch (_: Exception) {
+            // Will be pushed on next full sync
+        }
+    }
+
+    /** Accounts are few in number → push all unsynced, pull everything, merge by LWW. */
+    private suspend fun syncAccounts() {
+        val dao = accountDao ?: return
+
+        // Push unsynced (server_id IS NULL OR dirty = 1)
+        dao.getUnsynced().forEach { account ->
+            try {
+                pushOneAccount(account)
+            } catch (_: Exception) {}
+        }
+
+        // Pull all + last-write-wins merge; never clobber a local dirty row.
+        try {
+            api.getAccounts().forEach { dto ->
+                val serverTime = dto.updatedAt ?: 0L
+                val local = dao.getByServerId(dto.id)
+                if (local == null) {
+                    dao.upsert(
+                        Account(
+                            serverId = dto.id, name = dto.name, balance = dto.balance,
+                            iconColor = dto.iconColor, updatedAt = serverTime,
+                            deleted = dto.deleted, dirty = false
+                        )
+                    )
+                } else {
+                    if (local.dirty) return@forEach
+                    val localTime = local.updatedAt ?: 0L
+                    if (serverTime > localTime) {
+                        dao.upsert(
+                            local.copy(
+                                name = dto.name, balance = dto.balance,
+                                iconColor = dto.iconColor, updatedAt = serverTime,
+                                deleted = dto.deleted, dirty = false
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Push a single local account, branching on its state:
+     *  - deleted            → DELETE (soft-deleted server-side, hard-delete locally)
+     *  - serverId != null   → PUT (update existing)
+     *  - otherwise          → POST (create)
+     */
+    private suspend fun pushOneAccount(account: Account): Boolean {
+        val dao = accountDao ?: return true
+        return when {
+            account.deleted -> {
+                val serverId = account.serverId
+                if (serverId == null) {
+                    dao.hardDeleteById(account.id)
+                    return true
+                }
+                api.deleteAccount(serverId)
+                dao.hardDeleteById(account.id)
+                true
+            }
+            account.serverId != null -> {
+                val dto = api.updateAccount(
+                    account.serverId,
+                    UpdateAccountRequest(name = account.name, iconColor = account.iconColor, balance = account.balance)
+                )
+                dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
+                true
+            }
+            else -> {
+                val dto = api.createAccount(
+                    CreateAccountRequest(name = account.name, iconColor = account.iconColor, balance = account.balance)
+                )
+                dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
+                true
+            }
+        }
     }
 }
 

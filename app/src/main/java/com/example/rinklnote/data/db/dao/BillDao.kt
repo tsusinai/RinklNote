@@ -39,10 +39,10 @@ interface BillDao {
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
 
-    // Logout cleanup: purge only bills already pushed to the server (server_id set).
-    // Locally-edited / never-pushed rows are kept so they are not permanently lost
-    // and get pushed on the next login's sync.
-    @Query("DELETE FROM bills WHERE server_id IS NOT NULL")
+    // Logout cleanup: purge only bills already pushed to the server (server_id set)
+    // AND not locally edited (dirty = 0). Locally-edited / never-pushed rows are kept
+    // so they are not permanently lost and get pushed on the next login's sync.
+    @Query("DELETE FROM bills WHERE server_id IS NOT NULL AND dirty = 0")
     suspend fun deleteSynced()
 
     @Query("UPDATE bills SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
@@ -53,6 +53,9 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE server_id IS NULL OR dirty = 1")
     suspend fun getUnsynced(): List<Bill>
 
-    @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
+    @Query("SELECT * FROM bills WHERE server_id = :serverId")
+    suspend fun getByServerId(serverId: Long): Bill?
+
+    @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt, base_updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
 }
