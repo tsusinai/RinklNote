@@ -964,6 +964,33 @@ function renderSettings(pg) {
     }},'立即同步'));
     pg.appendChild(syncCard);
 
+    // AI 主动推送开关 — 关闭后服务端不再主动推月结/异常/习惯；主动问账仍可用
+    const aiCard = h('div',{className:'card',style:'margin-bottom:16px'});
+    aiCard.append(h('div',{className:'section-label'},'AI 主动推送'));
+    const aiRow = h('div',{style:'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px'});
+    aiRow.append(h('p',{style:'font-size:13px;color:var(--muted);margin:0;flex:1'},'关闭后不再收到月结/异常/习惯推送，主动问账仍可用'));
+    const aiToggle = h('button',{className:'btn'});
+    aiToggle.textContent = '加载中...';
+    aiRow.appendChild(aiToggle);
+    aiCard.appendChild(aiRow);
+    pg.appendChild(aiCard);
+    (async () => {
+      let disabled = false;
+      try { const r = await api('/api/auth/ai'); disabled = !!r.disabled; } catch(e) {}
+      function paint() {
+        aiToggle.textContent = disabled ? '已关闭' : '开启';
+        aiToggle.className = disabled ? 'btn btn-outline' : 'btn btn-primary';
+      }
+      aiToggle.onclick = async () => {
+        const next = !disabled;
+        try {
+          await api('/api/auth/ai', { method:'PUT', body: JSON.stringify({ disabled: next }) });
+          disabled = next; paint(); S.msg = next ? '已关闭主动推送' : '已开启主动推送'; render();
+        } catch(e) { S.msg='设置失败'; render(); }
+      };
+      paint();
+    })();
+
     // QQ Bot settings
     pg.append(h('h3',{style:'margin-top:24px;margin-bottom:12px'},'QQ 机器人'));
     const botBox = h('div',{className:'card',style:'margin-bottom:16px;font-size:13px'});
