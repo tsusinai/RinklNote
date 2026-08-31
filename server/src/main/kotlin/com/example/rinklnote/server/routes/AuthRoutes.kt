@@ -32,11 +32,15 @@ data class MeResponse(
     val phone: String,
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val aiDisabled: Boolean = false
 )
 
 @Serializable
 data class ChangePasswordRequest(val oldPassword: String, val newPassword: String)
+
+@Serializable
+data class AiSettingRequest(val disabled: Boolean)
 
 fun Route.authRoutes(userService: UserService) {
     // In-memory per-IP limiting: blocks brute-force login/password guessing and
@@ -117,7 +121,8 @@ fun Route.authRoutes(userService: UserService) {
                         phone = user.phone,
                         qqNumber = user.qqNumber,
                         qqOpenid = user.qqOpenid,
-                        createdAt = user.createdAt
+                        createdAt = user.createdAt,
+                        aiDisabled = user.aiDisabled
                     )
                 )
             }
@@ -151,6 +156,22 @@ fun Route.authRoutes(userService: UserService) {
 
                 userService.unbindQQNumber(userId)
                 call.respond(MessageResponse("QQ号已解绑"))
+            }
+
+            get("/ai") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                call.respond(mapOf("disabled" to userService.isAiDisabled(userId)))
+            }
+
+            put("/ai") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@put call.respond(HttpStatusCode.Unauthorized)
+                val body = call.receive<AiSettingRequest>()
+                userService.setAiDisabled(userId, body.disabled)
+                call.respond(mapOf("disabled" to body.disabled))
             }
         }
     }
