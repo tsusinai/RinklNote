@@ -57,7 +57,9 @@ data class AccountDTO(
     val id: Long,
     val name: String,
     val balance: Double,
-    val iconColor: String
+    val iconColor: String,
+    val updatedAt: Long = 0,
+    val deleted: Boolean = false
 )
 
 class BillService {
@@ -106,10 +108,7 @@ class BillService {
             billType = "EXPENSE"
         }
 
-        val account = transaction {
-            AccountsTable.selectAll().orderBy(AccountsTable.id).firstOrNull()
-                ?: throw IllegalStateException("No account found")
-        }
+        val accountId = accountIdFor(userId)
 
         val billId = transaction {
             BillsTable.insert {
@@ -118,7 +117,7 @@ class BillService {
                 it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = catId
                 it[BillsTable.categoryName] = catName
-                it[BillsTable.accountId] = account[AccountsTable.id]
+                it[BillsTable.accountId] = accountId
                 it[BillsTable.remark] = sanitizedRemark
                 it[BillsTable.date] = todayStart
                 it[BillsTable.billSource] = source
@@ -130,7 +129,7 @@ class BillService {
         return BillDTO(
             id = billId, amount = amount, billType = billType,
             categoryId = catId, categoryName = catName,
-            subCategoryName = null, accountId = account[AccountsTable.id],
+            subCategoryName = null, accountId = accountId,
             remark = sanitizedRemark, date = todayStart, source = source,
             createdAt = now, updatedAt = now
         )
@@ -259,6 +258,105 @@ class BillService {
             afterId = page.nextAfterId
         } while (page.hasMore && after != null)
         return result
+    }
+
+    // ── 每用户账户 ──────────────────────────────────────────────
+
+    private fun ResultRow.toAccountDto() = AccountDTO(
+        id = this[AccountsTable.id],
+        name = this[AccountsTable.name],
+        balance = this[AccountsTable.balance],
+        iconColor = this[AccountsTable.iconColor],
+        updatedAt = this[AccountsTable.updatedAt],
+        deleted = this[AccountsTable.deleted]
+    )
+
+    /** 按 (user_id,name) 幂等补默认 3 账户：缺哪个名补哪个，自定义账户共存。 */
+    fun ensureDefaultAccounts(userId: Long) {
+        val now = System.currentTimeMillis()
+        transaction {
+            val existing = AccountsTable.selectAll()
+                .where { AccountsTable.userId eq userId }
+                .map { it[AccountsTable.name] }
+                .toSet()
+            listOf(
+                Triple("微信", "#28C145", 0.0),
+                Triple("支付宝", "#06B4FD", 0.0),
+                Triple("默认", "#F97D1D", 0.0)
+            ).forEach { (name, color, balance) ->
+                if (name in existing) return@forEach
+                AccountsTable.insert {
+                    it[AccountsTable.userId] = userId
+                    it[AccountsTable.name] = name
+                    it[AccountsTable.iconColor] = color
+                    it[AccountsTable.balance] = balance
+                    it[AccountsTable.updatedAt] = now
+                }
+            }
+        }
+    }
+
+    fun accountsFor(userId: Long): List<AccountDTO> {
+        ensureDefaultAccounts(userId)
+        return transaction {
+            AccountsTable.selectAll()
+                .where { (AccountsTable.userId eq userId) and (AccountsTable.deleted eq false) }
+                .orderBy(AccountsTable.id)
+                .map { it.toAccountDto() }
+        }
+    }
+
+    fun createAccount(userId: Long, name: String, iconColor: String, balance: Double): AccountDTO {
+        require(name.isNotBlank()) { "账户名不能为空" }
+        require(balance >= 0 && balance.isFinite()) { "余额不能为负" }
+        val now = System.currentTimeMillis()
+        val id = transaction {
+            AccountsTable.insert {
+                it[AccountsTable.userId] = userId
+                it[AccountsTable.name] = name
+                it[AccountsTable.iconColor] = iconColor
+                it[AccountsTable.balance] = balance
+                it[AccountsTable.updatedAt] = now
+            } get AccountsTable.id
+        }
+        return AccountDTO(id, name, balance, iconColor, now, false)
+    }
+
+    fun renameAccount(id: Long, userId: Long, name: String, iconColor: String): AccountDTO? = transaction {
+        val row = AccountsTable.selectAll()
+            .where { (AccountsTable.id eq id) and (AccountsTable.userId eq userId) }
+            .singleOrNull() ?: return@transaction null
+        val now = System.currentTimeMillis()
+        AccountsTable.update({ AccountsTable.id eq id }) {
+            it[AccountsTable.name] = name
+            it[AccountsTable.iconColor] = iconColor
+            it[AccountsTable.updatedAt] = now
+        }
+        row.toAccountDto().copy(name = name, iconColor = iconColor, updatedAt = now)
+    }
+
+    fun deleteAccount(id: Long, userId: Long): Boolean {
+        val now = System.currentTimeMillis()
+        return transaction {
+            val updated = AccountsTable.update({
+                (AccountsTable.id eq id) and (AccountsTable.userId eq userId)
+            }) {
+                it[deleted] = true
+                it[updatedAt] = now
+            }
+            updated > 0
+        }
+    }
+
+    /** 当前用户首个未删除账户 id；无则先播种默认。 */
+    fun accountIdFor(userId: Long): Long {
+        ensureDefaultAccounts(userId)
+        return transaction {
+            AccountsTable.selectAll()
+                .where { (AccountsTable.userId eq userId) and (AccountsTable.deleted eq false) }
+                .orderBy(AccountsTable.id)
+                .first()[AccountsTable.id]
+        }
     }
 
     fun seedIfNeeded() {
