@@ -14,7 +14,8 @@ data class UserInfo(
     val phone: String,
     val qqNumber: String?,
     val qqOpenid: String?,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val aiDisabled: Boolean = false
 )
 
 class UserService(
@@ -62,35 +63,49 @@ class UserService(
 
     fun findById(id: Long): UserInfo? {
         return transaction {
-            UsersTable.selectAll().where { UsersTable.id eq id }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
-            }
+            UsersTable.selectAll().where { UsersTable.id eq id }.singleOrNull()?.toUserInfo()
         }
     }
 
     fun findByPhone(phone: String): UserInfo? {
         return transaction {
-            UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
-            }
+            UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()?.toUserInfo()
         }
     }
 
     fun findByQQ(qqNumber: String): UserInfo? {
         return transaction {
-            UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
-            }
+            UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.toUserInfo()
         }
     }
 
     fun findByQqOpenid(openid: String): UserInfo? {
         return transaction {
-            UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.let {
-                UserInfo(id = it[UsersTable.id], phone = it[UsersTable.phone], qqNumber = it[UsersTable.qqNumber], qqOpenid = it[UsersTable.qqOpenid], createdAt = it[UsersTable.createdAt])
-            }
+            UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.toUserInfo()
         }
     }
+
+    /** 所有已绑定 QQ（qqOpenid 非空）的用户，用于主动推送枚举。 */
+    fun findAllBoundQq(): List<UserInfo> = transaction {
+        UsersTable.selectAll().where { UsersTable.qqOpenid.isNotNull() }.map { it.toUserInfo() }
+    }
+
+    fun setAiDisabled(userId: Long, disabled: Boolean) {
+        transaction { UsersTable.update({ UsersTable.id eq userId }) { it[aiDisabled] = disabled } }
+    }
+
+    fun isAiDisabled(userId: Long): Boolean = transaction {
+        UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()?.get(UsersTable.aiDisabled) ?: false
+    }
+
+    private fun ResultRow.toUserInfo() = UserInfo(
+        id = this[UsersTable.id],
+        phone = this[UsersTable.phone],
+        qqNumber = this[UsersTable.qqNumber],
+        qqOpenid = this[UsersTable.qqOpenid],
+        createdAt = this[UsersTable.createdAt],
+        aiDisabled = this[UsersTable.aiDisabled]
+    )
 
     fun bindByQqOpenid(userId: Long, openid: String): Boolean {
         return transaction {

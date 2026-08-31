@@ -11,6 +11,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import com.example.rinklnote.server.tables.UsersTable
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.selectAll
 
 class UserServiceTest {
 
@@ -82,5 +85,34 @@ class UserServiceTest {
 
         service.unbindQQNumber(id) // should not throw
         assertNull(service.findById(id)?.qqNumber)
+    }
+
+    @Test
+    fun `setAiDisabled and isAiDisabled roundtrip with default false`() {
+        val (id, _) = service.register("13800000006", "pass123456")
+        // 默认 false
+        assertFalse(service.isAiDisabled(id))
+        assertFalse(service.findById(id)!!.aiDisabled)
+
+        service.setAiDisabled(id, true)
+        assertTrue(service.isAiDisabled(id))
+        assertTrue(service.findById(id)!!.aiDisabled)
+
+        service.setAiDisabled(id, false)
+        assertFalse(service.isAiDisabled(id))
+    }
+
+    @Test
+    fun `findAllBoundQq returns only users with qqOpenid and carries aiDisabled`() {
+        // 用户1 有 openid；用户2 只绑 qqNumber、无 openid → 不应出现
+        val (id1, _) = service.register("13800000007", "pass123456")
+        val (id2, _) = service.register("13800000008", "pass123456")
+        service.bindByQqOpenid(id1, "openid-abc")
+        service.bindQQ(id2, "111111111")
+
+        val bound = service.findAllBoundQq()
+        assertEquals(1, bound.size)
+        assertEquals(id1, bound.first().id)
+        assertFalse(bound.first().aiDisabled)
     }
 }
