@@ -143,6 +143,7 @@ fun Application.module() {
     routing {
         authRoutes(userService)
         billRoutes(billService, nluService)
+        accountRoutes(billService)
         transcribeRoutes(asrService)
         budgetRoutes(budgetService)
         correctionRoutes()

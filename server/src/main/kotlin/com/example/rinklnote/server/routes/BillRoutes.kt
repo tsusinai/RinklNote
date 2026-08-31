@@ -24,14 +24,12 @@ data class CreateBillRequest(
     val subCategoryName: String? = null,
     val accountId: Long,
     val remark: String? = null,
-    val date: Long? = null
+    val date: Long? = null,
+    val baseUpdatedAt: Long? = null // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
 )
 
 @Serializable
 data class ParseRequest(val text: String)
-
-@Serializable
-data class UpdateBalanceRequest(val balance: Double)
 
 fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
     // Public endpoints — reference data, no auth required
@@ -40,12 +38,14 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
         call.respond(categories)
     }
 
-    get("/api/bills/accounts") {
-        val accounts = billService.getAccounts()
-        call.respond(accounts)
-    }
-
     authenticate("auth-jwt") {
+        // 账户已改为每用户：需要在鉴权下按用户返回。
+        get("/api/bills/accounts") {
+            val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            call.respond(billService.accountsFor(userId))
+        }
+
         route("/api/bills") {
             get("/sync") {
                 val principal = call.principal<JWTPrincipal>()
@@ -57,6 +57,16 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
                 val response = billService.syncBills(userId, after, afterId, limit)
                 call.respond(response)
+            }
+
+            get("/{id}") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                val id = call.parameters["id"]?.toLongOrNull()
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
+                val dto = billService.getBill(id, userId)
+                if (dto != null) call.respond(dto)
+                else call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
             }
 
             post("/parse") {
@@ -113,6 +123,18 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 require(body.amount > 0 && body.amount.isFinite()) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
 
+                // 条件 PUT：带 baseUpdatedAt 且和服务端最新 updatedAt 不符 → 409 + 当前最新 DTO，
+                // 客户端据此重取 base 重放，避免离线/陈旧端覆盖新端改动。
+                if (body.baseUpdatedAt != null) {
+                    val current = billService.getBill(billId, userId)
+                    if (current == null) {
+                        return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
+                    }
+                    if (current.updatedAt != body.baseUpdatedAt) {
+                        return@put call.respond(HttpStatusCode.Conflict, current)
+                    }
+                }
+
                 val updated = transaction {
                     val row = BillsTable.selectAll()
                         .where { (BillsTable.id eq billId) and (BillsTable.userId eq userId) }
@@ -161,24 +183,6 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     call.respond(mapOf("message" to "已删除"))
                 } else {
                     call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
-                }
-            }
-        }
-
-        route("/api/accounts") {
-            put("/{id}") {
-                val principal = call.principal<JWTPrincipal>()
-                val userId = principal?.payload?.getClaim("userId")?.asLong()
-                    ?: return@put call.respond(HttpStatusCode.Unauthorized)
-                val id = call.parameters["id"]?.toLongOrNull()
-                    ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
-                val body = call.receive<UpdateBalanceRequest>()
-                require(body.balance >= 0 && body.balance.isFinite()) { "余额不能为负" }
-                val updated = billService.updateAccountBalance(id, body.balance)
-                if (updated != null) {
-                    call.respond(updated)
-                } else {
-                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "账户不存在"))
                 }
             }
         }

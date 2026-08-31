@@ -148,6 +148,12 @@ class BillService {
     ): BillDTO {
         require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
+        val ownsAccount = transaction {
+            AccountsTable.selectAll()
+                .where { (AccountsTable.id eq accountId) and (AccountsTable.userId eq userId) }
+                .any()
+        }
+        require(ownsAccount) { "账户不存在" }
         val now = System.currentTimeMillis()
         val billDate = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
@@ -526,30 +532,38 @@ class BillService {
             }
     }
 
-    fun getAccounts(): List<AccountDTO> = transaction {
-        AccountsTable.selectAll().map {
-            AccountDTO(
-                id = it[AccountsTable.id],
-                name = it[AccountsTable.name],
-                balance = it[AccountsTable.balance],
-                iconColor = it[AccountsTable.iconColor]
-            )
-        }
-    }
-
-    fun updateAccountBalance(id: Long, balance: Double): AccountDTO? = transaction {
+    fun updateAccountBalance(id: Long, balance: Double, userId: Long): AccountDTO? = transaction {
         val row = AccountsTable.selectAll()
-            .where { AccountsTable.id eq id }
+            .where { (AccountsTable.id eq id) and (AccountsTable.userId eq userId) }
             .singleOrNull()
             ?: return@transaction null
+        val now = System.currentTimeMillis()
         AccountsTable.update({ AccountsTable.id eq id }) {
             it[AccountsTable.balance] = balance
+            it[AccountsTable.updatedAt] = now
         }
-        AccountDTO(
-            id = id,
-            name = row[AccountsTable.name],
-            balance = balance,
-            iconColor = row[AccountsTable.iconColor]
-        )
+        row.toAccountDto().copy(balance = balance, updatedAt = now)
     }
+
+    fun getBill(id: Long, userId: Long): BillDTO? = transaction {
+        BillsTable.selectAll()
+            .where { (BillsTable.id eq id) and (BillsTable.userId eq userId) }
+            .singleOrNull()?.toBillDto()
+    }
+
+    private fun ResultRow.toBillDto() = BillDTO(
+        id = this[BillsTable.id],
+        amount = this[BillsTable.amount],
+        billType = this[BillsTable.billType],
+        categoryId = this[BillsTable.categoryId],
+        categoryName = this[BillsTable.categoryName],
+        subCategoryName = this[BillsTable.subCategoryName],
+        accountId = this[BillsTable.accountId],
+        remark = this[BillsTable.remark],
+        date = this[BillsTable.date],
+        source = this[BillsTable.billSource],
+        createdAt = this[BillsTable.createdAt],
+        updatedAt = this[BillsTable.updatedAt],
+        deleted = this[BillsTable.deleted]
+    )
 }

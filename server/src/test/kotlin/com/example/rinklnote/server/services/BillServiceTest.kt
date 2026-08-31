@@ -167,18 +167,33 @@ class BillServiceTest {
 
     @Test
     fun `updateAccountBalance updates and returns the account`() {
-        val before = service.getAccounts().firstOrNull { it.name == "微信" } ?: error("微信 missing")
-        val updated = service.updateAccountBalance(before.id, 500.0)
+        val before = service.accountsFor(1L).firstOrNull { it.name == "微信" } ?: error("微信 missing")
+        val updated = service.updateAccountBalance(before.id, 500.0, 1L)
         assertNotNull(updated)
         assertEquals(before.id, updated!!.id)
         assertEquals(500.0, updated.balance, 0.0001)
-        val after = service.getAccounts().first { it.id == before.id }
+        val after = service.accountsFor(1L).first { it.id == before.id }
         assertEquals(500.0, after.balance, 0.0001)
     }
 
     @Test
     fun `updateAccountBalance returns null for unknown id`() {
-        assertNull(service.updateAccountBalance(99999, 1.0))
+        assertNull(service.updateAccountBalance(99999, 1.0, 1L))
+    }
+
+    @Test
+    fun `getBill returns own bill but null for another user`() {
+        val id = insertBill(1L, 10.0, updatedAt = 1000)
+        assertEquals(10.0, service.getBill(id, 1L)!!.amount, 0.0001)
+        assertNull(service.getBill(id, 2L))
+        assertNull(service.getBill(999999, 1L))
+    }
+
+    @Test
+    fun `updateAccountBalance is scoped to the account owner`() {
+        val w = service.accountsFor(1L).first { it.name == "微信" }
+        // 用户 2 无法改动用户 1 的账户余额
+        assertNull(service.updateAccountBalance(w.id, 999.0, 2L))
     }
 
     @Test

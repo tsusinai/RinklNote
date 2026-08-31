@@ -42,6 +42,13 @@ fun Application.configureDatabase() {
 }
 
 private fun Transaction.runMigrations() {
+    // v10 迁移：账户改为每用户（ug_accounts_user_name 替代旧 accounts(name) 唯一索引）。
+    // 旧唯一索引不移除，则会禁止跨用户同名账户；createMissingTablesAndColumns 不会 drop 旧索引。
+    listOf("accounts_name", "accounts_name_unique", "index_accounts_name", "index_accounts_name_unique")
+        .forEach { name ->
+            try { exec("DROP INDEX IF EXISTS $name") } catch (_: Exception) {}
+        }
+
     val indexes = listOf(
         "CREATE INDEX IF NOT EXISTS idx_bills_user_id ON bills(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_bills_user_date ON bills(user_id, date)",
