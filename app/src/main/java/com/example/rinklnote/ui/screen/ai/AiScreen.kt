@@ -19,15 +19,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -47,6 +51,9 @@ import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
+import com.example.rinklnote.util.bookkeepingZone
+import java.time.Instant
+import java.time.LocalDate
 
 @Composable
 fun AiScreen(
@@ -75,22 +82,38 @@ fun AiScreen(
             Text("AI 助手", fontSize = 18.sp, fontWeight = FontWeight.Medium)
         }
         if (!isLoggedIn) {
-            Text(
-                text = "未登录：可直接记账，问账需先登录",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "未登录：可直接记账，问账需先登录",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
+        val zone = bookkeepingZone()
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            items(state.messages, key = { it.id }) { msg ->
-                ChatBubble(msg)
+            itemsIndexed(state.messages, key = { _, msg -> msg.id }) { index, msg ->
+                val msgDay = Instant.ofEpochMilli(msg.createdAt).atZone(zone).toLocalDate()
+                val prevDay = if (index > 0) {
+                    Instant.ofEpochMilli(state.messages[index - 1].createdAt).atZone(zone).toLocalDate()
+                } else null
+                if (prevDay == null || prevDay != msgDay) {
+                    DateDivider(date = msgDay)
+                }
+                ChatBubble(message = msg)
             }
             if (state.isWaiting) {
                 item(key = "typing") {
@@ -99,7 +122,7 @@ fun AiScreen(
             }
         }
 
-        // 输入栏：麦克风 + 圆角胶囊输入框 + 发送
+        // 输入栏：麦克风 + 胶囊输入框（内含右对齐箭头发送图标）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -128,36 +151,48 @@ fun AiScreen(
                     )
                     .clip(RoundedCornerShape(24.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 16.dp)
+                    .padding(start = 16.dp, end = 4.dp)
             ) {
-                BasicTextField(
-                    value = state.input,
-                    onValueChange = { viewModel.onEvent(AiEvent.InputChanged(it)) },
-                    singleLine = true,
-                    textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    interactionSource = aiInteraction,
-                    modifier = Modifier.fillMaxSize(),
-                    decorationBox = { innerTextField ->
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                            if (state.input.isEmpty()) {
-                                Text(
-                                    text = "输入记账或问题，如「午餐28元」",
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    BasicTextField(
+                        value = state.input,
+                        onValueChange = { viewModel.onEvent(AiEvent.InputChanged(it)) },
+                        singleLine = true,
+                        textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        interactionSource = aiInteraction,
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                                if (state.input.isEmpty()) {
+                                    Text(
+                                        text = "输入记账或问题，如「午餐28元」",
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
                         }
+                    )
+                    val canSend = state.input.isNotBlank() && !state.isWaiting
+                    IconButton(
+                        onClick = { viewModel.onEvent(AiEvent.Send) },
+                        enabled = canSend
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "发送",
+                            tint = if (canSend) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = { viewModel.onEvent(AiEvent.Send) },
-                enabled = state.input.isNotBlank() && !state.isWaiting
-            ) { Text("发送") }
         }
     }
 }
@@ -165,6 +200,19 @@ fun AiScreen(
 @Composable
 private fun ChatBubble(message: ChatMessage) {
     val isUser = message.role == "user"
+    val kindLabel: String? = when (message.kind) {
+        "summary" -> "月结"
+        "anomaly" -> "异常"
+        "habit" -> "习惯"
+        "booking" -> "记账"
+        else -> null
+    }
+    val dotColor: Color? = when (message.kind) {
+        "summary", "booking" -> MaterialTheme.colorScheme.primary
+        "anomaly" -> MaterialTheme.colorScheme.error
+        "habit" -> MaterialTheme.colorScheme.tertiary
+        else -> null
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -177,13 +225,43 @@ private fun ChatBubble(message: ChatMessage) {
                 .background(if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = message.content,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-            )
+            Column {
+                if (kindLabel != null && dotColor != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = kindLabel,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Text(
+                    text = message.content,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun DateDivider(date: LocalDate) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(
+            text = "${date.monthValue}月${date.dayOfMonth}日",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
