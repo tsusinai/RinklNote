@@ -205,6 +205,7 @@ async function api(path, opts={}) {
   const h = { 'Content-Type':'application/json', ...opts.headers };
   if (S.token) h['Authorization'] = 'Bearer ' + S.token;
   const r = await fetch(API + path, { ...opts, headers: h });
+  S._lastHttp = r.status;   // last HTTP status so conditional-PUT handlers can detect 409
   // Expired/revoked token: clear it and bounce back to the login screen instead
   // of failing silently on every subsequent request. Harmless for the unauthenticated
   // login/register calls (their 401 already lands on the login screen).
@@ -562,8 +563,20 @@ function openEditBill(b) {
       if(!cat){errMsg='分类已不存在';render();return;}
       const r = await api('/api/bills/'+b.id,{method:'PUT',body:JSON.stringify({
         amount:parseFloat(st.amount),billType:st.billType,categoryId:parseInt(st.catId),categoryName:cat.name,
-        subCategoryName:st.subCatName||null,accountId:parseInt(st.acctId),remark:st.remark||null
+        subCategoryName:st.subCatName||null,accountId:parseInt(st.acctId),remark:st.remark||null,
+        baseUpdatedAt: b.updatedAt
       })});
+      if(S._lastHttp===409){
+        // Version conflict: the server returned the freshest row. Rebase the
+        // editable copy on it so a re-save is guarded by the new base, and
+        // prompt the user to confirm — never silently clobber a concurrent edit.
+        b.updatedAt = r.updatedAt;
+        st.amount=String(r.amount); st.billType=r.billType; st.catId=String(r.categoryId);
+        st.subCatName=r.subCategoryName||''; st.acctId=String(r.accountId); st.remark=r.remark||'';
+        errMsg='账单已在其他设备修改，已载入最新内容，请确认后重新保存';
+        render();
+        return;
+      }
       if(r.id){S.msg='账单已更新';overlay.remove();await loadData();}
       else{errMsg=r.message||'更新失败';render();}
     }},'保存'));
@@ -752,7 +765,26 @@ function renderAssets(pg) {
     onclick: () => { S.revealBalance = !S.revealBalance; render(); }
   }, S.revealBalance ? '隐藏余额' : '显示余额'));
   pg.appendChild(head);
-  pg.appendChild(h('button', { className: 'btn btn-primary', style:'margin-bottom:20px', onclick: async () => { await loadData(); } }, '同步账单'));
+
+  // Action row: sync + per-user account create
+  const actions = h('div', { style: 'display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap' });
+  actions.appendChild(h('button', { className: 'btn btn-primary', onclick: async () => { await loadData(); } }, '同步账单'));
+  actions.appendChild(h('button', { className: 'btn btn-outline', onclick: async () => {
+    const name = prompt('新账户名');
+    if (name === null) return;
+    const bal = prompt('余额', '0');
+    if (bal === null) return;
+    const num = parseFloat(bal);
+    if (!name.trim()) { S.msg = '账户名不能为空'; render(); return; }
+    if (isNaN(num) || num < 0 || !isFinite(num)) { S.msg = '请输入有效余额'; render(); return; }
+    const palette = ['#28C145','#06B4FD','#F97D1D','#8B5CF6','#EF4444','#64748B'];
+    const iconColor = palette[S.accts.length % palette.length];
+    await api('/api/accounts', { method: 'POST', body: JSON.stringify({ name: name.trim(), iconColor: iconColor, balance: num }) });
+    S.accts = await api('/api/accounts');
+    S.msg = '账户已创建';
+    render();
+  } }, '新建账户'));
+  pg.appendChild(actions);
 
   const total = S.accts.reduce((s,a)=>s+(a.balance||0),0);
   const totalCard = h('div', { className: 'card', style: 'margin-bottom:20px;background:var(--primary);color:#fff;border-radius:15px;padding:20px' });
@@ -774,16 +806,33 @@ function renderAssets(pg) {
       info.append(h('div', { className: 'amount', style: 'font-size:20px;font-weight:700' },
         S.revealBalance ? '¥'+(a.balance||0).toFixed(2) : '***'));
       c.appendChild(info);
-      info.append(h('div',{style:'margin-top:8px'},
+      info.append(h('div',{style:'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap'},
         h('button',{className:'btn btn-outline',style:'padding:4px 12px;font-size:11px',onclick:async()=>{
           const val = prompt('修改 '+a.name+' 余额', (a.balance||0));
           if(val===null) return;
           const num = parseFloat(val);
           if(isNaN(num)||num<0||!isFinite(num)){S.msg='请输入有效余额';render();return;}
-          const r = await api('/api/accounts/'+a.id,{method:'PUT',body:JSON.stringify({balance:num})});
-          S.msg = (r.balance!==undefined) ? '余额已更新' : (r.message||'更新失败');
+          await api('/api/accounts/'+a.id,{method:'PUT',body:JSON.stringify({balance:num})});
+          S.accts = await api('/api/accounts');
+          S.msg='余额已更新';
           render();
-        }},'编辑余额')
+        }},'编辑余额'),
+        h('button',{className:'btn btn-outline',style:'padding:4px 12px;font-size:11px',onclick:async()=>{
+          const nv = prompt('重命名账户', a.name);
+          if(nv===null) return;
+          if(!nv.trim()){S.msg='账户名不能为空';render();return;}
+          await api('/api/accounts/'+a.id,{method:'PUT',body:JSON.stringify({name:nv.trim()})});
+          S.accts = await api('/api/accounts');
+          S.msg='已重命名';
+          render();
+        }},'重命名'),
+        h('button',{className:'btn btn-outline danger',style:'padding:4px 12px;font-size:11px',onclick:async()=>{
+          if(!confirm('确定删除账户 '+a.name+'？')) return;
+          const r = await api('/api/accounts/'+a.id,{method:'DELETE'});
+          S.msg = r.message || '已删除';
+          S.accts = await api('/api/accounts');
+          render();
+        }},'删除')
       ));
       cards.appendChild(c);
     });
@@ -1298,7 +1347,7 @@ async function loadData() {
   // If bills sync fails, categories & accounts still load so the UI works
   try {
     const [cRes, aRes] = await Promise.all([
-      api('/api/bills/categories'), api('/api/bills/accounts')
+      api('/api/bills/categories'), api('/api/accounts')
     ]);
     if (Array.isArray(cRes)) S.cats = cRes;
     if (Array.isArray(aRes)) S.accts = aRes;

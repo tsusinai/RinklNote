@@ -315,6 +315,13 @@ class BillService {
     fun createAccount(userId: Long, name: String, iconColor: String, balance: Double): AccountDTO {
         require(name.isNotBlank()) { "账户名不能为空" }
         require(balance >= 0 && balance.isFinite()) { "余额不能为负" }
+        // (user_id, name) 唯一索引：同名账户对同一用户不可重复（含默认账户名）
+        val exists = transaction {
+            AccountsTable.selectAll()
+                .where { (AccountsTable.userId eq userId) and (AccountsTable.name eq name) and (AccountsTable.deleted eq false) }
+                .any()
+        }
+        require(!exists) { "账户已存在" }
         val now = System.currentTimeMillis()
         val id = transaction {
             AccountsTable.insert {
@@ -332,6 +339,11 @@ class BillService {
         val row = AccountsTable.selectAll()
             .where { (AccountsTable.id eq id) and (AccountsTable.userId eq userId) }
             .singleOrNull() ?: return@transaction null
+        // 不与同用户其他未删账户重名
+        val dup = AccountsTable.selectAll()
+            .where { (AccountsTable.userId eq userId) and (AccountsTable.name eq name) and (AccountsTable.deleted eq false) and (AccountsTable.id neq id) }
+            .any()
+        require(!dup) { "账户已存在" }
         val now = System.currentTimeMillis()
         AccountsTable.update({ AccountsTable.id eq id }) {
             it[AccountsTable.name] = name

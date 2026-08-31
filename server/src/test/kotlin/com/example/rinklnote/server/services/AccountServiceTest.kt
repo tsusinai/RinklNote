@@ -69,6 +69,20 @@ class AccountServiceTest {
         assertNull(service.renameAccount(999999, 1L, "x", "y"))
     }
 
+    @Test(expected = IllegalArgumentException::class)
+    fun `createAccount rejects a duplicate name`() {
+        service.ensureDefaultAccounts(1L)
+        service.createAccount(1L, "微信", "#000000", 0.0)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `renameAccount rejects renaming to an existing sibling`() {
+        service.ensureDefaultAccounts(1L)
+        val custom = service.createAccount(1L, "招商银行", "#123456", 0.0)
+        val wechat = service.accountsFor(1L).first { it.name == "微信" }
+        service.renameAccount(wechat.id, 1L, "招商银行", "#000000")
+    }
+
     @Test
     fun `deleteAccount soft-deletes and hides it from accountsFor`() {
         val w = service.createAccount(1L, "招商银行", "#123456", 0.0)
