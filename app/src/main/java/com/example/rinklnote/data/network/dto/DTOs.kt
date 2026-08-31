@@ -143,6 +143,9 @@ data class MonthlySummaryResponse(
 data class AnomalyResponse(val alerts: List<AnomalyAlert> = emptyList())
 
 @Serializable
+data class HabitResponse(val content: String? = null)
+
+@Serializable
 data class AnomalyAlert(
     val level: String = "",
     val message: String = "",

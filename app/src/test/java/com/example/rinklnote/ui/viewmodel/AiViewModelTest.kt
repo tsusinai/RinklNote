@@ -11,6 +11,7 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AccountDTO
 import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.AnomalyAlert
+import com.example.rinklnote.data.network.dto.HabitResponse
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
 import com.example.rinklnote.data.network.dto.BindQQRequest
@@ -272,6 +273,7 @@ class AiViewModelTest {
             AnomalyResponse(alerts = listOf(AnomalyAlert("HIGH", "周末支出异常偏高", "spike")))
         var queryResult: QueryResponse = QueryResponse(answer = "8 月交通共支出 156 元，共 12 笔。")
         var queryError: Exception? = null
+        var habitContent: String? = "「午餐」你常记 三餐 ¥28.00，今天记了吗？"
 
         override suspend fun parseBill(request: ParseRequest): ParseResponse =
             ParseResponse(amount = "28", categoryName = "三餐", remark = request.text)
@@ -316,5 +318,6 @@ class AiViewModelTest {
         override suspend fun updateSuggestConfig(config: Map<String, String>): MessageResponse = MessageResponse("")
         override suspend fun getAiDisabled(): Map<String, Boolean> = mapOf("disabled" to false)
         override suspend fun setAiDisabled(request: AiDisabledRequest): Map<String, Boolean> = mapOf("disabled" to request.disabled)
+        override suspend fun getHabit(): HabitResponse = HabitResponse(habitContent)
     }
 }

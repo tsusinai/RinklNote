@@ -106,4 +106,7 @@ interface ApiService {
 
     @POST("api/insights/query")
     suspend fun queryBillData(@Body request: QueryRequest): QueryResponse
+
+    @GET("api/insights/habit")
+    suspend fun getHabit(): HabitResponse
 }
