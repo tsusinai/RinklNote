@@ -6,6 +6,7 @@ import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQBotWebSocketClient
+import com.example.rinklnote.server.services.PushScheduler
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.asr.AsrConfig
@@ -110,6 +111,41 @@ fun Application.module() {
     // Shares message processing with the HTTP webhook path via QQMessageProcessor.
     val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
     qqWsClient.start(appScope)
+
+    // QQ 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）
+    val pushScheduler = PushScheduler(
+        userService = userService,
+        send = { openid, content, msgId -> qqBotService.sendC2CMessage(openid, content, msgId) },
+        monthlyProvider = { userId, month ->
+            val (y, m) = month.split("-").map { it.toInt() }
+            val zone = java.time.ZoneId.of("Asia/Shanghai")
+            val monthStart = java.time.LocalDate.of(y, m, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val nextMonthStart = java.time.LocalDate.of(y, m, 1).plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
+            if (stats.totalExpense <= 0 && stats.totalIncome <= 0) null
+            else {
+                val r = insightService.monthlySummary(userId, month)
+                buildString {
+                    append("📊 本月总结\n")
+                    append(r.summary)
+                    r.highlights.forEach { append("\n• ").append(it) }
+                }
+            }
+        },
+        anomalyProvider = { userId ->
+            val alerts = insightService.anomalyCheck(userId).alerts
+            if (alerts.isEmpty()) null
+            else alerts.joinToString("\n") { "⚠️ " + it.message }
+        },
+        habitProvider = { userId ->
+            val habit = insightService.habitReminder(userId)
+            if (habit == null) null
+            else insightService.polishHabitCopy(habit)
+        },
+        intervalMs = 30_000L,
+        log = log
+    )
+    pushScheduler.start(appScope)
 
     val templateService = TemplateService()
 
