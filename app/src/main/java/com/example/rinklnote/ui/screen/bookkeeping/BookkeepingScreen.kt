@@ -308,12 +308,15 @@ private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
         .associate { it.first to it.second }
 }
 
+/** 「最近几天」趋势：只展示所选月份末尾 10 天（当月截到今日；历史月为整月末 10 天），不下探到月初之前。 */
 private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Float>, List<String>> {
     val zone = bookkeepingZone()
     val firstDay = LocalDate.now(zone).plusMonths(offset.toLong()).withDayOfMonth(1)
     val lastDay = if (offset == 0) LocalDate.now() else firstDay.plusMonths(1).minusDays(1)
-    val days = (java.time.temporal.ChronoUnit.DAYS.between(firstDay, lastDay).toInt()) + 1
-    val data = List(days) { firstDay.plusDays(it.toLong()) }
+    // 从 lastDay 往前推 10 天的窗口，若触到月初则截断到月初，避免出现跨月空点
+    val windowStart = lastDay.minusDays(9L).let { if (it.isBefore(firstDay)) firstDay else it }
+    val days = (java.time.temporal.ChronoUnit.DAYS.between(windowStart, lastDay).toInt()) + 1
+    val data = List(days) { windowStart.plusDays(it.toLong()) }
     val values = data.map { d ->
         bills.filter { bill ->
             bill.billType == "EXPENSE" &&
