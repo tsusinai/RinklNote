@@ -9,6 +9,7 @@ import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AccountDTO
+import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.AnomalyAlert
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
@@ -313,5 +314,7 @@ class AiViewModelTest {
         override suspend fun getSuggestion(): Map<String, String> = emptyMap()
         override suspend fun getSuggestConfig(): Map<String, String> = emptyMap()
         override suspend fun updateSuggestConfig(config: Map<String, String>): MessageResponse = MessageResponse("")
+        override suspend fun getAiDisabled(): Map<String, Boolean> = mapOf("disabled" to false)
+        override suspend fun setAiDisabled(request: AiDisabledRequest): Map<String, Boolean> = mapOf("disabled" to request.disabled)
     }
 }
