@@ -471,8 +471,8 @@ private fun CustomBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(32.dp)
-                .shadow(4.dp, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 0.dp))
+                .shadow(4.dp, RoundedCornerShape(30.dp))
+                .clip(RoundedCornerShape(30.dp))
                 .background(MaterialTheme.colorScheme.surface)
         ) {
         Row(modifier = Modifier.fillMaxSize()) {
