@@ -198,6 +198,7 @@ fun BookkeepingScreen(
             visible = showMonthDetail,
             monthLabel = monthLabel,
             bills = state.bills,
+            month = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
             onDismiss = { showMonthDetail = false }
         )
     }
