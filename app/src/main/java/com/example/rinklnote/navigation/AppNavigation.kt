@@ -241,7 +241,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     .statusBarsPadding()
             ) { page ->
                 when (page) {
-                    0 -> PlanScreen(viewModel = budgetVM)
+                    0 -> PlanScreen(viewModel = budgetVM, isActive = pagerState.currentPage == 0)
                     1 -> BookkeepingScreen(
                         onOpenDrawer = openDrawer,
                         onFinanceClick = {

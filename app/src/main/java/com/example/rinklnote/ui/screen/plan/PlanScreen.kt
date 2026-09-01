@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,10 +38,16 @@ import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 
 @Composable
-fun PlanScreen(viewModel: BudgetViewModel) {
+fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
     var showBudgetKeypad by remember { mutableStateOf(false) }
+
+    // 离开「计划」页（横向 pager 滑走/点其他 tab）时收起预算键盘，否则局部 remember 状态
+    // 会随 pager 预组合留存，返回时键盘依旧存在（与 QuickAdd 键盘离开记账页被重置一致）。
+    LaunchedEffect(isActive) {
+        if (!isActive) showBudgetKeypad = false
+    }
 
     Column(
         modifier = Modifier
