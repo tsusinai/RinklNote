@@ -181,7 +181,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         // 必须先读 state 再 reset——确认文本来自记账成功时的 amount/分类
                         val s = quickAddVM.state.value
                         val cat = s.selectedCategory?.name ?: ""
-                        aiVM.appendBookingConfirmed("已记账：${s.amount}元（$cat）")
+                        aiVM.appendBookingConfirmed("记好嘞！${s.amount}元（$cat）已入账～")
                     } else {
                         Toast.makeText(context, "已记账", Toast.LENGTH_SHORT).show()
                     }

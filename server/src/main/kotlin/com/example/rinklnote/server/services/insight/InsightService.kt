@@ -72,14 +72,14 @@ class InsightService(
 - 总收入: ¥${"%.2f".format(totalIncome)}
 - 支出分类TOP5: ${byCategory.joinToString { "${it.first} ¥${"%.2f".format(it.second)}" }}
 
-请你用中文写一段简洁的月度消费总结（80-150字），并列出2-3个值得关注的点(highlights)。
+请你用自然亲切的中文写一段简洁的月度消费总结（80-150字），语气温和，别像冷冰冰的报告，并列出2-3个值得关注的点(highlights)。
 
 返回JSON: {"summary": "总结文字", "highlights": ["亮点1", "亮点2"]}
 """.trimIndent()
 
         try {
             val jsonStr = llmParser.chat(
-                "你是一个个人财务分析助手，用中文回答。你必须返回一个 JSON 对象。",
+                "你是一个贴心又不失专业的个人财务助手，用自然亲切的中文回答，别写成冷冰冰的报告，语气温和。你必须返回一个 JSON 对象。",
                 context
             )
             if (jsonStr != null) {
@@ -90,7 +90,7 @@ class InsightService(
         } catch (_: Exception) {}
 
         return MonthlySummaryResponse(
-            summary = "${month} 总支出 ¥${"%.2f".format(totalExpense)}，收入 ¥${"%.2f".format(totalIncome)}",
+            summary = "${month} 总支出 ¥${"%.2f".format(totalExpense)}，收入 ¥${"%.2f".format(totalIncome)}，钱要花得开心，也要记得给自己留一点～",
             highlights = emptyList()
         )
     }
@@ -114,7 +114,7 @@ class InsightService(
             val pct = ((todayExpense / dailyAvg - 1) * 100).toInt()
             alerts.add(AnomalyAlert(
                 level = "WARN",
-                message = "今天支出 ¥${"%.2f".format(todayExpense)}，超出日均 ¥${"%.2f".format(dailyAvg)} 的 $pct%",
+                message = "今天花了 ¥${"%.2f".format(todayExpense)}，比平时日均 ¥${"%.2f".format(dailyAvg)} 高 $pct%，留意一下哦",
                 type = "DAILY_SPIKE"
             ))
         }
@@ -162,7 +162,7 @@ class InsightService(
 
         try {
             val jsonStr = llmParser.chat(
-                "你是一个个人财务查询助手，用中文回答。你必须返回一个 JSON 对象: {\"answer\": \"你的回答\"}。只基于提供的数据回答，不要编造。",
+                "你是一个贴心又专业的财务查询助手，用自然亲切的中文回答，别写成冷冰冰的报告。你必须返回一个 JSON 对象: {\"answer\": \"你的回答\"}。只基于提供的数据回答，不要编造。",
                 context
             )
             if (jsonStr != null) {
@@ -172,7 +172,7 @@ class InsightService(
             }
         } catch (_: Exception) {}
 
-        return QueryResponse(answer = "抱歉，暂时无法理解这个问题。请尝试更具体的提问，如「上个月交通支出多少？」")
+        return QueryResponse(answer = "抱歉，这个问题我一下子没太懂～ 你可以换个说法，比如「上个月交通花了多少」")
     }
 
     // ── Smart Suggestion ──
@@ -282,13 +282,13 @@ class InsightService(
 返回JSON: {"answer": "..."}
 """.trimIndent()
         return try {
-            val jsonStr = llmParser.chat("你是一个贴心的记账提醒助手，用中文。必须返回 JSON 对象。", context)
+            val jsonStr = llmParser.chat("你是一个贴心又不唠叨的记账提醒助手，用自然亲切、不硬性的中文。必须返回 JSON 对象。", context)
             val parsed = jsonStr?.let { Json { ignoreUnknownKeys = true; isLenient = true }.decodeFromString<QueryResponse>(it) }
             val ans = parsed?.answer?.trim()
             if (!ans.isNullOrBlank()) ans
             else "「${habit.label}」你常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记了吗？"
         } catch (_: Exception) {
-            "「${habit.label}」你常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记了吗？"
+            "「${habit.label}」到点啦，你平时常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记得补一笔呀～"
         }
     }
 

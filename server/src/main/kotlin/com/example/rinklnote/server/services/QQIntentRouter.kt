@@ -44,7 +44,7 @@ class QQIntentRouter(
         if (!(hasAmount && !askWord)) {
             // Setting a budget is not supported in chat — don't silently record it.
             if (BUDGET.containsMatchIn(content) && hasAmount) {
-                return "暂不支持在机器人设置预算，可在网页设置中调整"
+                return "抱歉，机器人还不能设预算，去网页调整一下就行～"
             }
             // Category query ("打车花了多少") before the generic query intents.
             ruleBasedParser.parse(content, emptyList())?.let { cat ->
@@ -64,12 +64,16 @@ class QQIntentRouter(
         val result = nluService.parse(content, userId)
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, result.amount, result.categoryName, result.remark, "QQ")
-            return "已记录: ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"
+            return listOf(
+                "已记录：${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
+                "已记录成功～ ${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
+                "好嘞，已记录 ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"
+            ).random()
         }
 
         // E. A category was recognised but no amount — keep the bookkeeping UX alive.
         if (result.categoryName != null) {
-            return "请补金额，如「${result.categoryName}20元」"
+            return "请补金额～ 说「${result.categoryName}20元」就帮你记上"
         }
 
         // F. LLM fallback for anything that is neither a known query nor bookkeeping.
@@ -83,13 +87,17 @@ class QQIntentRouter(
         val bills = billService.allBills(userId)
             .filter { it.billType == "EXPENSE" && it.date >= todayStart }
         val total = Money.cents(bills.sumOf { it.amount })
-        return "今日支出 ¥${"%.2f".format(total)}（${bills.size}笔）"
+        return "今天已花 ¥${"%.2f".format(total)}（${bills.size}笔），悠着点哦"
     }
 
     private fun monthExpense(userId: Long): String {
         val (monthStart, nextMonthStart) = currentMonthRange()
         val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
-        return "本月支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}"
+        return listOf(
+            "本月花销：支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}",
+            "这个月你花 ¥${"%.2f".format(stats.totalExpense)}，进账 ¥${"%.2f".format(stats.totalIncome)}",
+            "本月账单：支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}"
+        ).random()
     }
 
     private fun categoryQuery(category: String, userId: Long): String {
@@ -97,24 +105,24 @@ class QQIntentRouter(
         val bills = billService.allBills(userId)
             .filter { it.categoryName == category && it.date >= monthStart && it.date < nextMonthStart }
         val total = Money.cents(bills.sumOf { it.amount })
-        return "$category 本月支出 ¥${"%.2f".format(total)}（${bills.size}笔）"
+        return "$category 这个月花了 ¥${"%.2f".format(total)}（${bills.size}笔）"
     }
 
     private fun budget(userId: Long): String {
         val (monthStart, nextMonthStart) = currentMonthRange()
         val budget = budgetService.list(userId).firstOrNull { it.monthStart == monthStart && !it.deleted }
-            ?: return "本月未设置预算"
+            ?: return "这个月还没设预算哦，去网页设一个吧～"
         val spent = billService.monthlyStats(userId, monthStart, nextMonthStart).totalExpense
         val remaining = Money.cents(budget.amount - spent)
         val pct = if (budget.amount > 0) ((spent / budget.amount) * 100).toInt() else 0
-        return "本月预算 ¥${"%.2f".format(budget.amount)}，已用 ¥${"%.2f".format(spent)}，剩余 ¥${"%.2f".format(remaining)}（$pct%）"
+        return "本月预算 ¥${"%.2f".format(budget.amount)}，已用 ¥${"%.2f".format(spent)}，剩余 ¥${"%.2f".format(remaining)}（已用${pct}%）"
     }
 
     private fun topCategories(userId: Long): String {
         val (monthStart, nextMonthStart) = currentMonthRange()
         val top = billService.monthlyStats(userId, monthStart, nextMonthStart).topExpenseCategories
-        if (top.isEmpty()) return "本月暂无支出记录"
-        return "本月支出TOP：\n" + top.mapIndexed { i, (name, amt) ->
+        if (top.isEmpty()) return "这个月还没有支出，先记一笔吧～"
+        return "这个月花得最多的几类：\n" + top.mapIndexed { i, (name, amt) ->
             "${i + 1}. $name ¥${"%.2f".format(amt)}"
         }.joinToString("\n")
     }
@@ -122,7 +130,7 @@ class QQIntentRouter(
     private fun recentBills(content: String, userId: Long): String {
         val n = Regex("""(\d+)\s*笔""").find(content)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 10) ?: 5
         val bills = billService.allBills(userId).sortedByDescending { it.date }.take(n)
-        if (bills.isEmpty()) return "还没有任何账单"
+        if (bills.isEmpty()) return "还没有任何账单，来记第一笔吧～"
         return bills.mapIndexed { i, b ->
             "${i + 1}. ${formatDate(b.date)} ${b.categoryName} ¥${"%.2f".format(b.amount)} ${b.remark?.take(20) ?: ""}".trimEnd()
         }.joinToString("\n")
@@ -146,9 +154,12 @@ class QQIntentRouter(
 
     private fun suggest(userId: Long): String {
         val pattern = insightService.suggestDailyPattern(userId)
-            ?: return "暂无建议，多记几笔后会按时段推荐"
+            ?: return "还没摸到你常花的习惯，多记几笔我就懂你啦～"
         val amount = pattern["amount"]?.toDoubleOrNull() ?: 0.0
-        return "${pattern["label"]}时段你常点 ${pattern["categoryName"]} ¥${"%.2f".format(amount)}"
+        return listOf(
+            "${pattern["label"]}时段你常点 ${pattern["categoryName"]} ¥${"%.2f".format(amount)}，记一笔正好",
+            "${pattern["label"]}到饭点了，你平时那个 ${pattern["categoryName"]} ¥${"%.2f".format(amount)} 别忘了记～"
+        ).random()
     }
 
     // ── Delete intent ──
@@ -176,18 +187,22 @@ class QQIntentRouter(
                 extractAmountWithSuffix(content) == null &&
                 !DELETE_REFERENCE.containsMatchIn(content)
             ) {
-                "想删哪一笔？如「删除午餐」或「删掉刚才那笔」"
+                "想删哪一笔？说「删除午餐」或「删掉刚才那笔」就行～"
             } else {
-                "最近10笔内没找到可删除的账单"
+                "最近10笔里没找到匹配的账单，再说具体点～"
             }
         }
         billService.deleteBill(target.id, userId)
-        return "已删除：${target.categoryName} ¥${"%.2f".format(target.amount)}（${formatDate(target.date)}）"
+        return listOf(
+            "已删除：${target.categoryName} ¥${"%.2f".format(target.amount)}（${formatDate(target.date)}）",
+            "已删除成功～ ${target.categoryName} ¥${"%.2f".format(target.amount)}（${formatDate(target.date)}）"
+        ).random()
     }
 
     // ── Help ──
 
     private fun helpText(): String = """
+        我是你的记账小帮手，直接说就行，比如：
         记账: 午餐20元 / 工资8000
         今日: 今天花了多少
         本月: 这个月花了多少

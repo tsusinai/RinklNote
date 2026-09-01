@@ -81,7 +81,7 @@ class AiViewModel(
                 repository.insertChatMessage(
                     ChatMessage(
                         role = "assistant", kind = "greeting",
-                        content = "你好，我是 AI 记账助手。直接发「午餐28元」记账；问我问题，例如「上个月交通花了多少」；登录后还能自动生成月总结和异常提醒。",
+                        content = "你好呀，我是你的 AI 记账小帮手。直接发「午餐28元」就帮你记一笔；想算账就问我，比如「上个月交通花了多少」；登录后我还会自动帮你捋月结和异常提醒～",
                         createdAt = now()
                     )
                 )
@@ -155,7 +155,7 @@ class AiViewModel(
             try {
                 val r = api.getMonthlySummary(month)
                 val content = buildString {
-                    append("本月总结\n")
+                    append("这个月收支给你捋一捋👇\n")
                     append(r.summary)
                     r.highlights.forEach { append("\n• ").append(it) }
                 }
@@ -181,7 +181,7 @@ class AiViewModel(
                 val r = api.getAnomalyAlerts()
                 if (r.alerts.isEmpty()) return@launch   // 无异常不插「暂无」，不占去重位
                 val content = buildString {
-                    append("异常提醒\n")
+                    append("发现点小动静，提你一下～\n")
                     append(r.alerts.joinToString("\n") { "• " + it.message })
                 }
                 repository.insertChatMessage(

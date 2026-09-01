@@ -283,7 +283,7 @@ private fun TypingBubble() {
         ) {
             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("思考中…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("帮你想一下…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
