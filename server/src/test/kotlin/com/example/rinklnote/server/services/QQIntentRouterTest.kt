@@ -19,6 +19,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -189,6 +190,23 @@ class QQIntentRouterTest {
     fun `unrecognised text falls back to LLM natural query`() = runBlocking {
         val reply = router.route("你好", 1L)
         assertTrue("reply=$reply", reply.isNotBlank())
+    }
+
+    @Test
+    fun `bare greeting is answered not treated as bookkeeping`() = runBlocking {
+        // Regression: previously "你好" fell through to NLU, which labelled it with a
+        // catch-all category (「其他」) and the router replied 「请补金额」.
+        val reply = router.route("你好", 1L)
+        assertTrue("reply=$reply", reply.isNotBlank())
+        assertTrue("reply=$reply", !reply.contains("请补金额"))
+        assertFalse("reply=$reply", reply.contains("已记录"))
+    }
+
+    @Test
+    fun `what-can-you-do triggers help not bookkeeping`() = runBlocking {
+        val reply = router.route("你是干什么的", 1L)
+        assertTrue("reply=$reply", reply.contains("记账小帮手"))
+        assertTrue("reply=$reply", !reply.contains("请补金额"))
     }
 
     @Test

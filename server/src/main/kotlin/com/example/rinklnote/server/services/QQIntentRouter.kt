@@ -31,6 +31,9 @@ class QQIntentRouter(
     private val shanghai = ZoneId.of("Asia/Shanghai")
 
     suspend fun route(content: String, userId: Long): String {
+        // Greeting — say hi back; never fall into bookkeeping/「请补金额」.
+        if (isGreeting(content)) return greetingText()
+
         // A. Help (smallest whitelist, checked first)
         if (HELP.containsMatchIn(content)) return helpText()
 
@@ -72,7 +75,10 @@ class QQIntentRouter(
         }
 
         // E. A category was recognised but no amount — keep the bookkeeping UX alive.
-        if (result.categoryName != null) {
+        // Only for a genuine half-finished bookkeeping entry (a real category keyword or
+        // bookkeeping verb present), never for random chat/greetings that the LLM happened
+        // to label with a catch-all category like 「其他」.
+        if (result.categoryName != null && isBookkeepingAttempt(content)) {
             return "请补金额～ 说「${result.categoryName}20元」就帮你记上"
         }
 
@@ -241,8 +247,27 @@ class QQIntentRouter(
     private fun extractAmountWithSuffix(text: String): Double? =
         Regex("""(\d+\.?\d*)\s*[元块]""").find(text)?.groupValues?.get(1)?.toDoubleOrNull()
 
+    /** Bare greeting (你好/hi/在吗/早上好…) with no bookkeeping intent. */
+    private fun isGreeting(content: String): Boolean {
+        val t = content.trim()
+        return t.length in 1..14 && GREETING.matches(t)
+    }
+
+    /** True when the message looks like a real half-finished bookkeeping entry (no amount yet). */
+    private fun isBookkeepingAttempt(content: String): Boolean {
+        if (extractAmount(content) != null) return true
+        if (ruleBasedParser.parse(content, emptyList()) != null) return true
+        return BOOKKEEPING_VERB.containsMatchIn(content)
+    }
+
+    private fun greetingText(): String = listOf(
+        "你好呀，我是你的记账小帮手～ 直接说「午餐20元」就帮你记，问「这个月花了多少」我帮你查",
+        "嗨！记账、查账、删账、总结都在行，说「午餐20元」试试～",
+        "在呢～ 需要记账就说金额，比如「打车25元」；想知道我能做什么，回复【帮助】"
+    ).random()
+
     private companion object {
-        val HELP = Regex("帮助|怎么用|你能做什么|会什么|指令|功能|help", RegexOption.IGNORE_CASE)
+        val HELP = Regex("帮助|怎么用|你能做什么|会什么|指令|功能|help|干什么|干嘛|做什么|你是谁|用途|能干嘛", RegexOption.IGNORE_CASE)
         val DELETE_VERB = Regex("删|删除|去掉|撤销|记错了|错了|不要了")
         val DELETE_REFERENCE = Regex("刚才|上一笔|最新|最后|这笔|那笔|刚记")
         val ASK_WORD = Regex("多少|多少钱|几笔|哪几笔|哪些|剩多少")
@@ -257,5 +282,7 @@ class QQIntentRouter(
         val SUMMARY = Regex("总结|分析|复盘|怎么样")
         val ANOMALY = Regex("异常|预警|超支|超标")
         val SUGGEST = Regex("建议|推荐")
+        val GREETING = Regex("^(你好|您好|哈喽|嗨|hi|hello|在吗|在不在|早上好|上午好|下午好|晚上好|晚安|早|早安)[呀哈哇啦哦]?[\\s!！。~～，,]*$", RegexOption.IGNORE_CASE)
+        val BOOKKEEPING_VERB = Regex("记账|记一笔|记一下|记录|帮我记|帮记")
     }
 }
