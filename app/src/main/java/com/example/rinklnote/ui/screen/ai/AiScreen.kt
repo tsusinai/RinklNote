@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,19 +98,25 @@ fun AiScreen(
         }
 
         val zone = bookkeepingZone()
+        // 预计算每条消息的日期与"是否需日期分隔"，避免每条目内重复 toLocalDate 并按 index 读前一条
+        val messagesWithDay = remember(state.messages, zone) {
+            state.messages.mapIndexed { index, msg ->
+                val day = Instant.ofEpochMilli(msg.createdAt).atZone(zone).toLocalDate()
+                val prevDay = if (index > 0) {
+                    Instant.ofEpochMilli(state.messages[index - 1].createdAt).atZone(zone).toLocalDate()
+                } else null
+                Triple(msg, day, prevDay == null || prevDay != day)
+            }
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            itemsIndexed(state.messages, key = { _, msg -> msg.id }) { index, msg ->
-                val msgDay = Instant.ofEpochMilli(msg.createdAt).atZone(zone).toLocalDate()
-                val prevDay = if (index > 0) {
-                    Instant.ofEpochMilli(state.messages[index - 1].createdAt).atZone(zone).toLocalDate()
-                } else null
-                if (prevDay == null || prevDay != msgDay) {
-                    DateDivider(date = msgDay)
+            items(messagesWithDay, key = { it.first.id }) { (msg, day, showDivider) ->
+                if (showDivider) {
+                    DateDivider(date = day)
                 }
                 ChatBubble(message = msg)
             }

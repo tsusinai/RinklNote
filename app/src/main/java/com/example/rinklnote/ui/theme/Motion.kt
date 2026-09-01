@@ -41,11 +41,6 @@ object Motion {
     // iOS-style swipe reveal settle
     val SwipeSettle: FiniteAnimationSpec<Float> = spring(dampingRatio = 0.8f, stiffness = 400f)
 
-    // Two-phase confirm check pop
-    val CheckPop: FiniteAnimationSpec<Float> = spring(
-        dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow
-    )
-
     // Chart draw / data-update
     val ChartDraw: FiniteAnimationSpec<Float> = tween(DurationChartDraw)
     val ChartUpdate: FiniteAnimationSpec<Float> = tween(DurationChartUpdate)

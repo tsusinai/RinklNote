@@ -1,5 +1,8 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +42,7 @@ import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.ChartBox
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.util.bookkeepingZone
@@ -132,7 +136,7 @@ fun BookkeepingScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
-            item { Spacer(modifier = Modifier.height(100.dp)) }
+            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(100.dp)) }
         }
 
         // FAB
@@ -150,16 +154,23 @@ fun BookkeepingScreen(
             Text("+", fontSize = 28.sp, fontWeight = FontWeight.Light, color = MaterialTheme.colorScheme.onSurface)
         }
 
-        // Edit overlay — fullscreen, covers everything while editing
-        state.editingBill?.let { bill ->
-            BillEditOverlay(
-                bill = bill,
-                expenseCategories = state.expenseCategories,
-                incomeCategories = state.incomeCategories,
-                accounts = state.accounts,
-                onCancel = { viewModel.onEvent(BookkeepingEvent.CancelEdit) },
-                onConfirm = { newBill -> viewModel.onEvent(BookkeepingEvent.ConfirmEdit(newBill)) }
-            )
+        // Edit overlay — fullscreen, covers everything while editing；用上滑进入（与快加键盘一致）
+        AnimatedVisibility(
+            visible = state.editingBill != null,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
+        ) {
+            state.editingBill?.let { bill ->
+                BillEditOverlay(
+                    bill = bill,
+                    expenseCategories = state.expenseCategories,
+                    incomeCategories = state.incomeCategories,
+                    accounts = state.accounts,
+                    onCancel = { viewModel.onEvent(BookkeepingEvent.CancelEdit) },
+                    onConfirm = { newBill -> viewModel.onEvent(BookkeepingEvent.ConfirmEdit(newBill)) },
+                    onLoadSubCategories = viewModel::subCategories
+                )
+            }
         }
 
         // Delete confirm dialog

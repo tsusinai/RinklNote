@@ -1,5 +1,8 @@
 package com.example.rinklnote.ui.screen.assets
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
@@ -106,15 +111,22 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
         }
     }
 
-    editingAccount?.let { account ->
-        BalanceEditDialog(
-            account = account,
-            onConfirm = { updated ->
-                editingAccount = null
-                viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balance))
-            },
-            onDismiss = { editingAccount = null }
-        )
+    // 全屏编辑余额用上滑进入（与快加键盘一致的 SheetEnter/Exit）
+    AnimatedVisibility(
+        visible = editingAccount != null,
+        enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
+        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
+    ) {
+        editingAccount?.let { account ->
+            BalanceEditDialog(
+                account = account,
+                onConfirm = { updated ->
+                    editingAccount = null
+                    viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balance))
+                },
+                onDismiss = { editingAccount = null }
+            )
+        }
     }
 
     if (addingAccount) {
@@ -158,7 +170,7 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
 
 @Composable
 private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean) {
-    val total = accounts.sumOf { it.balance }
+    val total = remember(accounts) { accounts.sumOf { it.balance } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -203,6 +215,10 @@ private fun AccountCard(
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // 保持最新回调引用：父级重组时避免 stale lambda 或整卡不必要的重组
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnRename by rememberUpdatedState(onRename)
+    val currentOnDelete by rememberUpdatedState(onDelete)
     Box {
         Row(
             modifier = Modifier
@@ -210,7 +226,7 @@ private fun AccountCard(
                 .shadow(4.dp, RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surface)
-                .clickable { onClick() }
+                .clickable { currentOnClick() }
                 .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -242,11 +258,11 @@ private fun AccountCard(
         DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
             DropdownMenuItem(
                 text = { Text("重命名") },
-                onClick = { menuExpanded = false; onRename() }
+                onClick = { menuExpanded = false; currentOnRename() }
             )
             DropdownMenuItem(
                 text = { Text("删除账户") },
-                onClick = { menuExpanded = false; onDelete() }
+                onClick = { menuExpanded = false; currentOnDelete() }
             )
         }
     }

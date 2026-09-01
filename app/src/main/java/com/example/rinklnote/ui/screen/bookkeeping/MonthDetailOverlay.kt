@@ -27,15 +27,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.util.bookkeepingZone
+import java.time.Instant
 
 @Composable
 fun MonthDetailOverlay(
@@ -75,19 +79,24 @@ fun MonthDetailOverlay(
                 }
             }
 
-            val expenseTotal = bills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
-            val incomeTotal = bills.filter { it.billType == "INCOME" }.sumOf { it.amount }
-            val grouped = bills.groupBy { it.categoryName }
+            // 汇总与分组只在 bills 变化时算一次，避免每次重组重新 filter/groupBy/sum
+            val (expenseTotal, incomeTotal, groupList) = remember(bills) {
+                val e = bills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
+                val i = bills.filter { it.billType == "INCOME" }.sumOf { it.amount }
+                val g = bills.groupBy { it.categoryName }
+                    .map { (name, bl) -> Triple(name, bl.sumOf { it.amount }, bl) }
+                Triple(e, i, g)
+            }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 item(key = "totals") { TotalsCard(expenseTotal, incomeTotal) }
-                item { Spacer(modifier = Modifier.height(12.dp)) }
+                item(key = "spacer") { Spacer(modifier = Modifier.height(12.dp)) }
 
                 if (bills.isEmpty()) {
-                    item {
+                    item(key = "empty") {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                             contentAlignment = Alignment.Center
@@ -97,13 +106,12 @@ fun MonthDetailOverlay(
                     }
                 }
 
-                grouped.forEach { (catName, bills) ->
-                    val subtotal = bills.sumOf { it.amount }
+                groupList.forEach { (catName, subtotal, catBills) ->
                     item(key = "cat_$catName") {
                         CategoryHeader(catName, subtotal)
                         Spacer(modifier = Modifier.height(4.dp))
                     }
-                    items(bills, key = { it.id }) { bill ->
+                    items(catBills, key = { it.id }) { bill ->
                         DetailRow(bill)
                         Spacer(modifier = Modifier.height(4.dp))
                     }
@@ -151,6 +159,8 @@ private fun CategoryHeader(categoryName: String, subtotal: Double) {
 @Composable
 private fun DetailRow(bill: Bill) {
     val isExpense = bill.billType == "EXPENSE"
+    val localDate = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
+    val dateLabel = "${localDate.monthValue}月${localDate.dayOfMonth}日"
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -158,7 +168,10 @@ private fun DetailRow(bill: Bill) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(7.dp)
@@ -167,11 +180,20 @@ private fun DetailRow(bill: Bill) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
+                text = dateLabel,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
                 text = bill.remark ?: (bill.subCategoryName ?: bill.categoryName),
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = (if (isExpense) "-" else "+") + String.format("%.2f", bill.amount),
             fontSize = 14.sp,

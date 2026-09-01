@@ -33,6 +33,9 @@ import kotlinx.coroutines.launch
  * The row itself translates — it is NOT dismissed (no SwipeToDismissBox).
  * Exactly one row is open at a time: the parent hoists `revealed` so opening one
  * automatically closes the others.
+ *
+ * 删除面板为固定 80dp 宽、钉在尾端的红色区域，"删除"居中、可点。前景是不透明 surface，
+ * 左移后即确定露出右侧红底，避免旧实现 matchParentSize + CenterEnd 在细行/卡片裁剪下显示不佳。
  */
 @Composable
 fun SwipeableBillItem(
@@ -42,6 +45,7 @@ fun SwipeableBillItem(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+
     val density = LocalDensity.current
     val revealPx = with(density) { 80.dp.toPx() }
     var offsetX by remember { mutableStateOf(0f) }
@@ -63,31 +67,34 @@ fun SwipeableBillItem(
     }
 
     Box(modifier = modifier) {
-        // Red delete background — sits behind the row, revealed when row slides left
+        // Red delete action — only a red "删除" label on the card surface, revealed
+        // when the row slides left. No full red panel behind it (minimal, and the
+        // error-color text matches the app's other delete affordances).
         Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(MaterialTheme.colorScheme.error),
+            modifier = Modifier.matchParentSize(),
             contentAlignment = Alignment.CenterEnd
         ) {
             Text(
                 text = "删除",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onError,
+                color = MaterialTheme.colorScheme.error,
                 modifier = Modifier
-                    .padding(end = 24.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
                     .clickable { onDelete() }
             )
         }
 
-        // Foreground row content — opaque surface so the red delete background
-        // (and its "删除" label) only becomes visible when the row is swiped left.
+        // Foreground row content — opaque surface so the red panel only becomes
+        // visible when the row is swiped left.
+        // IMPORTANT: graphicsLayer must come BEFORE background, otherwise the
+        // background() layer is applied outside the transform and stays fixed,
+        // permanently covering the red delete panel (only the content slides).
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
                 .graphicsLayer { translationX = offsetX }
+                .background(MaterialTheme.colorScheme.surface)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragStart = { },

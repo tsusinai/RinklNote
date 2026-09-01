@@ -88,6 +88,9 @@ fun ChartBox(
 
     val perIndexValue = remember(expenseData.size) { List(expenseData.size) { Animatable(0f) } }
 
+    // 缩放上限用「目标数据」的 max（避免动画漂移），并只在数据变化时算一次（不再每帧重算）
+    val maxVal = remember(expenseData) { expenseData.maxOrNull()?.coerceAtLeast(1f) ?: 1f }
+
     // Track previous data to detect which indices changed
     var prevExpenseData by remember { mutableStateOf(emptyList<Float>()) }
 
@@ -219,7 +222,6 @@ fun ChartBox(
                 val chartHeight = xAxisTop - chartTop
 
                 val step = (chartRight - chartLeft) / (expenseData.size - 1).coerceAtLeast(1)
-                val maxVal = expenseData.max().coerceAtLeast(1f)
 
                 when (chartType) {
                     ChartType.LINE -> {

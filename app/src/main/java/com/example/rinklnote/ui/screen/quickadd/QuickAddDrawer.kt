@@ -219,7 +219,7 @@ private fun DrawerContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.subCategories, state.selectedSubCategory, viewModel)
+            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.expandedParentId, state.subCategories, state.selectedSubCategory, viewModel)
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -340,6 +340,7 @@ private fun CategorySection(
     categories: List<Category>,
     selectedCategory: Category?,
     showSubCategories: Boolean,
+    expandedParentId: Long?,
     subCategories: List<SubCategory>,
     selectedSubCategory: SubCategory?,
     viewModel: QuickAddViewModel
@@ -361,8 +362,8 @@ private fun CategorySection(
             Text("长按呼出二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        // 当前展开的母标签：由已加载的二级分类推断其父级 id
-        val expandedParentId = if (showSubCategories) subCategories.firstOrNull()?.parentCategoryId else null
+        // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
+        val visibleParentId = if (showSubCategories) expandedParentId else null
         categories.forEach { category ->
             CategoryRow(
                 category = category,
@@ -374,7 +375,7 @@ private fun CategorySection(
             // AnimatedVisibility 始终在组合中（不能靠 if 守卫，否则进入组合即 visible=true，
             // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
             AnimatedVisibility(
-                visible = expandedParentId == category.id && subCategories.isNotEmpty(),
+                visible = visibleParentId == category.id && subCategories.isNotEmpty(),
                 enter = expandVertically(
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioNoBouncy,
@@ -447,11 +448,9 @@ private fun SubCategoryPopup(
     Column(
         modifier = Modifier
             // 32.dp 缩进：与母标签行内图标(24dp)+间距(8dp)对齐，弹层左缘正对标签文字
-            .padding(start = 32.dp, top = 2.dp)
+            .padding(start = 32.dp, top = 2.dp, end = 10.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(vertical = 4.dp, horizontal = 10.dp)
+            .padding(vertical = 4.dp)
     ) {
         subCategories.forEach { sub ->
             val isSelected = selected?.id == sub.id
@@ -459,19 +458,27 @@ private fun SubCategoryPopup(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onSelect(sub) }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = sub.name,
-                    fontSize = 14.sp,
-                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                if (isSelected) {
-                    Text("✓", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                }
+                // 与父分类/账户行同款单选圆点；未选中给空心圆点做右锚，保证可选中观感
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                        .then(
+                            if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                            else Modifier
+                        )
+                )
             }
         }
     }

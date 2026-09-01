@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.getMonthStart
@@ -136,6 +137,9 @@ class BookkeepingViewModel(
             syncManager?.let { launch { it.pushBill(bill.copy(deleted = true, dirty = true)) } }
         }
     }
+
+    /** 二级分类按所属一级分类延时加载（编辑页点开某分类时才拉取），避免一次性全量. */
+    suspend fun subCategories(parentId: Long): List<SubCategory> = repository.getSubCategories(parentId)
 
     class Factory(
         private val repository: BillRepository,

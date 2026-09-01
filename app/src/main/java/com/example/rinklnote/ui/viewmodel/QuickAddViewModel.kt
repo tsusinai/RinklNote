@@ -16,6 +16,7 @@ import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +38,7 @@ data class QuickAddState(
     val accounts: List<Account> = emptyList(),
     val remark: String = "",
     val showSubCategories: Boolean = false,
-    val isConfirmEnabled: Boolean = false,
+    val expandedParentId: Long? = null,
     val templates: List<BillTemplate> = emptyList(),
     val nlpInput: String = "",
     val isParsing: Boolean = false,
@@ -120,7 +121,7 @@ class QuickAddViewModel(
     fun onEvent(event: QuickAddEvent) {
         when (event) {
             is QuickAddEvent.Digit -> onDigit(event.digit)
-            is QuickAddEvent.Clear -> _state.update { it.copy(amount = "", isConfirmEnabled = false) }
+            is QuickAddEvent.Clear -> _state.update { it.copy(amount = "") }
             is QuickAddEvent.Backspace -> onBackspace()
             is QuickAddEvent.ToggleType -> toggleType()
             is QuickAddEvent.SelectCategory -> selectCategory(event.category)
@@ -140,38 +141,59 @@ class QuickAddViewModel(
         }
     }
 
+    // 二级分类异步加载的当前任务：连按多个母标签时取消旧任务，避免旧父级结果覆盖新父级
+    private var subCategoryLoadJob: Job? = null
+
     private fun onDigit(digit: String) {
         _state.update { current ->
             if (current.amount.contains(".") && digit == ".") return
             val newAmount = current.amount + digit
-            current.copy(amount = newAmount, isConfirmEnabled = newAmount.toDoubleOrNull() != null && (newAmount.toDoubleOrNull() ?: 0.0) > 0)
+            current.copy(amount = newAmount)
         }
     }
 
     private fun onBackspace() {
         _state.update { current ->
-            val newAmount = current.amount.dropLast(1)
-            current.copy(amount = newAmount, isConfirmEnabled = newAmount.toDoubleOrNull()?.let { it > 0 } ?: false)
+            current.copy(amount = current.amount.dropLast(1))
         }
     }
 
     private fun toggleType() {
         _state.update { current ->
             val newType = if (current.billType == "EXPENSE") "INCOME" else "EXPENSE"
-            current.copy(billType = newType, selectedCategory = null, selectedSubCategory = null)
+            current.copy(
+                billType = newType,
+                selectedCategory = null,
+                selectedSubCategory = null,
+                showSubCategories = false,
+                expandedParentId = null,
+                subCategories = emptyList()
+            )
         }
     }
 
     private fun selectCategory(category: Category) {
-        _state.update { it.copy(selectedCategory = category, selectedSubCategory = null, showSubCategories = false) }
+        subCategoryLoadJob?.cancel()
+        _state.update {
+            it.copy(
+                selectedCategory = category,
+                selectedSubCategory = null,
+                showSubCategories = false,
+                expandedParentId = null,
+                subCategories = emptyList()
+            )
+        }
     }
 
     private fun showSubCategories(category: Category) {
-        // 先清空旧二级分类：切换母标签时旧弹层先收起，新数据加载后再展开，避免闪到错误父级下方
-        _state.update { it.copy(showSubCategories = true, subCategories = emptyList()) }
-        viewModelScope.launch {
-            val subs = repository.getSubCategories(category.id)
-            _state.update { it.copy(subCategories = subs) }
+        // 先清空旧二级分类并记录本次请求的父级 id，结果只在"仍是当前展开父级"时才应用，
+        // 避免快速连按多个母标签时旧结果覆盖新父级、弹层闪错位置。
+        subCategoryLoadJob?.cancel()
+        val parentId = category.id
+        _state.update { it.copy(showSubCategories = true, expandedParentId = parentId, subCategories = emptyList()) }
+        subCategoryLoadJob = viewModelScope.launch {
+            val subs = repository.getSubCategories(parentId)
+            _state.update { if (it.expandedParentId == parentId) it.copy(subCategories = subs) else it }
         }
     }
 
@@ -181,7 +203,8 @@ class QuickAddViewModel(
     }
 
     private fun dismissSubCategories() {
-        _state.update { it.copy(showSubCategories = false, subCategories = emptyList()) }
+        subCategoryLoadJob?.cancel()
+        _state.update { it.copy(showSubCategories = false, expandedParentId = null, subCategories = emptyList()) }
     }
 
     private fun confirm() {
@@ -271,19 +294,23 @@ class QuickAddViewModel(
     private fun onTemplateClick(template: BillTemplate) {
         val cat = _state.value.categories.find { it.id == template.categoryId } ?: return
         val acct = _state.value.accounts.find { it.id == template.accountId } ?: return
-        _state.update {
-            it.copy(
-                amount = template.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
-                selectedCategory = cat,
-                billType = cat.billType,
-                selectedSubCategory = template.subCategoryName?.let { name ->
-                    _state.value.subCategories.find { sc -> sc.name == name }
-                },
-                selectedAccount = acct,
-                remark = ""
-            )
+        // 子分类必须从"模板自身分类"解析，而不是当前弹层快照（可能为空/属于别的父级），
+        // 否则模板携带的子分类会被静默丢弃。逐条异步拉取模板分类的二分类。
+        viewModelScope.launch {
+            val subs = repository.getSubCategories(cat.id)
+            val sub = template.subCategoryName?.let { name -> subs.find { it.name == name } }
+            _state.update {
+                it.copy(
+                    amount = template.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
+                    selectedCategory = cat,
+                    billType = cat.billType,
+                    selectedSubCategory = sub,
+                    selectedAccount = acct,
+                    remark = ""
+                )
+            }
+            finalConfirm()
         }
-        viewModelScope.launch { finalConfirm() }
     }
 
     // ── Suggestion ──
@@ -382,12 +409,15 @@ class QuickAddViewModel(
     }
 
     fun reset() {
+        // 重置后恢复默认选中（支出首个分类），否则下次开抽屉无预选导致「确认」要重挑分类。
+        // 仅支出 collector 会补默认，income 不会（收入默认留空），故此处用支出首个兜底。
         _state.update { s ->
             QuickAddState(
                 accounts = s.accounts,
                 expenseCategories = s.expenseCategories,
                 incomeCategories = s.incomeCategories,
-                selectedAccount = s.accounts.firstOrNull()
+                selectedAccount = s.accounts.firstOrNull(),
+                selectedCategory = s.expenseCategories.firstOrNull()
             )
         }
     }

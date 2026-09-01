@@ -58,12 +58,11 @@ class QuickAddViewModelTest {
     }
 
     @Test
-    fun `digit builds amount and enables confirm only for positive values`() = runTest(dispatcher) {
+    fun `digit backspace clear builds the amount string`() = runTest(dispatcher) {
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Digit("1"))
         vm.onEvent(QuickAddEvent.Digit("0"))
         assertEquals("10", vm.state.value.amount)
-        assertTrue(vm.state.value.isConfirmEnabled)
 
         vm.onEvent(QuickAddEvent.Digit("0"))
         assertEquals("100", vm.state.value.amount)
@@ -73,10 +72,9 @@ class QuickAddViewModelTest {
 
         vm.onEvent(QuickAddEvent.Clear)
         assertEquals("", vm.state.value.amount)
-        assertFalse(vm.state.value.isConfirmEnabled)
 
         vm.onEvent(QuickAddEvent.Digit("0"))
-        assertFalse(vm.state.value.isConfirmEnabled) // zero is not a valid amount
+        assertEquals("0", vm.state.value.amount)
     }
 
     @Test

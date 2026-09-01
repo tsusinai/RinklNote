@@ -21,6 +21,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,8 @@ import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.toDateString
 
+/** 一天一张卡：日期头 + 该日所有账单。内部经 derivedStateOf 读取 revealed/menu，
+ *  侧滑只重组真正受影响的行，而非整卡。 */
 @Composable
 fun BillCard(
     date: Long,
@@ -56,7 +61,6 @@ fun BillCard(
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Header: date + total
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -80,10 +84,9 @@ fun BillCard(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Items
         bills.forEach { bill ->
-            val displayName = bill.subCategoryName ?: bill.categoryName
-            val revealed = revealedBillId == bill.id
+            val revealed by remember(bill.id) { derivedStateOf { revealedBillId == bill.id } }
+            val menuVisible by remember(bill.id) { derivedStateOf { menuBill?.id == bill.id } }
             Box {
                 SwipeableBillItem(
                     revealed = revealed,
@@ -91,19 +94,19 @@ fun BillCard(
                     onDelete = { onDelete(bill) }
                 ) {
                     BillItem(
-                        categoryName = displayName,
+                        categoryName = bill.subCategoryName ?: bill.categoryName,
                         amount = bill.amount,
                         billType = bill.billType,
                         remark = bill.remark,
                         onClick = {
-                            // Tap an open row to close it; tap a closed row to edit
+                            // 点已展开的行收起；点未展开的行进入编辑
                             if (revealed) onRevealChange(null) else onEdit(bill)
                         },
                         onLongPress = { onMenuChange(bill) }
                     )
                 }
                 DropdownMenu(
-                    expanded = menuBill?.id == bill.id,
+                    expanded = menuVisible,
                     onDismissRequest = { onMenuChange(null) }
                 ) {
                     DropdownMenuItem(
@@ -143,7 +146,7 @@ private fun BillItem(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(vertical = 2.dp),
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(

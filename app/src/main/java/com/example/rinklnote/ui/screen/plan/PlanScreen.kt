@@ -1,6 +1,9 @@
 package com.example.rinklnote.ui.screen.plan
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,14 +36,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.util.BalancePrivacy
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 
 @Composable
 fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
     var showBudgetKeypad by remember { mutableStateOf(false) }
 
     // 离开「计划」页（横向 pager 滑走/点其他 tab）时收起预算键盘，否则局部 remember 状态
@@ -68,12 +70,16 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
 
             BudgetCard(
                 state = state,
-                hidden = balanceHidden,
                 onClick = { showBudgetKeypad = true }
             )
         }
 
-        if (showBudgetKeypad) {
+        // 全屏键盘 overlay 用上滑进入（与快加键盘一致的 SheetEnter/Exit），而非裸 if 硬切换
+        AnimatedVisibility(
+            visible = showBudgetKeypad,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
+        ) {
             BudgetKeypadOverlay(
                 initialAmount = state.budget?.amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: "",
                 onConfirm = { amount ->
@@ -89,7 +95,6 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
 @Composable
 private fun BudgetCard(
     state: com.example.rinklnote.ui.viewmodel.BudgetState,
-    hidden: Boolean,
     onClick: () -> Unit
 ) {
     val budget = state.budget
@@ -112,7 +117,7 @@ private fun BudgetCard(
                 Text("设置", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(
-                    text = if (hidden) "***" else "¥${budget.amount.toBigDecimal().stripTrailingZeros().toPlainString()}",
+                    text = "¥${budget.amount.toBigDecimal().stripTrailingZeros().toPlainString()}",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
@@ -127,8 +132,8 @@ private fun BudgetCard(
         } else {
             val over = state.isOverBudget
             val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            val spentText = if (hidden) "***" else "¥${String.format("%.2f", state.monthExpense)}"
-            val budgetText = if (hidden) "***" else "¥${String.format("%.2f", budget.amount)}"
+            val spentText = "¥${String.format("%.2f", state.monthExpense)}"
+            val budgetText = "¥${String.format("%.2f", budget.amount)}"
             val percent = if (budget.amount > 0) (state.monthExpense / budget.amount * 100).toInt() else 0
 
             LinearProgressIndicator(
@@ -144,7 +149,7 @@ private fun BudgetCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = if (hidden) "已花 *** / 预算 *** ($percent%)" else "已花 $spentText / 预算 $budgetText ($percent%)",
+                text = "已花 $spentText / 预算 $budgetText ($percent%)",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurface
             )
