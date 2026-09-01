@@ -184,7 +184,7 @@ const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
   // bills filter
   bf: { search: '', cat: '', from: '', to: '' },
   // settings
-  phone: '', pwd: '', qq: '', smode: 'login', bindCode: '',
+  phone: '', pwd: '', qq: '', smode: 'login', bindCode: '', qqLoginCode: '',
   botConfigured: false, botBound: false, botOpenid: '', botMaskedId: '',
   botAppId: '', botSecret: '', botShowSecret: false,
   lastSync: 0, me: null, theme: localStorage.getItem('rkl_theme') || 'system',
@@ -313,6 +313,13 @@ function renderLogin(prompt) {
     if (r.token) { S.token = r.token; localStorage.setItem('rkl_token', r.token); S.msg = '登录成功!'; await loadData(); }
     else { S.msg = r.message || '登录失败'; render(); }
   }}, S.smode==='login'?'登录':'注册'));
+  div.append(h('hr', { style:'margin:16px 0' }));
+  div.append(h('input', { type:'text', placeholder:'QQ 登录码（向机器人发「登录」获取）', value:S.qqLoginCode, oninput:e=>S.qqLoginCode=e.target.value, style:'margin-bottom:8px' }));
+  div.append(h('button', { className:'btn btn-primary', style:'width:100%', onclick: async () => {
+    const r = await api('/api/auth/qq-login', { method:'POST', body:JSON.stringify({ code:S.qqLoginCode }) });
+    if (r.token) { S.token = r.token; localStorage.setItem('rkl_token', r.token); S.msg = 'QQ登录成功!'; S.smode = 'login'; await loadData(); }
+    else { S.msg = r.message || 'QQ登录失败'; render(); }
+  }}, 'QQ 登录'));
   if (S.msg) div.append(h('p',{className:msgClass()},S.msg));
   return div;
 }
@@ -871,7 +878,7 @@ function renderMe(pg) {
     acctBox.appendChild(h('h3', { style: 'margin-bottom:10px' }, '账号信息'));
     const row = (label, val) => h('div', { style: 'display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light)' },
       h('span', { style: 'color:var(--muted)' }, label), h('span', { style: 'font-weight:500' }, val));
-    acctBox.appendChild(row('手机号', me.phone));
+    acctBox.appendChild(row('手机号', (me.phone) ? me.phone : 'QQ账号'));
     acctBox.appendChild(row('QQ号', me.qqNumber || '未绑定'));
     acctBox.appendChild(row('QQ机器人', me.qqOpenid ? ('已绑定 …' + me.qqOpenid.slice(-6)) : '未绑定'));
     if (me.createdAt) acctBox.appendChild(row('注册时间', me.createdAt.slice(0, 10)));
