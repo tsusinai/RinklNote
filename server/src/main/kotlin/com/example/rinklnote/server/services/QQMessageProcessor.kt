@@ -21,6 +21,7 @@ import java.security.MessageDigest
  */
 object QQMessageProcessor {
     private val logger = LoggerFactory.getLogger("QQMessageProcessor")
+    private val LOGIN_CODE = Regex("登录|登录码|验证码|网页登录|扫码", RegexOption.IGNORE_CASE)
 
     suspend fun process(
         eventType: String,
@@ -72,25 +73,31 @@ object QQMessageProcessor {
 
             logger.info("Processing message from $openid: $content")
 
-            // Check if user is bound
-            val user = userService.findByQqOpenid(openid)
-            if (user == null) {
+            // 自动开户：openid 即账号，无需手机号/App 前置（QQ 即账号）。
+            val existing = userService.findByQqOpenid(openid)
+            val isNew = existing == null
+            val user = existing ?: userService.createByQqOpenid(openid)
+            logger.info("QQ user resolved: id=${user.id} new=$isNew")
+
+            // 「登录码」指令：返回一次性 QQ 登录码供网页登录。
+            if (LOGIN_CODE.containsMatchIn(content)) {
                 val code = qqBotService.generateBindCode(openid)
+                val reply = "网页登录码: $code\n在网页「QQ 登录」输入此码即可登录你的记账账号。"
                 if (groupOpenid != null) {
-                    qqBotService.sendGroupMessage(groupOpenid, "你还未绑定账号。绑定码: $code\n请在网页设置中输入此码完成绑定。", msgId)
+                    qqBotService.sendGroupMessage(groupOpenid, reply, msgId)
                 } else {
-                    qqBotService.sendC2CMessage(openid, "你还未绑定账号。\n绑定码: $code\n请在网页设置中输入此码完成绑定。", msgId)
+                    qqBotService.sendC2CMessage(openid, reply, msgId)
                 }
                 return
             }
 
-            // Route the message: query / delete / bookkeeping / help / LLM fallback.
             val router = QQIntentRouter(billService, budgetService, insightService, nluService)
             val reply = router.route(content, user.id)
+            val out = if (isNew) "欢迎！已开通 QQ 记账账号。用中文说「午餐20元」即可记账；回复「登录」可获取网页登录码。\n\n$reply" else reply
             if (groupOpenid != null) {
-                qqBotService.sendGroupMessage(groupOpenid, reply, msgId)
+                qqBotService.sendGroupMessage(groupOpenid, out, msgId)
             } else {
-                qqBotService.sendC2CMessage(openid, reply, msgId)
+                qqBotService.sendC2CMessage(openid, out, msgId)
             }
 
             logger.info("QQ reply for user ${user.id}: ${reply.replace("\n", " / ")}")
