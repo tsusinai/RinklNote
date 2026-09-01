@@ -189,6 +189,9 @@ fun AppNavigation(app: RinklNoteApp) {
                     showDrawer = false
                     showKeypad = false
                 }
+                is QuickAddEffect.FinalConfirmFailed -> {
+                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

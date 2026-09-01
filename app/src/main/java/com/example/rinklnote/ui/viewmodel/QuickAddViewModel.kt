@@ -15,6 +15,7 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,6 +71,7 @@ sealed interface QuickAddEvent {
 
 sealed interface QuickAddEffect {
     data object FinalConfirmCompleted : QuickAddEffect
+    data class FinalConfirmFailed(val message: String) : QuickAddEffect
 }
 
 class QuickAddViewModel(
@@ -186,8 +188,14 @@ class QuickAddViewModel(
         // One-step: keypad confirm saves immediately (anti-misclick two-phase removed).
         val s = _state.value
         if (s.amount.toDoubleOrNull() == null) return
-        if (s.selectedCategory == null) return
-        if (s.selectedAccount == null) return
+        if (s.selectedCategory == null) {
+            _effects.trySend(QuickAddEffect.FinalConfirmFailed("请先选择分类"))
+            return
+        }
+        if (s.selectedAccount == null) {
+            _effects.trySend(QuickAddEffect.FinalConfirmFailed("请先选择账户"))
+            return
+        }
         finalConfirm()
     }
 
@@ -332,30 +340,40 @@ class QuickAddViewModel(
         if (amount == null || category == null || account == null) {
             // Not a valid submission — release the guard so the user can retry.
             confirming = false
+            _effects.trySend(QuickAddEffect.FinalConfirmFailed("请完整填写金额、分类和账户"))
             return
         }
 
         viewModelScope.launch {
-            val bill = Bill(
-                amount = amount,
-                billType = s.billType,
-                categoryId = category.id,
-                categoryName = category.name,
-                subCategoryName = s.selectedSubCategory?.name,
-                accountId = account.id,
-                remark = s.remark.ifBlank { null },
-                date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
-            )
-            val savedId = repository.addBill(bill)
-            _effects.send(QuickAddEffect.FinalConfirmCompleted)
-            // Background push to server (best-effort, non-blocking).
-            // Push the persisted row (with its real auto-generated id) so
-            // SyncManager can stamp server_id on it — otherwise it stays
-            // unsynced and every full sync re-POSTs a duplicate.
-            val saved = bill.copy(id = savedId)
-            syncManager?.let { launch { it.pushBill(saved) } }
-            // Release the guard so the next QuickAdd can submit again.
-            confirming = false
+            try {
+                val bill = Bill(
+                    amount = amount,
+                    billType = s.billType,
+                    categoryId = category.id,
+                    categoryName = category.name,
+                    subCategoryName = s.selectedSubCategory?.name,
+                    accountId = account.id,
+                    remark = s.remark.ifBlank { null },
+                    date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+                )
+                val savedId = repository.addBill(bill)
+                _effects.send(QuickAddEffect.FinalConfirmCompleted)
+                // Background push to server (best-effort, non-blocking).
+                // Push the persisted row (with its real auto-generated id) so
+                // SyncManager can stamp server_id on it — otherwise it stays
+                // unsynced and every full sync re-POSTs a duplicate.
+                val saved = bill.copy(id = savedId)
+                syncManager?.let { launch { it.pushBill(saved) } }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 保存失败也要给反馈，否则「确认」看起来无响应。
+                _effects.send(QuickAddEffect.FinalConfirmFailed("记账失败，请重试"))
+            } finally {
+                // 无论成败都释放守卫：否则 addBill 抛异常时 confirming 常驻 true，
+                // 键盘「确认」此后永久无响应（「点不动」的根因之一）。
+                confirming = false
+            }
         }
     }
 
