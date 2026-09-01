@@ -109,9 +109,17 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
                 return@post
             }
             val openid = qqBotService.consumeBindCode(body.code)
-                ?: return@post call.respond(HttpStatusCode.Unauthorized, MessageResponse("登录码无效或已过期"))
+            if (openid == null) {
+                loginLimiter.recordFailure(ip)
+                call.respond(HttpStatusCode.Unauthorized, MessageResponse("登录码无效或已过期"))
+                return@post
+            }
             val user = userService.findByQqOpenid(openid)
-                ?: return@post call.respond(HttpStatusCode.NotFound, MessageResponse("该QQ尚未开通账号，请先给机器人发消息"))
+            if (user == null) {
+                loginLimiter.recordFailure(ip)
+                call.respond(HttpStatusCode.NotFound, MessageResponse("该QQ尚未开通账号，请先给机器人发消息"))
+                return@post
+            }
             loginLimiter.recordSuccess(ip)
             val token = userService.generateToken(user.id, user.phone)
             call.respond(AuthResponse(user.id, token))
