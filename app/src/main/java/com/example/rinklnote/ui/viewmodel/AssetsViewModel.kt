@@ -24,6 +24,8 @@ sealed interface AssetsEvent {
     data class DeleteAccount(val account: Account) : AssetsEvent
 }
 
+/** 资产页 ViewModel：账户清单取自 repository 缓存的 accounts（StateFlow，非 Room 实时流），
+ *  每次增/改名/改余额/删除都先本地落库置 dirty，再尽力推送到服务端（pushAccount）。 */
 class AssetsViewModel(
     private val repository: BillRepository,
     private val syncManager: SyncManager? = null
@@ -93,6 +95,7 @@ class AssetsViewModel(
 
     private fun deleteAccount(event: AssetsEvent.DeleteAccount) {
         viewModelScope.launch {
+            // 本地先标记逻辑删除，再把「删除墓碑」推送服务端做同样软删（跨端一致）。
             repository.softDeleteAccount(event.account)
             val tombstone = event.account.copy(
                 deleted = true,
