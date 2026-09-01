@@ -122,35 +122,42 @@ class InsightService(
         return AnomalyResponse(alerts = alerts)
     }
 
+    /**
+     * 自然问账：先解析出用户提到的月份（如「8月/八月/上个月/2026-03」），再只把该月窗口内的
+     * 聚合数据喂给 LLM。此前不管问哪个历史月，都只送「本月聚合 + 上月一个总和」，所以「8月交通花了多少」
+     * 之类的问题无从回答。数据仍只含「分类+金额+日期」，不含备注与未聚合明细（NFR1）。
+     */
     suspend fun naturalQuery(userId: Long, query: String): QueryResponse {
         val bills = billService.allBills(userId)
         val categories = transaction { billService.getCategories().map { it.name } }
 
-        val now = LocalDate.now(SHANGHAI)
+        // 解析用户问的目标月份；未明确（如「最近花了多少」）则回落到本月首日。
+        val target = resolveYearMonth(query, LocalDate.now(SHANGHAI)) ?: LocalDate.now(SHANGHAI).withDayOfMonth(1)
 
-        // Current month summary
-        val monthStart = now.withDayOfMonth(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
-        val monthBills = bills.filter { it.date >= monthStart }
+        val monthStart = target.atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
+        val nextMonthStart = target.plusMonths(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
+
+        // 只取目标月份窗口内的账单，避免跨月数据污染回答。
+        val monthBills = bills.filter { it.date >= monthStart && it.date < nextMonthStart }
+
         val totalExpense = Money.cents(monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount })
+        val totalIncome = Money.cents(monthBills.filter { it.billType == "INCOME" }.sumOf { it.amount })
         val topCategories = monthBills.filter { it.billType == "EXPENSE" }
             .groupBy { it.categoryName }
             .mapValues { Money.cents(it.value.sumOf { b -> b.amount }) }
             .entries.sortedByDescending { it.value }.take(5)
             .map { it.key to it.value }
+        val recentBills = monthBills.sortedByDescending { it.date }.take(10)
 
-        // Last month summary
-        val lastMonthStart = now.minusMonths(1).withDayOfMonth(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
-        val lastMonthExpense = Money.cents(bills.filter { it.date in lastMonthStart until monthStart && it.billType == "EXPENSE" }.sumOf { it.amount })
-
-        // 只送「分类+金额+日期」聚合，移除备注与未聚合明细（NFR1）。
         val context = naturalQueryContext(
             query = query,
             categories = categories,
-            now = now,
+            year = target.year,
+            month = target.monthValue,
             totalExpense = totalExpense,
-            totalIncome = lastMonthExpense,
+            totalIncome = totalIncome,
             topCategories = topCategories,
-            recentBills = bills.sortedByDescending { it.date }.take(10)
+            recentBills = recentBills
         )
 
         try {
@@ -295,14 +302,64 @@ class InsightService(
     companion object {
         val SHANGHAI: ZoneId = ZoneId.of("Asia/Shanghai")
 
+        private val CN_MONTH = mapOf(
+            "一" to 1, "二" to 2, "三" to 3, "四" to 4, "五" to 5, "六" to 6,
+            "七" to 7, "八" to 8, "九" to 9, "十" to 10, "十一" to 11, "十二" to 12
+        )
+
+        /**
+         * 从自然语言里解析出用户想查的月份，返回该月首日；解析不到返回 null。
+         * 覆盖「8月 / 08月 / 八月 / 上个月 / 这个月 / 去年8月 / 2026-08 / 2026年3月」。
+         * 裸月份数字（未给年份）落在当前年份；若该日期晚于今天（如 9 月问「12月」）则滚回上一年。
+         * 纯函数，便于测试。
+         */
+        fun resolveYearMonth(query: String, now: LocalDate): LocalDate? {
+            val text = query.replace(" ", "")
+
+            if (text.contains("上个月") || text.contains("上月") || text.contains("上一月")) return now.minusMonths(1).withDayOfMonth(1)
+            if (text.contains("这个月") || text.contains("本月") || text.contains("这月")) return now.withDayOfMonth(1)
+
+            val lastYear = text.contains("去年")
+
+            // 显式「年份+月份」：2026-08 / 2026年8月
+            Regex("""(\d{4})[-年](\d{1,2})月?""").find(text)?.let { m ->
+                val y = m.groupValues[1].toInt()
+                val mm = m.groupValues[2].toIntOrNull()
+                if (mm != null && mm in 1..12) return LocalDate.of(y, mm, 1)
+            }
+
+            // 裸月份：8月 / 08月 / 八月
+            val bare = Regex("""(\d{1,2})月""").find(text)
+                ?: Regex("""([一二三四五六七八九十]{1,2})月""").find(text)
+            if (bare != null) {
+                val mm = parseMonthNum(bare.groupValues[1]) ?: return null
+                var y = if (lastYear) now.year - 1 else now.year
+                var candidate = LocalDate.of(y, mm, 1)
+                if (!lastYear && candidate.isAfter(now)) {
+                    y -= 1
+                    candidate = LocalDate.of(y, mm, 1)
+                }
+                return candidate
+            }
+
+            if (lastYear) return now.minusYears(1).withDayOfMonth(1)
+            return null
+        }
+
+        private fun parseMonthNum(token: String): Int? {
+            token.toIntOrNull()?.let { return if (it in 1..12) it else null }
+            return CN_MONTH[token]
+        }
+
         /**
          * 构造自然问账上下文。只送「分类 + 金额 + 日期」聚合，绝不包含备注或未聚合明细（NFR1）。
-         * 纯函数，测试零依赖。
+         * 纯函数，测试零依赖。year/month 指出上下文对应的数据区间（即用户所问的月份）。
          */
         fun naturalQueryContext(
             query: String,
             categories: List<String>,
-            now: LocalDate,
+            year: Int,
+            month: Int,
             totalExpense: Double,
             totalIncome: Double,
             topCategories: List<Pair<String, Double>>,
@@ -315,11 +372,11 @@ class InsightService(
 
 可用分类: ${categories.joinToString("、")}
 
-数据:
-- 当前月份: ${now.year}-${now.monthValue}
-- 当月总支出: ¥${"%.2f".format(totalExpense)}
-- 上月总支出: ¥${"%.2f".format(totalIncome)}
-- 当月消费TOP5: ${topCategories.joinToString { pair -> "${pair.first} ¥${"%.2f".format(pair.second)}" }}
+数据 ($year-$month):
+- 月份: ${year}-${month}
+- 总支出: ¥${"%.2f".format(totalExpense)}
+- 总收入: ¥${"%.2f".format(totalIncome)}
+- 支出分类TOP5: ${topCategories.joinToString { pair -> "${pair.first} ¥${"%.2f".format(pair.second)}" }}
 
 最近10笔记录:
 $recentLines

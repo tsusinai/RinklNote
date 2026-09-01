@@ -82,11 +82,12 @@ class InsightServiceTest {
     @Test
     fun `naturalQueryContext includes category+amount+date but not remark`() {
         val ctx = InsightService.naturalQueryContext(
-            query = "最近花了多少",
+            query = "8月花了多少",
             categories = listOf("三餐", "交通"),
-            now = java.time.LocalDate.of(2026, 8, 20),
+            year = 2026,
+            month = 8,
             totalExpense = 100.0,
-            totalIncome = 0.0,
+            totalIncome = 50.0,
             topCategories = listOf("三餐" to 100.0),
             recentBills = listOf(
                 BillDTO(id = 1, amount = 28.0, billType = "EXPENSE", categoryId = 1,
@@ -97,7 +98,30 @@ class InsightServiceTest {
         )
         assertTrue(ctx.contains("三餐"))
         assertTrue(ctx.contains("28.00"))
+        assertTrue("应标注所问月份", ctx.contains("2026-8"))
         assertFalse("备注不应送 LLM", ctx.contains("机密"))
+    }
+
+    @Test
+    fun `resolveYearMonth parses bare month number`() {
+        val now = java.time.LocalDate.of(2026, 9, 1)
+        assertEquals(java.time.LocalDate.of(2026, 8, 1), InsightService.resolveYearMonth("8月交通花了多少", now))
+        assertEquals(java.time.LocalDate.of(2026, 8, 1), InsightService.resolveYearMonth("八月花了多少", now))
+    }
+
+    @Test
+    fun `resolveYearMonth rolls future bare month to last year`() {
+        val now = java.time.LocalDate.of(2026, 9, 1)
+        assertEquals(java.time.LocalDate.of(2025, 12, 1), InsightService.resolveYearMonth("12月花了多少", now))
+    }
+
+    @Test
+    fun `resolveYearMonth parses relative and explicit months`() {
+        val now = java.time.LocalDate.of(2026, 9, 1)
+        assertEquals(java.time.LocalDate.of(2026, 8, 1), InsightService.resolveYearMonth("上个月花了多少", now))
+        assertEquals(java.time.LocalDate.of(2026, 9, 1), InsightService.resolveYearMonth("这个月花了多少", now))
+        assertEquals(java.time.LocalDate.of(2025, 3, 1), InsightService.resolveYearMonth("2025-03", now))
+        assertEquals(java.time.LocalDate.of(2025, 8, 1), InsightService.resolveYearMonth("去年8月", now))
     }
 
     @Test
