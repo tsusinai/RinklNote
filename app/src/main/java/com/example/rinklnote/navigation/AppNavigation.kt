@@ -103,6 +103,17 @@ fun AppNavigation(app: RinklNoteApp) {
     var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
     var showQqBotGuide by remember { mutableStateOf(false) }
     var showRemarkSheet by remember { mutableStateOf(false) }
+    // 语音连续多笔：累计笔数 + 最近一笔的短暂确认提示。
+    var voiceBookedCount by remember { mutableStateOf(0) }
+    var voiceConfirm by remember { mutableStateOf<String?>(null) }
+
+    // 浮层确认提示 2.2s 后自动消失，连续说话时每次更新都会重新计时。
+    LaunchedEffect(voiceConfirm) {
+        if (voiceConfirm != null) {
+            delay(2200)
+            voiceConfirm = null
+        }
+    }
 
     val openDrawer: () -> Unit = {
         showDrawer = true
@@ -149,6 +160,8 @@ fun AppNavigation(app: RinklNoteApp) {
             showDrawer = false
             showKeypad = false
             voiceActive = false
+            voiceBookedCount = 0
+            voiceConfirm = null
             quickAddVM.reset()
             quickAddVM.resetConfirming()
         }
@@ -193,6 +206,13 @@ fun AppNavigation(app: RinklNoteApp) {
                 is QuickAddEffect.FinalConfirmFailed -> {
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
                 }
+                is QuickAddEffect.VoiceBillBooked -> {
+                    voiceBookedCount += 1
+                    voiceConfirm = "已记：${effect.summary} · 第${voiceBookedCount}笔"
+                }
+                is QuickAddEffect.VoiceNoAmount -> {
+                    voiceConfirm = "没抓到金额，再说一次～"
+                }
             }
         }
     }
@@ -231,6 +251,16 @@ fun AppNavigation(app: RinklNoteApp) {
         } else {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    // 语音会话结束（✕/完成或返回键）：关语音条 + 抽屉，清空多笔计数并重置抽屉状态。
+    val endVoiceSession: () -> Unit = {
+        voiceActive = false
+        voiceTarget = VoiceTarget.QUICK_ADD
+        showDrawer = false
+        voiceBookedCount = 0
+        voiceConfirm = null
+        quickAddVM.reset()
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -375,23 +405,60 @@ fun AppNavigation(app: RinklNoteApp) {
             exit = slideOutVertically(animationSpec = Motion.SheetExit, targetOffsetY = { it })
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-                VoiceInputBar(
-                    api = app.apiService,
-                    onResult = { text ->
-                        voiceActive = false
-                        val target = voiceTarget
-                        voiceTarget = VoiceTarget.QUICK_ADD
-                        if (target == VoiceTarget.AI) {
-                            // 语音在 AI 页发起 → 走聊天路由（记账/问账自动判定）
-                            aiVM.send(text)
-                        } else {
-                            // 抽屉语音记账：NLP 直填并提交
-                            quickAddVM.onEvent(QuickAddEvent.NlpInput(text))
-                            quickAddVM.onEvent(QuickAddEvent.NlpSubmit)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // 连续多笔的计数 + 最近一笔的短暂确认，浮在语音条上方。
+                    AnimatedVisibility(visible = voiceConfirm != null) {
+                        Box(
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .shadow(6.dp, RoundedCornerShape(18.dp))
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = voiceConfirm ?: "",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
-                    },
-                    onDismiss = { voiceActive = false }
-                )
+                    }
+                    if (voiceBookedCount > 0 && voiceConfirm == null) {
+                        Box(
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "已记 $voiceBookedCount 笔",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    VoiceInputBar(
+                        api = app.apiService,
+                        onResult = { text ->
+                            val target = voiceTarget
+                            if (target == VoiceTarget.AI) {
+                                // 语音在 AI 页发起 → 走聊天路由；单笔，语音条关闭。
+                                voiceActive = false
+                                voiceTarget = VoiceTarget.QUICK_ADD
+                                aiVM.send(text)
+                            } else {
+                                // 抽屉语音记账：连续多笔，逐笔入库，语音条保持聆听、不动抽屉。
+                                quickAddVM.onEvent(QuickAddEvent.VoiceUtterance(text))
+                            }
+                        },
+                        onDismiss = endVoiceSession,
+                        continuous = voiceTarget == VoiceTarget.QUICK_ADD
+                    )
+                }
             }
         }
 

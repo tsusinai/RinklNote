@@ -68,11 +68,20 @@ sealed interface QuickAddEvent {
     data object SuggestionClick : QuickAddEvent
     data object DismissSuggestion : QuickAddEvent
     data object Confirm : QuickAddEvent
+
+    /** 语音连续多笔：一整句口语转写（可能含多笔金额），逐笔入库但不动抽屉。 */
+    data class VoiceUtterance(val text: String) : QuickAddEvent
 }
 
 sealed interface QuickAddEffect {
     data object FinalConfirmCompleted : QuickAddEffect
     data class FinalConfirmFailed(val message: String) : QuickAddEffect
+
+    /** 语音多笔已记一笔："分类 ¥金额"，用于浮层计数/确认提示。 */
+    data class VoiceBillBooked(val summary: String) : QuickAddEffect
+
+    /** 语音这话没能抽出可记金额，提示再说一次。 */
+    data object VoiceNoAmount : QuickAddEffect
 }
 
 class QuickAddViewModel(
@@ -134,6 +143,7 @@ class QuickAddViewModel(
             is QuickAddEvent.NlpSubmit -> onNlpSubmit()
             is QuickAddEvent.TemplateClick -> onTemplateClick(event.template)
             is QuickAddEvent.SuggestionClick -> onSuggestionClick()
+            is QuickAddEvent.VoiceUtterance -> onVoiceUtterance(event.text)
             is QuickAddEvent.DismissSuggestion -> _state.update {
                 it.copy(suggestion = null, suggestionDismissed = true)
             }
@@ -289,6 +299,83 @@ class QuickAddViewModel(
             finalConfirm()
         }
     }
+
+    // ── Voice multi-entry ──
+
+    /**
+     * 一整句口语转写 → 按金额边界拆成多笔，逐笔入库。不动抽屉、不发
+     * FinalConfirmCompleted（那是键盘确认的开关抽屉信号）。每笔成功发
+     * [QuickAddEffect.VoiceBillBooked]，抽出金额则发 VoiceNoAmount。
+     */
+    private fun onVoiceUtterance(text: String) {
+        val segments = VoiceParser.splitVoiceText(text)
+        if (segments.isEmpty()) {
+            _effects.trySend(QuickAddEffect.VoiceNoAmount)
+            return
+        }
+        viewModelScope.launch {
+            for (seg in segments) {
+                val book = bookVoiceSegment(seg)
+                if (book != null) {
+                    // 后台尽力推送到服务端（不阻塞入库），与本段记账并行。
+                    syncManager?.let { launch { it.pushBill(book.first) } }
+                    _effects.trySend(QuickAddEffect.VoiceBillBooked(book.second))
+                } else {
+                    _effects.trySend(QuickAddEffect.VoiceNoAmount)
+                }
+            }
+        }
+    }
+
+    /**
+     * 解析并保存单个语音片段（可能已归一为含阿拉伯金额）。优先走服务端
+     * parseBill，失败回退本地 VoiceParser；分类在支出/收入全集里找，找不到
+     * 落到默认支出首分类。返回「已入库账单 + 摘要」，由调用方决定推送。
+     */
+    private suspend fun bookVoiceSegment(segment: String): Pair<Bill, String>? {
+        var amountStr: String? = null
+        var catName: String? = null
+        val svc = api
+        if (svc != null) {
+            try {
+                val result = svc.parseBill(ParseRequest(segment))
+                if (result.amount.isNotBlank() && result.amount.toDoubleOrNull() != null) {
+                    amountStr = result.amount
+                    catName = result.categoryName
+                }
+            } catch (_: Exception) {
+                // 服务端失败/未登录 → 回退本地规则解析
+            }
+        }
+        if (amountStr == null) {
+            val parsed = VoiceParser.parse(segment)
+            if (parsed.amount == null) return null
+            amountStr = trimVoice(parsed.amount)
+            catName = parsed.categoryName
+        }
+        val amount = amountStr.toDoubleOrNull() ?: return null
+        val s = _state.value
+        val allCats = s.expenseCategories + s.incomeCategories
+        val cat = catName?.let { n -> allCats.find { it.name == n } }
+            ?: s.expenseCategories.firstOrNull()
+            ?: return null
+        val acct = s.selectedAccount ?: s.accounts.firstOrNull() ?: return null
+        val bill = Bill(
+            amount = amount,
+            billType = cat.billType,
+            categoryId = cat.id,
+            categoryName = cat.name,
+            remark = segment.ifBlank { null },
+            accountId = acct.id,
+            date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+        )
+        val savedId = repository.addBill(bill)
+        val saved = bill.copy(id = savedId)
+        return saved to "${cat.name} ¥${"%.2f".format(amount)}"
+    }
+
+    private fun trimVoice(d: Double): String =
+        if (d == d.toLong().toDouble()) d.toLong().toString() else d.toString()
 
     // ── Template ──
     private fun onTemplateClick(template: BillTemplate) {

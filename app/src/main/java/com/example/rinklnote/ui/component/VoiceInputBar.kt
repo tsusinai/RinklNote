@@ -74,7 +74,8 @@ private enum class VoicePhase { Listening, Processing, Error }
 fun VoiceInputBar(
     api: ApiService?,
     onResult: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    continuous: Boolean = false
 ) {
     val context = LocalContext.current.applicationContext
     val currentOnResult by rememberUpdatedState(onResult)
@@ -89,12 +90,21 @@ fun VoiceInputBar(
     var fallbackAudio by remember { mutableStateOf(false) }
     // Guards against double delivery (e.g. onError after stopListening).
     var ended by remember { mutableStateOf(false) }
+    // 连续多笔：每记一笔 +1，驱动 LaunchedEffect 重新聆听下一笔（避免本地函数前向引用）。
+    var recognitionRound by remember { mutableStateOf(0) }
 
     fun finishWithText(text: String) {
         if (ended) return
-        ended = true
-        recorder.cancel() // device result is good enough — discard fallback audio
+        // 连续多笔：交结果给父级后重新聆听下一笔，不关闭；单笔则结束。
         currentOnResult(text)
+        if (continuous) {
+            ended = false
+            recorder.cancel()
+            recognitionRound += 1
+        } else {
+            ended = true
+            recorder.cancel() // device result is good enough — discard fallback audio
+        }
     }
 
     fun showError() {
@@ -113,7 +123,13 @@ fun VoiceInputBar(
         scope.launch {
             val text = transcribeViaServer(api, file)
             file.delete()
-            if (!text.isNullOrBlank()) currentOnResult(text) else showError()
+            if (!text.isNullOrBlank()) {
+                currentOnResult(text)
+                if (continuous) {
+                    ended = false
+                    recognitionRound += 1
+                }
+            } else showError()
         }
     }
 
@@ -151,6 +167,11 @@ fun VoiceInputBar(
 
     // Start listening the moment the bar appears — no upload wait, instant feedback.
     LaunchedEffect(Unit) { startListen() }
+
+    // 连续多笔：每记一笔后自动回到聆听，等待下一句。
+    LaunchedEffect(recognitionRound) {
+        if (recognitionRound > 0) startListen()
+    }
 
     fun onMicTap() {
         when (phase) {
