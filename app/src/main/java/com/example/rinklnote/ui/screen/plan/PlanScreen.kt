@@ -49,35 +49,40 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
         if (!isActive) showBudgetKeypad = false
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "计划",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+    // 单层 Box 根：预算键盘必须以页内 overlay 的形式叠在计划内容之上。
+    // 之前在 PlanScreen 里把主 Column 和键盘作为两个平级子项直接交给 pager，
+    // 键盘虽进入组合但未真正盖住卡片（点击落在平级卡片上、键盘不可见）。
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "计划",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
-        BudgetCard(
-            state = state,
-            hidden = balanceHidden,
-            onClick = { showBudgetKeypad = true }
-        )
-    }
+            BudgetCard(
+                state = state,
+                hidden = balanceHidden,
+                onClick = { showBudgetKeypad = true }
+            )
+        }
 
-    if (showBudgetKeypad) {
-        BudgetKeypadOverlay(
-            initialAmount = state.budget?.amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: "",
-            onConfirm = { amount ->
-                showBudgetKeypad = false
-                viewModel.onEvent(BudgetEvent.SetBudget(amount))
-            },
-            onDismiss = { showBudgetKeypad = false }
-        )
+        if (showBudgetKeypad) {
+            BudgetKeypadOverlay(
+                initialAmount = state.budget?.amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: "",
+                onConfirm = { amount ->
+                    showBudgetKeypad = false
+                    viewModel.onEvent(BudgetEvent.SetBudget(amount))
+                },
+                onDismiss = { showBudgetKeypad = false }
+            )
+        }
     }
 }
 
