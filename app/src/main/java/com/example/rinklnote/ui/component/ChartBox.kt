@@ -73,6 +73,19 @@ fun ChartBox(
     val surfaceColor = MaterialTheme.colorScheme.surface
     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
 
+    // Pre-measure the constant labels once (style + text are fixed for a given
+    // dataset & theme). During the entry animation the per-frame draw loop only
+    // *re-positions* these layouts — re-measuring them every frame was the main
+    // ChartBox render cost (measure = text layout + shaping + font fallback).
+    val amountLabelLayouts = remember(expenseData, tertiaryColor) {
+        val style = TextStyle(fontSize = 8.sp, color = tertiaryColor, textAlign = TextAlign.Center)
+        expenseData.map { textMeasurer.measure("%.2f".format(it), style) }
+    }
+    val axisLabelLayouts = remember(labels, onSurfaceVariantColor) {
+        val style = TextStyle(fontSize = 9.sp, color = onSurfaceVariantColor, textAlign = TextAlign.Center)
+        labels.map { textMeasurer.measure(it, style) }
+    }
+
     val perIndexValue = remember(expenseData.size) { List(expenseData.size) { Animatable(0f) } }
 
     // Track previous data to detect which indices changed
@@ -208,17 +221,6 @@ fun ChartBox(
                 val step = (chartRight - chartLeft) / (expenseData.size - 1).coerceAtLeast(1)
                 val maxVal = expenseData.max().coerceAtLeast(1f)
 
-                val dataLabelStyle = TextStyle(
-                    fontSize = 8.sp,
-                    color = tertiaryColor,
-                    textAlign = TextAlign.Center
-                )
-                val axisLabelStyle = TextStyle(
-                    fontSize = 9.sp,
-                    color = onSurfaceVariantColor,
-                    textAlign = TextAlign.Center
-                )
-
                 when (chartType) {
                     ChartType.LINE -> {
                         // Draw line path using per-index animated values
@@ -247,10 +249,7 @@ fun ChartBox(
                                 center = Offset(x, y)
                             )
 
-                            val label = textMeasurer.measure(
-                                text = "%.2f".format(expenseData[index]),
-                                style = dataLabelStyle
-                            )
+                            val label = amountLabelLayouts[index]
                             drawText(
                                 textLayoutResult = label,
                                 topLeft = Offset(
@@ -277,10 +276,7 @@ fun ChartBox(
                                 cornerRadius = CornerRadius(2.dp.toPx())
                             )
 
-                            val label = textMeasurer.measure(
-                                text = "%.2f".format(expenseData[index]),
-                                style = dataLabelStyle
-                            )
+                            val label = amountLabelLayouts[index]
                             drawText(
                                 textLayoutResult = label,
                                 topLeft = Offset(
@@ -296,10 +292,7 @@ fun ChartBox(
                 if (labels.isNotEmpty()) {
                     labels.forEachIndexed { index, label ->
                         val x = chartLeft + step * index
-                        val measured = textMeasurer.measure(
-                            text = label,
-                            style = axisLabelStyle
-                        )
+                        val measured = axisLabelLayouts[index]
                         drawText(
                             textLayoutResult = measured,
                             topLeft = Offset(
