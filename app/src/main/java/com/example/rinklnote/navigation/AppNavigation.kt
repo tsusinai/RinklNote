@@ -232,7 +232,7 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Page content — swipe left/right to switch tabs
             HorizontalPager(
