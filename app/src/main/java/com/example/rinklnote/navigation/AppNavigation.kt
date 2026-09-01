@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -465,7 +466,7 @@ private fun CustomBottomBar(
         label = "indicator"
     )
 
-    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
