@@ -64,4 +64,11 @@ private fun Transaction.runMigrations() {
             // Ignore "index already exists" errors
         }
     }
+
+    // v11 迁移：users.phone/password_hash 改为可空，以支持「QQ openid 自动开户」。
+    // createMissingTablesAndColumns 只加表/加列，不会改动已有列 nullability，需手动 ALTER。
+    listOf("ALTER TABLE users ALTER COLUMN phone SET NULL",
+            "ALTER TABLE users ALTER COLUMN password_hash SET NULL").forEach { sql ->
+        try { exec(sql) } catch (_: Exception) {}
+    }
 }

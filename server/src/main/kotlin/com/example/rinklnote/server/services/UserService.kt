@@ -11,7 +11,7 @@ import java.util.*
 
 data class UserInfo(
     val id: Long,
-    val phone: String,
+    val phone: String?,
     val qqNumber: String?,
     val qqOpenid: String?,
     val createdAt: String? = null,
@@ -85,6 +85,17 @@ class UserService(
         }
     }
 
+    /** QQ openid 自动开户：phone/passwordHash 为空，身份即 openid。已存在则返回既有用户。 */
+    fun createByQqOpenid(openid: String): UserInfo {
+        return findByQqOpenid(openid) ?: transaction {
+            val userId = UsersTable.insert {
+                it[UsersTable.qqOpenid] = openid
+                it[createdAt] = LocalDateTime.now().toString()
+            } get UsersTable.id
+            UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
+        }
+    }
+
     /** 所有已绑定 QQ（qqOpenid 非空）的用户，用于主动推送枚举。 */
     fun findAllBoundQq(): List<UserInfo> = transaction {
         UsersTable.selectAll().where { UsersTable.qqOpenid.isNotNull() }.map { it.toUserInfo() }
@@ -149,12 +160,13 @@ class UserService(
         }
     }
 
-    private fun generateToken(userId: Long, phone: String): String {
-        return JWT.create()
+    fun generateToken(userId: Long, phone: String?): String {
+        val builder = JWT.create()
             .withAudience(jwtAudience)
             .withIssuer(jwtIssuer)
             .withClaim("userId", userId)
-            .withClaim("phone", phone)
+        if (phone != null) builder.withClaim("phone", phone)
+        return builder
             .withExpiresAt(Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000))
             .sign(Algorithm.HMAC256(jwtSecret))
     }

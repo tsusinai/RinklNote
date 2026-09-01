@@ -29,7 +29,7 @@ data class MessageResponse(val message: String)
 @Serializable
 data class MeResponse(
     val id: Long,
-    val phone: String,
+    val phone: String?,
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,

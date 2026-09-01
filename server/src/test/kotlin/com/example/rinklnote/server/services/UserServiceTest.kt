@@ -115,4 +115,29 @@ class UserServiceTest {
         assertEquals(id1, bound.first().id)
         assertFalse(bound.first().aiDisabled)
     }
+
+    @Test
+    fun `createByQqOpenid creates openid account with null phone and is idempotent`() {
+        val u1 = service.createByQqOpenid("openid-xxx")
+        assertNotNull(u1)
+        assertNull(u1.phone)
+        assertEquals("openid-xxx", u1.qqOpenid)
+        assertNotNull(service.findById(u1.id))
+        assertNull(service.findById(u1.id)!!.phone)
+
+        // 同一 openid 再调用返回同一账号，不重复建
+        val u2 = service.createByQqOpenid("openid-xxx")
+        assertEquals(u1.id, u2.id)
+    }
+
+    @Test
+    fun `openid account cannot be phone-logged-in and token works for null phone`() {
+        val u = service.createByQqOpenid("openid-yyy")
+        assertNull(service.login("", "whatever"))
+        assertNull(service.findByPhone(""))
+
+        // generateToken 接受 null phone，产出合法 JWT（三段）
+        val token = service.generateToken(u.id, u.phone)
+        assertEquals(3, token.split(".").size)
+    }
 }
