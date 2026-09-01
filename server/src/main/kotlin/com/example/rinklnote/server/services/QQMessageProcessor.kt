@@ -62,6 +62,8 @@ object QQMessageProcessor {
                     groupOpenid = null
                 }
                 "GROUP_AT_MESSAGE_CREATE" -> {
+                    // 身份作用域：群聊用 member_openid，单聊用 user_openid（下方 C2C）。同一用户两种身份不同，
+                    // 自动开户会按先到的身份建账号 —— 一人可能得到两个账号（账单按身份隔离）。平台限制，个人应用接受。
                     openid = author?.get("member_openid")?.jsonPrimitive?.content ?: return
                     groupOpenid = d["group_openid"]?.jsonPrimitive?.content
                 }
