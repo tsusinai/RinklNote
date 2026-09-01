@@ -177,7 +177,7 @@ fun Application.module() {
     }
 
     routing {
-        authRoutes(userService)
+        authRoutes(userService, qqBotService)
         billRoutes(billService, nluService)
         accountRoutes(billService)
         transcribeRoutes(asrService)

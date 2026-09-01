@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.InMemoryRateLimiter
+import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -42,7 +43,10 @@ data class ChangePasswordRequest(val oldPassword: String, val newPassword: Strin
 @Serializable
 data class AiSettingRequest(val disabled: Boolean)
 
-fun Route.authRoutes(userService: UserService) {
+@Serializable
+data class QqLoginRequest(val code: String)
+
+fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
     // In-memory per-IP limiting: blocks brute-force login/password guessing and
     // mass account creation. Generous limits so legit users behind a shared IP
     // are not affected.
@@ -91,6 +95,26 @@ fun Route.authRoutes(userService: UserService) {
             loginLimiter.recordSuccess(ip)
             val (userId, token) = result
             call.respond(AuthResponse(userId, token))
+        }
+
+        post("/qq-login") {
+            val ip = call.request.local.remoteHost
+            if (loginLimiter.isBlocked(ip)) {
+                call.respond(HttpStatusCode.TooManyRequests, MessageResponse("尝试次数过多，请稍后再试"))
+                return@post
+            }
+            val body = call.receive<QqLoginRequest>()
+            if (body.code.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, MessageResponse("登录码不能为空"))
+                return@post
+            }
+            val openid = qqBotService.consumeBindCode(body.code)
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, MessageResponse("登录码无效或已过期"))
+            val user = userService.findByQqOpenid(openid)
+                ?: return@post call.respond(HttpStatusCode.NotFound, MessageResponse("该QQ尚未开通账号，请先给机器人发消息"))
+            loginLimiter.recordSuccess(ip)
+            val token = userService.generateToken(user.id, user.phone)
+            call.respond(AuthResponse(user.id, token))
         }
 
         authenticate("auth-jwt") {
