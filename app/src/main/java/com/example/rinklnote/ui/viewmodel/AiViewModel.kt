@@ -153,11 +153,27 @@ class AiViewModel(
             if (repository.countChatMessages("summary", monthStart) > 0) return@launch
             val month = LocalDate.now(zone).format(DateTimeFormatter.ofPattern("yyyy-MM"))
             try {
-                val r = api.getMonthlySummary(month)
+                val r = api.getMonthlyReview(month)
                 val content = buildString {
                     append("这个月收支给你捋一捋👇\n")
                     append(r.summary)
                     r.highlights.forEach { append("\n• ").append(it) }
+                    // 并入异常事实：超标日 / 最大单笔 / 消费集中
+                    if (r.spikeDays.isNotEmpty()) {
+                        append("\n⚠️ 超标日")
+                        r.spikeDays.take(5).forEach {
+                            append("\n- ").append(it.date).append(" ¥").append("%.2f".format(it.amount))
+                                .append("（超日均").append(it.ratioPct).append("%）")
+                        }
+                    }
+                    r.biggestSingle?.let {
+                        append("\n🔍 最大单笔：").append(it.categoryName).append(" ¥")
+                            .append("%.2f".format(it.amount)).append("（").append(it.date).append("）")
+                    }
+                    if (r.topCategories.isNotEmpty()) {
+                        append("\n🧾 消费集中：")
+                        append(r.topCategories.joinToString("、") { it.name + " ¥" + "%.2f".format(it.amount) })
+                    }
                 }
                 repository.insertChatMessage(
                     ChatMessage(role = "assistant", kind = "summary", content = content, createdAt = now())

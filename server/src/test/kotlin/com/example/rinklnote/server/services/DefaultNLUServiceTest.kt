@@ -99,4 +99,18 @@ class DefaultNLUServiceTest {
         // No category matches, LLM fallback returns null on the closed port.
         assertNull(r.categoryName)
     }
+
+    @Test
+    fun `extractAmount parses uppercase chinese numerals`() = runBlocking {
+        val r = nlu.parse("打车贰拾五元", 1L)
+        assertEquals(25.0, r.amount ?: 0.0, 0.0001)
+        assertEquals("交通", r.categoryName)
+    }
+
+    @Test
+    fun `extractAmount parses mixed chinese numerals with 圆`() = runBlocking {
+        val r = nlu.parse("午餐壹佰贰拾叁圆", 1L)
+        assertEquals(123.0, r.amount ?: 0.0, 0.0001)
+        assertEquals("三餐", r.categoryName)
+    }
 }

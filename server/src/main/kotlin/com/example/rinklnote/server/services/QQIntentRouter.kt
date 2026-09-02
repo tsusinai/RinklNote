@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.services
 
 import com.example.rinklnote.server.services.insight.InsightService
+import com.example.rinklnote.server.services.insight.MonthlyAnomalyResponse
 import com.example.rinklnote.server.services.nlu.NLUService
 import com.example.rinklnote.server.services.nlu.RuleBasedParser
 import java.time.LocalDate
@@ -41,7 +42,13 @@ class QQIntentRouter(
         // (刚才/那笔) only narrow down the target, never trigger deletion.
         if (DELETE_VERB.containsMatchIn(content)) return deleteIntent(content, userId)
 
-        // C. Query
+        // C. Summary / Anomaly — explicit intent words, checked before the amount gate so
+        // a historical month ("分析一下8月", "8月异常") doesn't get its "8" misread as an
+        // amount and pushed into bookkeeping. Supports any month via resolveYearMonth.
+        if (SUMMARY.containsMatchIn(content)) return monthlySummary(content, userId)
+        if (ANOMALY.containsMatchIn(content)) return anomaly(content, userId)
+
+        // D. Query
         val hasAmount = extractAmount(content) != null
         val askWord = ASK_WORD.containsMatchIn(content)
         if (!(hasAmount && !askWord)) {
@@ -58,12 +65,10 @@ class QQIntentRouter(
             if (BUDGET.containsMatchIn(content)) return budget(userId)
             if (TOP.containsMatchIn(content)) return topCategories(userId)
             if (RECENT.containsMatchIn(content) && RECENT_NOUN.containsMatchIn(content)) return recentBills(content, userId)
-            if (SUMMARY.containsMatchIn(content)) return monthlySummary(userId)
-            if (ANOMALY.containsMatchIn(content)) return anomaly(userId)
             if (SUGGEST.containsMatchIn(content)) return suggest(userId)
         }
 
-        // D. Bookkeeping
+        // E. Bookkeeping
         val result = nluService.parse(content, userId)
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, result.amount, result.categoryName, result.remark, "QQ")
@@ -142,9 +147,11 @@ class QQIntentRouter(
         }.joinToString("\n")
     }
 
-    private suspend fun monthlySummary(userId: Long): String {
-        val ym = LocalDate.now(shanghai).format(DateTimeFormatter.ofPattern("yyyy-MM"))
-        val resp = insightService.monthlySummary(userId, ym)
+    private suspend fun monthlySummary(content: String, userId: Long): String {
+        val now = LocalDate.now(shanghai)
+        val target = InsightService.resolveYearMonth(content, now) ?: now.withDayOfMonth(1)
+        val ym = target.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        val resp = insightService.monthlyReview(userId, ym)
         val sb = StringBuilder(resp.summary)
         if (resp.highlights.isNotEmpty()) {
             sb.append("\n").append(resp.highlights.joinToString("\n") { "· $it" })
@@ -152,11 +159,21 @@ class QQIntentRouter(
         return sb.toString()
     }
 
-    private suspend fun anomaly(userId: Long): String {
-        val alerts = insightService.anomalyCheck(userId).alerts
-        if (alerts.isEmpty()) return "今日暂无异常"
-        return alerts.joinToString("\n") { it.message }
+    private suspend fun anomaly(content: String, userId: Long): String {
+        val now = LocalDate.now(shanghai)
+        val target = InsightService.resolveYearMonth(content, now)
+        // Historical month → monthly anomaly facts; no month → today's alert check.
+        if (target == null) {
+            val alerts = insightService.anomalyCheck(userId).alerts
+            if (alerts.isEmpty()) return "今日暂无异常"
+            return alerts.joinToString("\n") { it.message }
+        }
+        val ym = target.format(DateTimeFormatter.ofPattern("yyyy-MM"))
+        return renderMonthlyAnomaly(insightService.monthlyAnomaly(userId, ym))
     }
+
+    private fun renderMonthlyAnomaly(resp: MonthlyAnomalyResponse): String =
+        "${resp.month} 异常分析：\n${resp.analysis}"
 
     private fun suggest(userId: Long): String {
         val pattern = insightService.suggestDailyPattern(userId)
@@ -216,8 +233,8 @@ class QQIntentRouter(
         预算: 这个月预算
         最近: 最近几笔 / 最近10笔
         删除: 删除午餐 / 删掉刚才那笔
-        总结: 分析一下这个月
-        异常: 今日异常
+        总结: 分析一下这个月 / 8月
+        异常: 今日异常 / 8月异常
         建议: 给点建议
     """.trimIndent()
 

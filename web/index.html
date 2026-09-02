@@ -6,6 +6,7 @@
 <title>RinklNote - 记账</title>
 <script src="/js/react.min.js"></script>
 <script src="/js/react-dom.min.js"></script>
+<script src="/js/prop-types.min.js"></script>
 <script src="/js/recharts.js"></script>
 <link rel="icon" href="data:,">
 <style>
@@ -189,6 +190,7 @@ const S = { tab: 'add', user: null, token: localStorage.getItem('rkl_token'),
   botAppId: '', botSecret: '', botShowSecret: false,
   lastSync: 0, me: null, theme: localStorage.getItem('rkl_theme') || 'system',
   searchFocus: false, revealBalance: false,
+  revMonth: (()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');})(),
 };
 
 const TABS = [
@@ -281,7 +283,7 @@ function render() {
   }
   content.appendChild(pg);
 
-  if (S.tab === 'charts') setTimeout(drawCharts, 100);
+  if (S.tab === 'charts') { setTimeout(drawCharts, 100); setTimeout(loadMonthlyReview, 0); }
 }
 
 // Debounced full re-render — high-frequency handlers (e.g. search input) call
@@ -601,6 +603,15 @@ let chartPeriod = 'month';
 function renderCharts(pg) {
   pg.append(h('h2', null, '图表分析'));
 
+  // 月度复盘面板：总结 + 异常。默认当前月，可切换月份。
+  pg.append(h('div', { className: 'card', id: 'rev-panel', style: 'margin-bottom:20px' },
+    h('div', { style: 'display:flex;justifyContent:space-between;alignItems:center;marginBottom:12px' },
+      h('h3', { style: 'fontSize:14px;color:var(--muted);marginBottom:0' }, '月度复盘'),
+      h('input', { type: 'month', value: S.revMonth, onchange: e => { S.revMonth = e.target.value; loadMonthlyReview(); } })
+    ),
+    h('div', { id: 'rev-body', style: 'line-height:1.6;color:var(--text)' }, '加载中…')
+  ));
+
   const tog = h('div', { className: 'toggle', style: 'margin-bottom:20px' });
   [{k:'week',l:'本周'},{k:'month',l:'本月'},{k:'year',l:'本年'}].forEach(p => {
     tog.appendChild(h('button', {
@@ -615,6 +626,41 @@ function renderCharts(pg) {
   cg.append(h('div', { className: 'card', id: 'chart-line' }, h('h3',{style:'fontSize:14px;color:var(--muted);marginBottom:16px'},'月度趋势')));
   pg.appendChild(cg);
   pg.append(h('div', { className: 'card', id: 'chart-bar', style: 'margin-top:20px' }, h('h3',{style:'fontSize:14px;color:var(--muted);marginBottom:16px'},'每日支出')));
+}
+
+// 拉取指定月份的月度复盘（/api/insights/monthly-review），填充 #rev-body。全程异步，
+// 只更新面板内部，不触发整棵 re-render，避免图表二次重绘。
+async function loadMonthlyReview() {
+  const body = document.getElementById('rev-body');
+  if (!body) return;
+  body.textContent = '加载中…';
+  try {
+    const r = await api('/api/insights/monthly-review?month=' + encodeURIComponent(S.revMonth));
+    if (!r || !r.summary) throw new Error('empty');
+    if ((r.totalExpense || 0) === 0 && (r.totalIncome || 0) === 0) {
+      body.textContent = '本月暂无记账数据，记一笔即可看到复盘～';
+      return;
+    }
+    body.innerHTML = '';
+    body.appendChild(h('p', { style: 'white-space:pre-wrap' }, r.summary));
+    (r.highlights || []).forEach(x => body.appendChild(h('p', { style: 'margin:4px 0;color:var(--muted)' }, '· ' + x)));
+    if (r.spikeDays && r.spikeDays.length) {
+      body.appendChild(h('p', { style: 'margin:12px 0 4px' }, '⚠️ 超标日'));
+      r.spikeDays.slice(0, 5).forEach(s => body.appendChild(
+        h('p', { style: 'margin:2px 0' }, '- ' + s.date + ' ¥' + s.amount.toFixed(2) + '（超日均' + s.ratioPct + '%）')
+      ));
+    }
+    if (r.biggestSingle) {
+      body.appendChild(h('p', { style: 'margin:6px 0' },
+        '🔍 最大单笔：' + r.biggestSingle.categoryName + ' ¥' + r.biggestSingle.amount.toFixed(2) + '（' + r.biggestSingle.date + '）'));
+    }
+    if (r.topCategories && r.topCategories.length) {
+      body.appendChild(h('p', { style: 'margin:6px 0' },
+        '🧾 消费集中：' + r.topCategories.map(c => c.name + ' ¥' + c.amount.toFixed(2)).join('、')));
+    }
+  } catch (e) {
+    body.textContent = '月度复盘加载失败，请先登录并确保本月有数据';
+  }
 }
 
 function drawCharts() {
@@ -1209,12 +1255,17 @@ function renderTemplateSection(box) {
   box.querySelector('#tmpl_add_btn').onclick = async () => {
     const catVal = (catSel.value||'').split('||');
     if(!catVal[0]||!acctSel.value){S.msg='请选择分类和账户';render();return;}
-    await api('/api/templates',{method:'POST',body:JSON.stringify({
-      label:box.querySelector('#tmpl_label').value||'未命名',
-      amount:parseFloat(box.querySelector('#tmpl_amount').value||'0'),
-      categoryId:parseInt(catVal[0]),categoryName:catVal[1]||'',
-      accountId:parseInt(acctSel.value),sortOrder:0
-    })});
+    try {
+      const r = await api('/api/templates',{method:'POST',body:JSON.stringify({
+        label:box.querySelector('#tmpl_label').value||'未命名',
+        amount:parseFloat(box.querySelector('#tmpl_amount').value||'0'),
+        categoryId:parseInt(catVal[0]),categoryName:catVal[1]||'',
+        accountId:parseInt(acctSel.value),sortOrder:0
+      })});
+      S.msg = (r && r.id) ? '模板已添加' : (r.message || '模板添加失败');
+    } catch(e) {
+      S.msg = '模板添加失败，请重试';
+    }
     render(); // re-render to refresh template list
   };
 

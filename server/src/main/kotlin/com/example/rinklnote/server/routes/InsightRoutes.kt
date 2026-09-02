@@ -38,6 +38,32 @@ fun Route.insightRoutes(insightService: InsightService) {
                 call.respond(result)
             }
 
+            get("/monthly-anomaly") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val month = call.request.queryParameters["month"]
+                    ?: java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"))
+
+                val result = insightService.monthlyAnomaly(userId, month)
+                call.respond(result)
+            }
+
+            get("/monthly-review") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val month = call.request.queryParameters["month"]
+                    ?: java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"))
+
+                val result = insightService.monthlyReview(userId, month)
+                call.respond(result)
+            }
+
             post("/query") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()

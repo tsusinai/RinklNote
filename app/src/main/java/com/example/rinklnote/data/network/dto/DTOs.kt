@@ -151,3 +151,26 @@ data class AnomalyAlert(
     val message: String = "",
     val type: String = ""
 )
+
+@Serializable
+data class CategoryAmount(val name: String = "", val amount: Double = 0.0)
+
+@Serializable
+data class MonthlySpike(val date: String = "", val amount: Double = 0.0, val ratioPct: Int = 0)
+
+@Serializable
+data class SingleBill(val amount: Double = 0.0, val categoryName: String = "", val date: String = "")
+
+@Serializable
+data class MonthlyReviewResponse(
+    val month: String = "",
+    val summary: String = "",
+    val highlights: List<String> = emptyList(),
+    val totalExpense: Double = 0.0,
+    val totalIncome: Double = 0.0,
+    val activeDays: Int = 0,
+    val avgDailyExpense: Double = 0.0,
+    val spikeDays: List<MonthlySpike> = emptyList(),
+    val biggestSingle: SingleBill? = null,
+    val topCategories: List<CategoryAmount> = emptyList()
+)

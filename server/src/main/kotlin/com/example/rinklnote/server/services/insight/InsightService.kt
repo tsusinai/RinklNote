@@ -10,6 +10,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -41,6 +42,44 @@ data class QueryResponse(
 @Serializable
 data class HabitResponse(
     val content: String? = null
+)
+
+@Serializable
+data class CategoryAmount(val name: String, val amount: Double)
+
+@Serializable
+data class MonthlyAnomalyResponse(
+    val month: String,
+    val totalExpense: Double,
+    val activeDays: Int,
+    val avgDailyExpense: Double,
+    val spikeDays: List<MonthlySpike>,
+    val biggestSingle: SingleBill?,
+    val topCategories: List<CategoryAmount>,
+    val analysis: String
+)
+
+@Serializable
+private data class MonthlyAnomalyAnalysis(val analysis: String)
+
+@Serializable
+data class MonthlySpike(val date: String, val amount: Double, val ratioPct: Int)
+
+@Serializable
+data class SingleBill(val amount: Double, val categoryName: String, val date: String)
+
+@Serializable
+data class MonthlyReviewResponse(
+    val month: String,
+    val summary: String,
+    val highlights: List<String>,
+    val totalExpense: Double,
+    val totalIncome: Double,
+    val activeDays: Int,
+    val avgDailyExpense: Double,
+    val spikeDays: List<MonthlySpike>,
+    val biggestSingle: SingleBill?,
+    val topCategories: List<CategoryAmount>
 )
 
 class InsightService(
@@ -93,6 +132,173 @@ class InsightService(
             summary = "${month} 总支出 ¥${"%.2f".format(totalExpense)}，收入 ¥${"%.2f".format(totalIncome)}，钱要花得开心，也要记得给自己留一点～",
             highlights = emptyList()
         )
+    }
+
+    /**
+     * 按月异常分析（规则版，无 LLM）。与 anomalyCheck（仅当天）互补：
+     * 以「本月实际有支出的天数为分母」算日均，找出本月支出超过该日均 [anomalyThreshold] 倍的
+     * 超标日、当月最大单笔、以及支出分类集中度。可复用（App/网页/QQ 推送）。
+     */
+    suspend fun monthlyAnomaly(userId: Long, month: String): MonthlyAnomalyResponse {
+        val f = computeMonthlyFacts(userId, month)
+        val analysis = anomalyAnalysis(f)
+        return MonthlyAnomalyResponse(
+            month = f.month, totalExpense = f.totalExpense, activeDays = f.activeDays,
+            avgDailyExpense = f.avgDailyExpense, spikeDays = f.spikeDays,
+            biggestSingle = f.biggestSingle, topCategories = f.topCategories,
+            analysis = analysis
+        )
+    }
+
+    /** LLM 生成月度异常分析；失败/缺失回退到规则文案（含同样的事实点）。 */
+    private suspend fun anomalyAnalysis(f: MonthlyFacts): String {
+        val spikeLines = if (f.spikeDays.isEmpty()) "无"
+            else f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" }
+        val topLines = f.topCategories.joinToString { "${it.name} ¥${"%.2f".format(it.amount)}" }
+        val biggest = f.biggestSingle?.let { "${it.categoryName} ¥${"%.2f".format(it.amount)}（${it.date}）" } ?: "无"
+        val context = """
+账单异常数据 (${f.month}):
+- 总支出: ¥${"%.2f".format(f.totalExpense)}
+- 记账天数: ${f.activeDays} 天，日均支出: ¥${"%.2f".format(f.avgDailyExpense)}
+- 超标日: ${spikeLines}
+- 最大单笔: ${biggest}
+- 消费集中TOP5: ${topLines}
+
+请用自然亲切的中文写一段 60-120 字的月度异常分析，指出这个月哪里花钱异常、哪些点值得注意，语气温和、别责怪，也别过度渲染。若该月整体平稳，就自然说明无明显异常。
+返回JSON: {"analysis": "你的分析"}
+""".trimIndent()
+        return try {
+            val jsonStr = llmParser.chat(
+                "你是一个贴心又不唠叨的记账异常分析助手，用自然亲切的中文。必须返回 JSON 对象。",
+                context
+            )
+            val ans = jsonStr?.let {
+                Json { ignoreUnknownKeys = true; isLenient = true }
+                    .decodeFromString<MonthlyAnomalyAnalysis>(it).analysis.trim()
+            }
+            if (!ans.isNullOrBlank()) ans else fallbackAnomalyAnalysis(f)
+        } catch (_: Exception) {
+            fallbackAnomalyAnalysis(f)
+        }
+    }
+
+    private fun fallbackAnomalyAnalysis(f: MonthlyFacts): String {
+        val sb = StringBuilder("本月支出 ¥${"%.2f".format(f.totalExpense)}，记账 ${f.activeDays} 天，日均 ¥${"%.2f".format(f.avgDailyExpense)}。")
+        if (f.spikeDays.isEmpty()) {
+            sb.append("整体节奏比较平稳，没有明显超标日。")
+        } else {
+            sb.append("有 ${f.spikeDays.size} 天支出明显超标：")
+                .append(f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" })
+                .append("。")
+        }
+        f.biggestSingle?.let { sb.append("最大单笔是${it.categoryName} ¥${"%.2f".format(it.amount)}。") }
+        return sb.toString()
+    }
+
+    /**
+     * 月度复盘：月度总结（LLM）+ 异常事实，一次返回。总结的上下文里追加了异常事实
+     * （超标日/最大单笔/分类集中度），LLM 复盘时能自然点出值得注意的点。所有下游
+     * （App/网页/QQ 推送）都消费这个统一入口，不再各问各的。
+     */
+    suspend fun monthlyReview(userId: Long, month: String): MonthlyReviewResponse {
+        val f = computeMonthlyFacts(userId, month)
+
+        val spikeLines = if (f.spikeDays.isEmpty()) "无"
+            else f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" }
+        val topLines = f.topCategories.joinToString { "${it.name} ¥${"%.2f".format(it.amount)}" }
+
+        val context = """
+账单数据 ($month):
+- 总支出: ¥${"%.2f".format(f.totalExpense)}
+- 总收入: ¥${"%.2f".format(f.totalIncome)}
+- 记账天数: ${f.activeDays} 天，日均支出: ¥${"%.2f".format(f.avgDailyExpense)}
+- 支出分类TOP5: ${topLines}
+- 超标日: ${spikeLines}
+- 最大单笔: ${f.biggestSingle?.let { "${it.categoryName} ¥${"%.2f".format(it.amount)}（${it.date}）" } ?: "无"}
+
+请你用自然亲切的中文写一段简洁的月度消费复盘（80-150字），语气温和，别像冷冰冰的报告，并列出2-3个值得关注的点(highlights)。若某月超标日/最大单笔异常明显，请在总结中自然点出，但别过度渲染。
+
+返回JSON: {"summary": "总结文字", "highlights": ["亮点1", "亮点2"]}
+""".trimIndent()
+
+        try {
+            val jsonStr = llmParser.chat(
+                "你是一个贴心又不失专业的个人财务助手，用自然亲切的中文回答，别写成冷冰冰的报告，语气温和。你必须返回一个 JSON 对象。",
+                context
+            )
+            if (jsonStr != null) {
+                val parsed = Json { ignoreUnknownKeys = true; isLenient = true }
+                    .decodeFromString<MonthlySummaryResponse>(jsonStr)
+                return MonthlyReviewResponse(
+                    month = month, summary = parsed.summary, highlights = parsed.highlights,
+                    totalExpense = f.totalExpense, totalIncome = f.totalIncome,
+                    activeDays = f.activeDays, avgDailyExpense = f.avgDailyExpense,
+                    spikeDays = f.spikeDays, biggestSingle = f.biggestSingle, topCategories = f.topCategories
+                )
+            }
+        } catch (_: Exception) {}
+
+        val sumMsg = buildString {
+            append("${month} 总支出 ¥${"%.2f".format(f.totalExpense)}，收入 ¥${"%.2f".format(f.totalIncome)}")
+            if (f.activeDays > 0) append("，日均 ¥${"%.2f".format(f.avgDailyExpense)}")
+        }
+        return MonthlyReviewResponse(
+            month = month, summary = sumMsg + "，钱要花得开心，也要记得给自己留一点～", highlights = emptyList(),
+            totalExpense = f.totalExpense, totalIncome = f.totalIncome,
+            activeDays = f.activeDays, avgDailyExpense = f.avgDailyExpense,
+            spikeDays = f.spikeDays, biggestSingle = f.biggestSingle, topCategories = f.topCategories
+        )
+    }
+
+    /** 按月聚合异常事实（规则版，无 LLM），供 monthlyAnomaly / monthlyReview 共享。 */
+    private suspend fun computeMonthlyFacts(userId: Long, month: String): MonthlyFacts {
+        require(month.matches(Regex("""^\d{4}-(0[1-9]|1[0-2])$"""))) { "月份格式错误，需要 YYYY-MM" }
+        val (y, m) = month.split("-").map { it.toInt() }
+        val monthStart = LocalDate.of(y, m, 1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
+        val nextMonthStart = LocalDate.of(y, m, 1).plusMonths(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
+
+        val inWindow = billService.allBills(userId).filter { it.date >= monthStart && it.date < nextMonthStart }
+        val expenses = inWindow.filter { it.billType == "EXPENSE" }
+        val totalExpense = Money.cents(expenses.sumOf { it.amount })
+        val totalIncome = Money.cents(inWindow.filter { it.billType == "INCOME" }.sumOf { it.amount })
+
+        val byDay = expenses.groupBy { dayKey(it.date) }
+        val activeDays = byDay.size
+        val avg = if (activeDays > 0) Money.cents(totalExpense / activeDays) else 0.0
+
+        val spikes = byDay.mapNotNull { (d, bills) ->
+            val dayTotal = Money.cents(bills.sumOf { it.amount })
+            if (avg > 0 && dayTotal > avg * anomalyThreshold) {
+                MonthlySpike(date = d, amount = dayTotal, ratioPct = ((dayTotal / avg - 1) * 100).toInt())
+            } else null
+        }.sortedByDescending { it.ratioPct }
+
+        val biggest = expenses.maxByOrNull { it.amount }?.let {
+            SingleBill(amount = it.amount, categoryName = it.categoryName, date = dayKey(it.date))
+        }
+
+        val top = expenses.groupBy { it.categoryName }
+            .mapValues { Money.cents(it.value.sumOf { b -> b.amount }) }
+            .entries.sortedByDescending { it.value }.take(5)
+            .map { CategoryAmount(it.key, it.value) }
+
+        return MonthlyFacts(month, totalExpense, totalIncome, activeDays, avg, spikes, biggest, top)
+    }
+
+    private data class MonthlyFacts(
+        val month: String,
+        val totalExpense: Double,
+        val totalIncome: Double,
+        val activeDays: Int,
+        val avgDailyExpense: Double,
+        val spikeDays: List<MonthlySpike>,
+        val biggestSingle: SingleBill?,
+        val topCategories: List<CategoryAmount>
+    )
+
+    private fun dayKey(epochMs: Long): String {
+        val d = LocalDate.ofInstant(Instant.ofEpochMilli(epochMs), SHANGHAI)
+        return "${d.monthValue}/${d.dayOfMonth}"
     }
 
     suspend fun anomalyCheck(userId: Long): AnomalyResponse {

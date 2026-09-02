@@ -101,6 +101,9 @@ interface ApiService {
     @GET("api/insights/monthly")
     suspend fun getMonthlySummary(@Query("month") month: String): MonthlySummaryResponse
 
+    @GET("api/insights/monthly-review")
+    suspend fun getMonthlyReview(@Query("month") month: String): MonthlyReviewResponse
+
     @GET("api/insights/anomaly")
     suspend fun getAnomalyAlerts(): AnomalyResponse
 

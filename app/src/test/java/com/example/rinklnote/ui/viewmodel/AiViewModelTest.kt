@@ -11,6 +11,9 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AccountDTO
 import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.AnomalyAlert
+import com.example.rinklnote.data.network.dto.CategoryAmount
+import com.example.rinklnote.data.network.dto.MonthlySpike
+import com.example.rinklnote.data.network.dto.MonthlyReviewResponse
 import com.example.rinklnote.data.network.dto.HabitResponse
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
@@ -305,10 +308,14 @@ class AiViewModelTest {
         override suspend fun seedIfNeeded() {}
     }
 
-    /** ApiService fake：覆写 parseBill + 3 个 insights 方法，其余桩。 */
+    /** ApiService fake：覆写 parseBill + insights 方法，其余桩。 */
     private class FakeApiService : ApiService {
-        var monthlyResult: MonthlySummaryResponse =
-            MonthlySummaryResponse(summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"))
+        var reviewResult: MonthlyReviewResponse =
+            MonthlyReviewResponse(
+                summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"),
+                spikeDays = listOf(MonthlySpike("8/15", 200.0, 60)),
+                topCategories = listOf(CategoryAmount("餐饮", 800.0))
+            )
         var monthlyError: Exception? = null
         var anomalyResult: AnomalyResponse =
             AnomalyResponse(alerts = listOf(AnomalyAlert("HIGH", "周末支出异常偏高", "spike")))
@@ -319,9 +326,11 @@ class AiViewModelTest {
         override suspend fun parseBill(request: ParseRequest): ParseResponse =
             ParseResponse(amount = "28", categoryName = "三餐", remark = request.text)
 
-        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse {
+        override suspend fun getMonthlySummary(month: String): MonthlySummaryResponse =
+            MonthlySummaryResponse()
+        override suspend fun getMonthlyReview(month: String): MonthlyReviewResponse {
             monthlyError?.let { throw it }
-            return monthlyResult
+            return reviewResult
         }
         override suspend fun getAnomalyAlerts(): AnomalyResponse = anomalyResult
         override suspend fun queryBillData(request: QueryRequest): QueryResponse {

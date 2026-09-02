@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
 data class AccessTokenResponse(val access_token: String, val expires_in: Long)
 
 @Serializable
-data class SendMessageRequest(val content: String, val msg_id: String)
+data class SendMessageRequest(val content: String, val msg_id: String? = null)
 
 class QQBotService {
     private val logger = LoggerFactory.getLogger(QQBotService::class.java)
@@ -37,7 +37,10 @@ class QQBotService {
     // Access token is issued by the auth host (bots.qq.com), NOT the api gateway.
     private val authUrl = "https://bots.qq.com"
 
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    // explicitNulls=false: active C2C/group pushes must OMIT msg_id entirely — QQ rejects a
+    // client-generated msg_id with 40034024 "msg_id无效或越权". msg_id is only valid as a passive
+    // reply key (the received event's id), so a null msg_id signals "active push" and gets dropped.
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true; explicitNulls = false }
 
     private val client = HttpClient(CIO) {
         install(HttpTimeout) { requestTimeoutMillis = 15_000 }
@@ -213,7 +216,7 @@ class QQBotService {
             val resp: HttpResponse = client.post("$baseUrl/v2/users/$openid/messages") {
                 contentType(ContentType.Application.Json)
                 header("Authorization", "QQBot $token")
-                setBody(SendMessageRequest(content = content, msg_id = msgId))
+                setBody(SendMessageRequest(content = content, msg_id = msgId.takeIf { it.isNotBlank() }))
             }
             logger.info("Sent message to $openid: ${resp.status.value}")
             resp.status.value in 200..299
@@ -230,7 +233,7 @@ class QQBotService {
             val resp: HttpResponse = client.post("$baseUrl/v2/groups/$groupOpenid/messages") {
                 contentType(ContentType.Application.Json)
                 header("Authorization", "QQBot $token")
-                setBody(SendMessageRequest(content = content, msg_id = msgId))
+                setBody(SendMessageRequest(content = content, msg_id = msgId.takeIf { it.isNotBlank() }))
             }
             logger.info("Sent group message to $groupOpenid: ${resp.status.value}")
             resp.status.value in 200..299

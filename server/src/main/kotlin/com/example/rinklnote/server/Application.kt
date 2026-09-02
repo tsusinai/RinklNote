@@ -115,7 +115,9 @@ fun Application.module() {
     // QQ 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）
     val pushScheduler = PushScheduler(
         userService = userService,
-        send = { openid, content, msgId -> qqBotService.sendC2CMessage(openid, content, msgId) },
+        // 主动推送：msg_id 传空串 → QQ 会省略该字段（随机 UUID 会被拒 40034024）。
+        // 被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
+        send = { openid, content, _ -> qqBotService.sendC2CMessage(openid, content, "") },
         monthlyProvider = { userId, month ->
             val (y, m) = month.split("-").map { it.toInt() }
             val zone = java.time.ZoneId.of("Asia/Shanghai")
@@ -124,11 +126,26 @@ fun Application.module() {
             val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
             if (stats.totalExpense <= 0 && stats.totalIncome <= 0) null
             else {
-                val r = insightService.monthlySummary(userId, month)
+                val r = insightService.monthlyReview(userId, month)
                 buildString {
                     append("📊 本月总结\n")
                     append(r.summary)
                     r.highlights.forEach { append("\n• ").append(it) }
+                    if (r.spikeDays.isNotEmpty()) {
+                        append("\n⚠️ 超标日\n")
+                        r.spikeDays.take(5).forEach {
+                            append("- ").append(it.date).append(" ¥").append("%.2f".format(it.amount))
+                                .append("（超日均").append(it.ratioPct).append("%）\n")
+                        }
+                    }
+                    r.biggestSingle?.let {
+                        append("\n🔍 最大单笔：").append(it.categoryName).append(" ¥")
+                            .append("%.2f".format(it.amount)).append("（").append(it.date).append("）")
+                    }
+                    if (r.topCategories.isNotEmpty()) {
+                        append("\n🧾 消费集中：")
+                        append(r.topCategories.joinToString("、") { it.name + " ¥" + "%.2f".format(it.amount) })
+                    }
                 }
             }
         },
