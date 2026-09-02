@@ -71,4 +71,47 @@ private fun Transaction.runMigrations() {
             "ALTER TABLE users ALTER COLUMN password_hash SET NULL").forEach { sql ->
         try { exec(sql) } catch (_: Exception) {}
     }
+
+    // v12 迁移：清理 accounts 上残留的「仅 name（不含 user_id）」唯一约束/索引，确保 (user_id, name) 复合唯一。
+    // createMissingTablesAndColumns 只会加表/加列：既不会 drop 旧唯一约束，也不会给既有表补新的唯一索引。
+    // 当唯一约束从「name 全局唯一」改成「(user_id, name)」时，旧 schema 留下的唯一约束（H2 自动命名，
+    // 如 ACCOUNTS_NAME_UNIQUE_INDEX_6 / CONSTRAINT_INDEX_A 形式的 backing index）会残留。
+    // 它禁止跨用户同名账户（微信/支付宝/默认）插入，于是 ensureDefaultAccounts 抛唯一冲突 → GET /api/accounts 500
+    // → Web/App 账户下拉为空、模板新建失败。
+    //
+    // 注意：H2 2.3 的 INFORMATION_SCHEMA.INDEX_COLUMNS / KEY_COLUMN_USAGE / CONSTRAINT_COLUMN_USAGE 均为空，
+    // 无法据此反查「某约束/索引覆盖哪些列」。因此不按列匹配，而是：
+    //   1) 用 TABLE_CONSTRAINTS 找出 ACCOUNTS 上的所有 UNIQUE 约束并 DROP CONSTRAINT（会连带删除其 backing index）；
+    //   2) 再用 INDEXES 兜底枚举 ACCOUNTS 上仍残留的 UNIQUE 索引（排除主键与复合 uq_accounts_user_name）并 DROP INDEX；
+    //   3) 最后确保 (user_id, name) 复合唯一索引存在。
+    // 三类 DDL 各自 try/catch，幂等，PostgreSQL 上同样安全（对应视图存在）。
+    val staleConstraints: List<String>? = exec(
+        "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'ACCOUNTS' AND CONSTRAINT_TYPE = 'UNIQUE'"
+    ) { rs ->
+        val names = mutableListOf<String>()
+        while (rs.next()) names.add(rs.getString(1))
+        names
+    }
+    staleConstraints?.forEach { name ->
+        try { exec("ALTER TABLE accounts DROP CONSTRAINT IF EXISTS \"$name\"") } catch (_: Exception) {}
+    }
+
+    val staleIndexes: List<String>? = exec(
+        """
+        SELECT INDEX_NAME FROM INFORMATION_SCHEMA.INDEXES
+        WHERE UPPER(TABLE_NAME) = 'ACCOUNTS'
+          AND UPPER(INDEX_TYPE_NAME) LIKE 'UNIQUE%'
+          AND UPPER(INDEX_NAME) NOT LIKE 'UQ_ACCOUNTS_USER_NAME%'
+          AND UPPER(INDEX_NAME) NOT LIKE 'PRIMARY_KEY%'
+        """.trimIndent()
+    ) { rs ->
+        val names = mutableListOf<String>()
+        while (rs.next()) names.add(rs.getString(1))
+        names
+    }
+    staleIndexes?.forEach { name ->
+        try { exec("DROP INDEX IF EXISTS \"$name\"") } catch (_: Exception) {}
+    }
+
+    try { exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounts_user_name ON accounts(user_id, name)") } catch (_: Exception) {}
 }
