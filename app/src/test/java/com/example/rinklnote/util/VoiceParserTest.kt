@@ -75,4 +75,25 @@ class VoiceParserTest {
         assertEquals(15.0, r.amount ?: 0.0, 0.0001)
         assertEquals("三餐", r.categoryName)
     }
+
+    @Test
+    fun `parse extracts uppercase chinese amount with yuan suffix`() {
+        val r = VoiceParser.parse("午餐贰拾元")
+        assertEquals(20.0, r.amount ?: 0.0, 0.0001)
+        assertEquals("三餐", r.categoryName)
+    }
+
+    @Test
+    fun `parse extracts uppercase chinese amount with 圆 suffix`() {
+        val r = VoiceParser.parse("打车壹佰贰拾叁圆")
+        assertEquals(123.0, r.amount ?: 0.0, 0.0001)
+        assertEquals("交通", r.categoryName)
+    }
+
+    @Test
+    fun `parse extracts mixed uppercase and lowercase chinese amount`() {
+        val r = VoiceParser.parse("零食贰拾八块")
+        assertEquals(28.0, r.amount ?: 0.0, 0.0001)
+        assertEquals("三餐", r.categoryName)
+    }
 }

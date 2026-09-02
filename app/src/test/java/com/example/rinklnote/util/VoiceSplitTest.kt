@@ -56,4 +56,25 @@ class VoiceSplitTest {
         assertNull(VoiceParser.cnNumToDouble("这"))
         assertNull(VoiceParser.cnNumToDouble(""))
     }
+
+    @Test
+    fun `cnNumToDouble parses uppercase financial numerals`() {
+        assertEquals(20.0, VoiceParser.cnNumToDouble("贰拾") ?: 0.0, 0.0001)
+        assertEquals(123.0, VoiceParser.cnNumToDouble("壹佰贰拾叁") ?: 0.0, 0.0001)
+        assertEquals(105.0, VoiceParser.cnNumToDouble("壹佰零伍") ?: 0.0, 0.0001)
+        assertEquals(28.0, VoiceParser.cnNumToDouble("贰拾八") ?: 0.0, 0.0001)
+        assertEquals(100000.0, VoiceParser.cnNumToDouble("拾万") ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun `cnNumToDouble parses 廿 as twenty`() {
+        assertEquals(20.0, VoiceParser.cnNumToDouble("廿") ?: 0.0, 0.0001)
+        assertEquals(25.0, VoiceParser.cnNumToDouble("廿五") ?: 0.0, 0.0001)
+    }
+
+    @Test
+    fun `splitVoiceText normalises uppercase chinese amounts and splits`() {
+        val segs = VoiceParser.splitVoiceText("午餐贰拾八元打车拾伍圆")
+        assertEquals(listOf("午餐28元", "打车15圆"), segs)
+    }
 }

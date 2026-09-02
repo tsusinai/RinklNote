@@ -25,12 +25,16 @@ object VoiceParser {
     )
 
     fun parse(text: String): VoiceResult {
-        var amount: Double? = null
-
-        val digitPattern = Regex("""(\d+\.?\d*)\s*[元块]?""")
-        val digitMatch = digitPattern.find(text)
-        if (digitMatch != null) {
-            amount = digitMatch.groupValues[1].toDoubleOrNull()
+        // 金额提取：优先「带单位的阿拉伯数字」，其次「带单位的中文数字（大写/小写）」，最后兜底裸阿拉伯数字。
+        // 带单位优先可避免把"8月"这类日期数字误当金额。
+        var amount: Double? = Regex("""(\d+\.?\d*)\s*[元圆块]""").find(text)
+            ?.groupValues?.get(1)?.toDoubleOrNull()
+        if (amount == null) {
+            amount = Regex("""([${CN_NUM_CHARS}]+)\s*[元圆块]""").find(text)
+                ?.let { cnNumToDouble(it.groupValues[1]) }
+        }
+        if (amount == null) {
+            amount = Regex("""(\d+\.?\d*)""").find(text)?.groupValues?.get(1)?.toDoubleOrNull()
         }
 
         var categoryName: String? = null
@@ -48,19 +52,23 @@ object VoiceParser {
         )
     }
 
-    // 中文金额 token：用于分句与数值归一（"二十元" → "20元"）。
-    private val cnAmountRegex = Regex("""([零一二两三四五六七八九十百千]+)\s*([元块])""")
+    // 中文数字字符集（小写 + 大写财务数字 + 零/两/廿），用于正则匹配与数值归一。
+    private const val CN_NUM_CHARS = "零〇一二两廿三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟"
+
+    // 中文金额 token：用于分句与数值归一（"二十元" → "20元"，"贰拾圆" → "20圆"）。
+    private val cnAmountRegex = Regex("""([${CN_NUM_CHARS}]+)\s*([元圆块])""")
 
     /**
      * 把一句口语化转写拆成多笔账单片段，按「金额边界」切分。
      * 例：`午餐20元打车30元` → `["午餐20元", "打车30元"]`；
-     *    `早餐十块打车二十块` → `["早餐10块", "打车20块"]`（中文数字先归一为阿拉伯）。
-     * 无金额的句子返回空列表。金额令牌要求带「元/块」单位，避免把日期/年份误当金额。
+     *    `早餐十块打车二十块` → `["早餐10块", "打车20块"]`（中文数字先归一为阿拉伯）；
+     *    `午餐贰拾八元打车拾伍圆` → `["午餐28元", "打车15圆"]`（大写/小写混用同样归一）。
+     * 无金额的句子返回空列表。金额令牌要求带「元/圆/块」单位，避免把日期/年份误当金额。
      */
     fun splitVoiceText(input: String): List<String> {
         val text = input.trim()
         if (text.isBlank()) return emptyList()
-        val amountToken = Regex("""(?:\d+\.?\d*|[零一二两三四五六七八九十百千]+)\s*[元块]""")
+        val amountToken = Regex("""(?:\d+\.?\d*|[${CN_NUM_CHARS}]+)\s*[元圆块]""")
         val matches = amountToken.findAll(text).toList()
         if (matches.isEmpty()) return emptyList()
 
@@ -79,31 +87,38 @@ object VoiceParser {
         return segments
     }
 
-    /** 把带上「元/块」的中文数字归一为阿拉伯数字，如"二十块"→"20块"。 */
+    /** 把带上「元/圆/块」的中文数字归一为阿拉伯数字，如"二十块"→"20块"，"贰拾圆"→"20圆"。 */
     private fun normalizeAmounts(seg: String): String =
         cnAmountRegex.replace(seg) { m ->
             val n = cnNumToDouble(m.groupValues[1]) ?: return@replace m.value
             "${trimPlain(n)}${m.groupValues[2]}"
         }
 
-    /** 中文数字字符串 → Double（支持零一二两三四五六七八九、十百千万）。 */
+    /**
+     * 中文数字字符串 → Double。支持大写财务数字（壹贰叁肆伍陆柒捌玖拾佰仟万亿）与小写
+     * （一二两三四五六七八九十百千万）混用，含 零/〇/两/廿。如"二十"=20、"一百二十五"=125、
+     * "贰拾八"=28、"壹佰零伍"=105、"廿五"=25。仅整数元（不含角/分），无法识别返回 null。
+     */
     fun cnNumToDouble(s: String): Double? {
         if (s.isBlank()) return null
         val digits = mapOf(
-            '零' to 0.0, '一' to 1.0, '二' to 2.0, '两' to 2.0, '三' to 3.0,
-            '四' to 4.0, '五' to 5.0, '六' to 6.0, '七' to 7.0, '八' to 8.0, '九' to 9.0
+            '零' to 0.0, '〇' to 0.0, '一' to 1.0, '壹' to 1.0, '二' to 2.0, '贰' to 2.0, '两' to 2.0,
+            '三' to 3.0, '叁' to 3.0, '四' to 4.0, '肆' to 4.0, '五' to 5.0, '伍' to 5.0,
+            '六' to 6.0, '陆' to 6.0, '七' to 7.0, '柒' to 7.0, '八' to 8.0, '捌' to 8.0,
+            '九' to 9.0, '玖' to 9.0
         )
-        var total = 0.0    // 已累计的高位（万以上）
+        var total = 0.0    // 已累计的高位（万/亿以上）
         var section = 0.0  // 当前节内累积值
         var unit = 0.0     // 当前读入的一位数
         for (ch in s) {
             when (ch) {
-                '零', '一', '二', '两', '三', '四', '五', '六', '七', '八', '九' -> unit = digits[ch] ?: return null
-                '十' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 10; unit = 0.0 }
-                '百' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 100; unit = 0.0 }
-                '千' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 1000; unit = 0.0 }
-                '万' -> { total += (section + unit) * 10000; section = 0.0; unit = 0.0 }
-                else -> return null
+                '廿' -> { section += 20; unit = 0.0 }                          // 廿 = 20（廿五 = 25）
+                '亿' -> { total += (section + unit) * 100_000_000; section = 0.0; unit = 0.0 }
+                '万' -> { total += (section + unit) * 10_000; section = 0.0; unit = 0.0 }
+                '十', '拾' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 10; unit = 0.0 }
+                '百', '佰' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 100; unit = 0.0 }
+                '千', '仟' -> { section += (unit.takeIf { it > 0 } ?: 1.0) * 1000; unit = 0.0 }
+                else -> { unit = digits[ch] ?: return null }
             }
         }
         val result = total + section + unit
