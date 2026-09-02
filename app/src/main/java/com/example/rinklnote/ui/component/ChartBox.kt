@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.component
 
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,10 +63,7 @@ private fun chartWindowTitle(chartType: ChartType): String {
 fun ChartBox(
     modifier: Modifier = Modifier,
     expenseData: List<Float>,
-    totalExpense: Double,
-    totalIncome: Double,
     labels: List<String>,
-    currentMonth: Int = java.time.LocalDate.now().monthValue,
     onDetailClick: () -> Unit = {}
 ) {
     var chartType by remember { mutableStateOf(ChartType.LINE) }
@@ -312,36 +310,8 @@ fun ChartBox(
                 }
             }
         }
-
-        // Summary bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(30.dp)
-                .clip(RoundedCornerShape(bottomStart = 15.dp, bottomEnd = 15.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = "${currentMonth}月：",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "支出${String.format("%.2f", totalExpense)}  ",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.tertiary
-            )
-            Text(
-                text = "收入${String.format("%.2f", totalIncome)}",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = IncomeGreen
-            )
-        }
     }
 }
+
+
+

@@ -10,7 +10,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,9 +32,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -42,7 +49,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +59,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,9 +90,23 @@ import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
-private val tabs = listOf("计划", "记账", "资产")
+
+data class Tabs(
+    val string: String,
+    val iconId: Int
+)
+
+private val tabs= listOf<Tabs>(
+    Tabs("计划",R.drawable.ic_register),
+    Tabs("记账",R.drawable.ic_wallet),
+    Tabs("资产",R.drawable.ic_finance),
+    Tabs("我的",R.drawable.ic_more_menu)
+    )
+
+// NavHost routes for the 4 bottom tabs, index-aligned with `tabs` (计划/记账/资产/我的).
+// 记账(index 1) 是 start destination；AI 不在 tab 列表里，单独有 route。
+private val tabRoutes = listOf("plan", "bookkeeping", "assets", "profile")
 
 private enum class VoiceTarget { QUICK_ADD, AI }
 
@@ -93,8 +114,9 @@ private const val AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000L  // sync every 5 minute
 
 @Composable
 fun AppNavigation(app: RinklNoteApp) {
-    val pagerState = rememberPagerState(initialPage = 1, pageCount = { 5 })
-    val coroutineScope = rememberCoroutineScope()
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
     var showDrawer by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
     var showLogin by remember { mutableStateOf(false) }
@@ -123,7 +145,7 @@ fun AppNavigation(app: RinklNoteApp) {
     val tabWidth = screenWidth / tabs.size
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
-        factory = BookkeepingViewModel.Factory(app.repository, app.syncManager)
+        factory = BookkeepingViewModel.Factory(app.repository, app.syncManager, app.apiService)
     )
     val quickAddVM: QuickAddViewModel = viewModel(
         factory = QuickAddViewModel.Factory(app.repository, app.syncManager, app.apiService)
@@ -154,9 +176,10 @@ fun AppNavigation(app: RinklNoteApp) {
     }
 
     // Dismiss the QuickAdd drawer / keypad whenever the user leaves the bookkeeping
-    // tab (tap or swipe) — otherwise the overlay stays on top of other tabs.
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != 1) {
+    // tab — otherwise the overlay stays on top of other tabs. (NavHost 无预组合，
+    // currentRoute 只在真实导航后变化，不必像 pager 那样再靠 currentPage 补齐预组合副作用。)
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != "bookkeeping") {
             showDrawer = false
             showKeypad = false
             voiceActive = false
@@ -165,25 +188,30 @@ fun AppNavigation(app: RinklNoteApp) {
             quickAddVM.reset()
             quickAddVM.resetConfirming()
         }
-        // 离开 AI 页(4)时丢弃未消费的记账在途标记，避免后续抽屉/语音记账被误判为聊天发起
-        if (pagerState.currentPage != 4) {
+        // 离开 AI 页时丢弃未消费的记账在途标记，避免后续抽屉/语音记账被误判为聊天发起
+        if (currentRoute != "ai") {
             aiVM.consumeBookingPending()
         }
     }
 
-    // AI 页(index 4)进入时注入欢迎语；已登录且未关闭 AI 主动推送时按需注入月总结/异常/习惯提醒。
-    // 用 currentPage==4 门控，避免 beyondViewportPageCount=1 预组合时误触发。
-    LaunchedEffect(pagerState.currentPage, authState.isLoggedIn, authState.aiDisabled) {
-        if (pagerState.currentPage == 4) {
+    // AI 页进入时注入欢迎语；已登录且未关闭 AI 主动推送时按需注入月总结/异常/习惯提醒。
+    // NavHost 下不存在预组合误触发问题，用 currentRoute=="ai" 门控即可。
+    LaunchedEffect(currentRoute, authState.isLoggedIn, authState.aiDisabled) {
+        if (currentRoute == "ai") {
             aiVM.onEnter(authState.isLoggedIn, authState.aiDisabled)
         }
     }
 
-    val onTabClick: (Int) -> Unit = { index ->
-        coroutineScope.launch {
-            pagerState.animateScrollToPage(index)
+    // 标准 bottom-nav 切换：弹到 start(记账) 并保存/恢复各 tab 状态，确保
+    // 从任意 tab 按返回都先回记账，记账页再返回才交给系统（与原来的「回首页」语义一致）。
+    val navigateTo: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
     }
+    val onTabClick: (Int) -> Unit = { index -> navigateTo(tabRoutes[index]) }
 
     // Collect one-shot effects from QuickAddViewModel
     LaunchedEffect(quickAddVM) {
@@ -221,12 +249,9 @@ fun AppNavigation(app: RinklNoteApp) {
     BackHandler(enabled = showDrawer) { showDrawer = false }
     BackHandler(enabled = showKeypad) { showKeypad = false }
 
-    // Popback: 记账页(1)是首页。在其他页按返回键回到记账页；
-    // 记账页上返回交给系统默认（退出 App）。页面内的弹窗
-    // （预算键盘/月明细/余额弹窗等）组合在本 handler 之后，优先级更高。
-    BackHandler(enabled = pagerState.currentPage != 1) {
-        coroutineScope.launch { pagerState.animateScrollToPage(1) }
-    }
+    // 返回交给 NavHost 的返回栈处理：在 AI 或非首页 tab 按返回会 pop 回记账(start)，
+    // 在记账页按返回交给系统默认。页面内的弹窗（预算键盘/月明细/余额弹窗等）
+    // 有自己的 BackHandler，组合优先级更高，会先于导航返回被消费。
 
     // Voice input: bottom floating mini bar (device real-time recognition, server
     // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
@@ -265,32 +290,36 @@ fun AppNavigation(app: RinklNoteApp) {
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Page content — swipe left/right to switch tabs
-            HorizontalPager(
-                state = pagerState,
-                beyondViewportPageCount = 1,
+            // Page content — 5 个 flat destination 由 NavHost 切换。
+            // 水平滑动过渡保留原 pager 的左右平移手感；NavHost 无预组合，
+            // 只有当前 destination 会被组合（AI 注入因此不再需要 currentPage 门控补齐）。
+            NavHost(
+                navController = navController,
+                startDestination = "bookkeeping",
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-            ) { page ->
-                when (page) {
-                    0 -> PlanScreen(viewModel = budgetVM, isActive = pagerState.currentPage == 0)
-                    1 -> BookkeepingScreen(
+                    .fillMaxWidth(),
+                enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
+                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() },
+                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) + fadeIn() },
+                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) + fadeOut() }
+            ) {
+                composable("plan") {
+                    PlanScreen(viewModel = budgetVM, isActive = currentRoute == "plan")
+                }
+                composable("bookkeeping") {
+                    BookkeepingScreen(
                         onOpenDrawer = openDrawer,
-                        onFinanceClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(2) }
-                        },
-                        onMoreClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                        },
-                        onAiClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(4) }
-                        },
+                        onFinanceClick = { navigateTo("assets") },
+                        onMoreClick = { navigateTo("profile") },
+                        onAiClick = { navigateTo("ai") },
                         viewModel = bookkeepingVM
                     )
-                    2 -> AssetsScreen(viewModel = assetsVM)
-                    3 -> ProfileScreen(
+
+                }
+                composable("assets") { AssetsScreen(viewModel = assetsVM) }
+                composable("profile") {
+                    ProfileScreen(
                         authViewModel = authVM,
                         settingsManager = app.settingsManager,
                         tokenManager = app.tokenManager,
@@ -300,7 +329,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         onBindQQClick = { showBindQQ = true },
                         onQqBotGuideClick = { showQqBotGuide = true }
                     )
-                    4 -> AiScreen(
+                }
+                composable("ai") {
+                    AiScreen(
                         viewModel = aiVM,
                         isLoggedIn = authState.isLoggedIn,
                         onVoiceInput = { startVoice(VoiceTarget.AI) }
@@ -308,10 +339,12 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
             }
 
-            // Custom bottom navigation — 仅 计划/记账/资产(0-2) 显示；我的(3)/AI(4) 整条隐藏
-            if (pagerState.currentPage < tabs.size) {
+            // Custom bottom navigation — 仅 4 个 tab route (plan/bookkeeping/assets/profile) 显示；
+            // AI(ai) 整条隐藏。
+            val currentTabIndex = tabRoutes.indexOf(currentRoute)
+            if (currentTabIndex >= 0) {
                 CustomBottomBar(
-                    currentIndex = pagerState.currentPage,
+                    currentIndex = currentTabIndex,
                     tabWidth = tabWidth,
                     onTabClick = onTabClick
                 )
@@ -521,58 +554,120 @@ private fun QqBotGuideDialog(
     )
 }
 
+//@Composable
+//private fun CustomBottomBar(
+//    currentIndex: Int ,
+//    tabWidth: Dp,
+//    onTabClick: (Int) -> Unit
+//) {
+//    val indicatorOffset by animateDpAsState(
+//        targetValue = tabWidth * currentIndex + (tabWidth - 60.dp) / 2,
+//        animationSpec = Motion.Indicator,
+//        label = "indicator"
+//    )
+//
+//    Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp, start = 10.dp, end = 10.dp)) {
+//        Box(
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(32.dp)
+//                .shadow(4.dp, RoundedCornerShape(30.dp))
+//                .clip(RoundedCornerShape(30.dp))
+//                .background(MaterialTheme.colorScheme.surface)
+//        ) {
+//        Row(modifier = Modifier.fillMaxSize()) {
+//            tabs.forEachIndexed { index, label ->
+//                Box(
+//                    modifier = Modifier
+//                        .width(tabWidth)
+//                        .fillMaxSize()
+//                        .clickable { onTabClick(index) },
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Text(
+//                        text = label,
+//                        fontSize = 14.sp,
+//                        fontWeight = FontWeight.Medium,
+//                        color = MaterialTheme.colorScheme.onSurface
+//                    )
+//                }
+//            }
+//        }
+//
+//        // Blue indicator — align to bottom-start then offset. Hidden on the 我的 page
+//        // (index 3) which has no bottom tab.
+//        if (currentIndex < tabs.size) {
+//            Box(
+//                modifier = Modifier
+//                    .align(Alignment.BottomStart)
+//                    .offset(x = indicatorOffset)
+//                    .width(60.dp)
+//                    .height(5.dp)
+//                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+//            )
+//        }
+//        }
+//    }
+//}
+
 @Composable
 private fun CustomBottomBar(
-    currentIndex: Int,
+    currentIndex: Int ,
     tabWidth: Dp,
     onTabClick: (Int) -> Unit
 ) {
     val indicatorOffset by animateDpAsState(
-        targetValue = tabWidth * currentIndex + (tabWidth - 60.dp) / 2,
+        targetValue = tabWidth * currentIndex + (tabWidth - 40.dp) / 2,
         animationSpec = Motion.Indicator,
         label = "indicator"
     )
 
-    Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp, start = 10.dp, end = 10.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 20.dp, start = 10.dp, end = 10.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
-                .shadow(4.dp, RoundedCornerShape(30.dp))
-                .clip(RoundedCornerShape(30.dp))
+                .height(50.dp)
+                .shadow(3.dp, RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surface)
         ) {
-        Row(modifier = Modifier.fillMaxSize()) {
-            tabs.forEachIndexed { index, label ->
-                Box(
-                    modifier = Modifier
-                        .width(tabWidth)
-                        .fillMaxSize()
-                        .clickable { onTabClick(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            Row(modifier = Modifier.fillMaxSize()) {
+                tabs.forEachIndexed { index, label ->
+                    Column(
+                        modifier = Modifier
+                            .width(tabWidth)
+                            .fillMaxSize()
+                            .clickable { onTabClick(index) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(label.iconId),
+                            contentDescription = label.string,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Text(
+                            text = label.string,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
             }
-        }
 
-        // Blue indicator — align to bottom-start then offset. Hidden on the 我的 page
-        // (index 3) which has no bottom tab.
-        if (currentIndex < tabs.size) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = indicatorOffset)
-                    .width(60.dp)
-                    .height(5.dp)
-                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
-            )
-        }
+            // Blue indicator — align to bottom-start then offset. Hidden on the 我的 page
+            // (index 3) which has no bottom tab.
+            if (currentIndex < tabs.size) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = indicatorOffset)
+                        .width(40.dp)
+                        .height(3.dp)
+                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+                )
+            }
         }
     }
 }

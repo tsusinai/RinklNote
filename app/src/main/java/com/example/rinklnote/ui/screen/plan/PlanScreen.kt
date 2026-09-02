@@ -58,6 +58,7 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
                 .padding(16.dp)
         ) {
             Text(

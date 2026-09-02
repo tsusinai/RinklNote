@@ -1,5 +1,7 @@
 package com.example.rinklnote.ui.component
 
+import android.annotation.SuppressLint
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -28,17 +30,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.toDateString
 
 /** 一天一张卡：日期头 + 该日所有账单。内部经 derivedStateOf 读取 revealed/menu，
  *  侧滑只重组真正受影响的行，而非整卡。 */
+@SuppressLint("DefaultLocale")
 @Composable
 fun BillCard(
     date: Long,
@@ -68,21 +73,22 @@ fun BillCard(
         ) {
             Text(
                 text = "${date.toDateString()} $dayOfWeek",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Normal,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
             val sign = if (totalAmount >= 0) "+" else "-"
             Text(
                 text = String.format("%s¥%.2f", sign, kotlin.math.abs(totalAmount)),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
                 color = if (totalAmount >= 0) incomeGreen else MaterialTheme.colorScheme.tertiary
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
+        Canvas(modifier = Modifier.fillMaxWidth()) { drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),)}
 
         bills.forEach { bill ->
             val revealed by remember(bill.id) { derivedStateOf { revealedBillId == bill.id } }
@@ -125,7 +131,7 @@ fun BillCard(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
         }
     }
 }

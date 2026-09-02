@@ -1,11 +1,13 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
+import android.content.res.Resources
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,10 +16,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,10 +47,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.component.BillCard
-import com.example.rinklnote.ui.component.ChartBox
+import com.example.rinklnote.ui.component.HeatmapBox
+import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
+import com.example.rinklnote.ui.viewmodel.DayPart
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
@@ -61,11 +67,22 @@ fun BookkeepingScreen(
     onAiClick: () -> Unit,
     viewModel: BookkeepingViewModel
 ) {
+    val horizonalPadding = 10.dp
+
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {
         val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
         "${d.year}年${d.monthValue}月"
+    }
+
+    // 顶部横幅背景：按当前时段对应四张图（数据由 ViewModel 的 state.dayPart 给出）。
+    val headerBg = when (state.dayPart) {
+        DayPart.MORNING -> R.drawable.morning
+        DayPart.DAY -> R.drawable.moon
+        DayPart.EVENING -> R.drawable.drop
+        DayPart.NIGHT -> R.drawable.night
     }
 
     // Interaction state
@@ -73,12 +90,11 @@ fun BookkeepingScreen(
     var menuBill by remember { mutableStateOf<Bill?>(null) }
     var deleteTarget by remember { mutableStateOf<Bill?>(null) }
     var showMonthDetail by remember { mutableStateOf(false) }
-    var showMonthNav by remember { mutableStateOf(false) }
 
     // Cache grouped bills to avoid recomputation on every recomposition
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
-    val chartData = remember(state.bills, state.selectedMonthOffset) {
-        computeMonthChartData(state.bills, state.selectedMonthOffset)
+    val heatmap = remember(state.bills, state.selectedMonthOffset) {
+        computeMonthHeatmap(state.bills, state.selectedMonthOffset)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -91,35 +107,41 @@ fun BookkeepingScreen(
             item(key = "topbar") {
                 TopBar(
                     monthLabel = monthLabel,
-                    onMonthClick = { showMonthNav = !showMonthNav },
+                    headerBg = headerBg,
+                    offset = state.selectedMonthOffset,
+                    onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
+                    onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
+                    onBackToNow = { viewModel.selectMonth(0) },
                     onOpenDrawer = onOpenDrawer,
                     onFinanceClick = onFinanceClick,
                     onMoreClick = onMoreClick,
                     onAiClick = onAiClick
                 )
             }
-            if (showMonthNav) {
-                item(key = "monthnav") {
-                    MonthNavigator(
-                        offset = state.selectedMonthOffset,
-                        onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
-                        onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
-                        onBackToNow = { viewModel.selectMonth(0) }
-                    )
-                }
-            }
-            item(key = "chart") {
-                Spacer(modifier = Modifier.height(24.dp))
-                ChartBox(
-                    expenseData = chartData.values,
+
+            item(key = "spacer-0") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+
+            item {
+                // AI 总结仅对「当月」展示；切换到其它月份时关闭总结栏（只留合计行）。
+                SummaryBar(
                     totalExpense = state.totalExpense,
                     totalIncome = state.totalIncome,
-                    labels = chartData.labels,
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
+                    aiSummary = if (isCurrentMonth) state.aiSummary else null,
+                    aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false,
+                )
+            }
+
+            item(key = "spacer-1") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+
+            item(key = "chart") {
+                HeatmapBox(
+                    heatmap = heatmap,
                     onDetailClick = { showMonthDetail = true }
                 )
             }
-            item(key = "spacer") { Spacer(modifier = Modifier.height(20.dp)) }
+            item(key = "spacer-2") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+
 
             groupedBills.forEach { (date, bills) ->
                 item(key = date) {
@@ -141,7 +163,7 @@ fun BookkeepingScreen(
                             deleteTarget = bill
                         }
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(horizonalPadding))
                 }
             }
             item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(100.dp)) }
@@ -160,7 +182,10 @@ fun BookkeepingScreen(
                 .clickable { onOpenDrawer() },
             contentAlignment = Alignment.Center
         ) {
-            Text("+", fontSize = 28.sp, fontWeight = FontWeight.Light, color = MaterialTheme.colorScheme.onSurface)
+            Icon(painter = painterResource(R.drawable.ic_add_bill),
+                contentDescription = "增加账单",
+                tint = Color.Unspecified
+                )
         }
 
         // Edit overlay — fullscreen, covers everything while editing；用上滑进入（与快加键盘一致）
@@ -216,7 +241,11 @@ fun BookkeepingScreen(
 @Composable
 private fun TopBar(
     monthLabel: String,
-    onMonthClick: () -> Unit,
+    headerBg: Int,
+    offset: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onBackToNow: () -> Unit,
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
@@ -225,47 +254,37 @@ private fun TopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .height(200.dp),
+        contentAlignment = Alignment.TopCenter
+
     ) {
-        // 更多 → 我的页；金融 → 资产页；登记 → 记账抽屉（对应原 Pixso 三图标）
-        Icon(
-            painter = painterResource(R.drawable.ic_more_menu),
-            contentDescription = "更多",
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .size(30.dp)
-                .clickable(onClick = onMoreClick),
-            tint = Color.Unspecified
+        // 时段横幅背景：四张图按当前时段切换，铺满标题栏（含状态栏后方），ContentScale.Crop 裁切铺满
+        Image(
+            painter = painterResource(headerBg),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop
         )
-        Text(
-            text = monthLabel,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
+        // 内容层：状态栏避让 + 内容内边距，置于背景图之上，不影响图的满铺
+        Box(
             modifier = Modifier
-                .align(Alignment.Center)
-                .clickable(onClick = onMonthClick)
-        )
+                .matchParentSize()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+        // 更多 → 我的页；金融 → 资产页；登记 → 记账抽屉
         Row(
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier.align(Alignment.TopStart),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_finance),
-                contentDescription = "金融",
+                painter = painterResource(R.drawable.ic_more_menu),
+                contentDescription = "更多",
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onFinanceClick),
-                tint = Color.Unspecified
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(
-                painter = painterResource(R.drawable.ic_register),
-                contentDescription = "登记",
-                modifier = Modifier
-                    .size(30.dp)
-                    .clickable(onClick = onOpenDrawer),
-                tint = Color.Unspecified
+                    .clickable(onClick = onMoreClick),
+                tint = Color.White
             )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
@@ -274,52 +293,62 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onAiClick),
-                tint = Color.Unspecified
+                tint = Color.White
             )
         }
-    }
-}
-
-@Composable
-private fun MonthNavigator(
-    offset: Int,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onBackToNow: () -> Unit
-) {
-    val d = LocalDate.now().plusMonths(offset.toLong())
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .shadow(4.dp, RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 4.dp, vertical = 0.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TextButton(onClick = onPrev) {
-            Text("‹", fontSize = 26.sp, color = MaterialTheme.colorScheme.onSurface)
-        }
-        Text(
-            text = "${d.year}年${d.monthValue}月",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        TextButton(onClick = onNext, enabled = offset < 0) {
+        Row(
+            modifier = Modifier.align(Alignment.TopCenter),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                "›",
-                fontSize = 26.sp,
-                color = if (offset < 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                "‹ ",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier
+                    .padding(horizontal = 6.dp)
+                    .pointerInput(Unit) { detectTapGestures { onPrev() } }
+            )
+            Text(
+                text = monthLabel,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.pointerInput(Unit) { detectTapGestures { onBackToNow() } }
+            )
+            Text(
+                " ›",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (offset < 0) Color.White else Color.White.copy(alpha = 0.35f),
+                modifier = Modifier
+                    .padding(horizontal = 6.dp)
+                    .pointerInput(offset) { detectTapGestures { if (offset < 0) onNext() } }
             )
         }
-        if (offset != 0) {
-            TextButton(onClick = onBackToNow) {
-                Text("回本月", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-            }
+        Row(
+            modifier = Modifier.align(Alignment.TopEnd),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_finance),
+                contentDescription = "金融",
+                modifier = Modifier
+                    .size(30.dp)
+                    .clickable(onClick = onFinanceClick),
+                tint = Color.White
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_register),
+                contentDescription = "登记",
+                modifier = Modifier
+                    .size(30.dp)
+                    .clickable(onClick = onOpenDrawer),
+                tint = Color.White
+            )
         }
+        } // 内容层 Box
     }
 }
 
@@ -329,26 +358,26 @@ private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
         .associate { it.first to it.second }
 }
 
-/** 「最近10日」趋势：恒为 10 个点。当月不足 10 天时仍展示 10 天，尚未到来之日期金额记为 0（不跨到上月）。
- *  历史月为整月末 10 天；当月 ≥10 日为「今日往前 10 天」，均为真实值。 */
-private fun computeMonthChartData(bills: List<Bill>, offset: Int): MonthChartData {
+/** 月度每日支出热力图数据：整月每天的支出合计（周一起始布局、首日 weekday、当月天数由 HeatmapBox 用到）。 */
+private fun computeMonthHeatmap(bills: List<Bill>, offset: Int): MonthHeatmap {
     val zone = bookkeepingZone()
     val today = LocalDate.now(zone)
     val firstDay = today.plusMonths(offset.toLong()).withDayOfMonth(1)
-    val lastDay = if (offset == 0) today else firstDay.plusMonths(1).minusDays(1)
-    // 从 lastDay 往前推 10 天的窗口，若触到月初则回退到月初，仍用 10 个槽位（未到之日=0）
-    val windowStart = lastDay.minusDays(9L).let { if (it.isBefore(firstDay)) firstDay else it }
-    val data = List(10) { windowStart.plusDays(it.toLong()) }
-    val values = data.map { d ->
-        if (d.isAfter(today)) 0f
-        else bills.filter { bill ->
-            bill.billType == "EXPENSE" &&
-                Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate() == d
-        }.sumOf { it.amount }.toFloat()
+    val lastDay = firstDay.plusMonths(1).minusDays(1)
+    val dailyExpense = HashMap<Int, Float>()
+    bills.forEach { bill ->
+        if (bill.billType == "EXPENSE") {
+            val d = Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate()
+            if (!d.isBefore(firstDay) && !d.isAfter(lastDay)) {
+                dailyExpense.merge(d.dayOfMonth, bill.amount.toFloat(), Float::plus)
+            }
+        }
     }
-    val labels = data.map { "${it.monthValue}.${it.dayOfMonth}" }
-    return MonthChartData(10, values, labels)
+    return MonthHeatmap(
+        year = firstDay.year,
+        monthValue = firstDay.monthValue,
+        firstWeekday = firstDay.dayOfWeek.value,
+        daysInMonth = lastDay.dayOfMonth,
+        dailyExpense = dailyExpense
+    )
 }
-
-/** 趋势图窗口数据：恒 10 点（当月未满10天时未到之日=0）。 */
-private data class MonthChartData(val dayCount: Int, val values: List<Float>, val labels: List<String>)
