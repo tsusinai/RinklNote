@@ -108,7 +108,6 @@ fun BookkeepingScreen(
                     totalIncome = state.totalIncome,
                     labels = chartData.labels,
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
-                    dayCount = chartData.dayCount,
                     onDetailClick = { showMonthDetail = true }
                 )
             }
@@ -321,25 +320,26 @@ private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
         .associate { it.first to it.second }
 }
 
-/** 「最近几天」趋势：只展示所选月份末尾 10 天（当月截到今日；历史月为整月末 10 天），不下探到月初之前。
- *  返回实际窗口天数 [MonthChartData.dayCount]，供图标题如实标注「本月前N日/最近10日」。 */
+/** 「最近10日」趋势：恒为 10 个点。当月不足 10 天时仍展示 10 天，尚未到来之日期金额记为 0（不跨到上月）。
+ *  历史月为整月末 10 天；当月 ≥10 日为「今日往前 10 天」，均为真实值。 */
 private fun computeMonthChartData(bills: List<Bill>, offset: Int): MonthChartData {
     val zone = bookkeepingZone()
-    val firstDay = LocalDate.now(zone).plusMonths(offset.toLong()).withDayOfMonth(1)
-    val lastDay = if (offset == 0) LocalDate.now() else firstDay.plusMonths(1).minusDays(1)
-    // 从 lastDay 往前推 10 天的窗口，若触到月初则截断到月初，避免出现跨月空点
+    val today = LocalDate.now(zone)
+    val firstDay = today.plusMonths(offset.toLong()).withDayOfMonth(1)
+    val lastDay = if (offset == 0) today else firstDay.plusMonths(1).minusDays(1)
+    // 从 lastDay 往前推 10 天的窗口，若触到月初则回退到月初，仍用 10 个槽位（未到之日=0）
     val windowStart = lastDay.minusDays(9L).let { if (it.isBefore(firstDay)) firstDay else it }
-    val dayCount = (java.time.temporal.ChronoUnit.DAYS.between(windowStart, lastDay).toInt()) + 1
-    val data = List(dayCount) { windowStart.plusDays(it.toLong()) }
+    val data = List(10) { windowStart.plusDays(it.toLong()) }
     val values = data.map { d ->
-        bills.filter { bill ->
+        if (d.isAfter(today)) 0f
+        else bills.filter { bill ->
             bill.billType == "EXPENSE" &&
                 Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate() == d
         }.sumOf { it.amount }.toFloat()
     }
     val labels = data.map { "${it.monthValue}.${it.dayOfMonth}" }
-    return MonthChartData(dayCount, values, labels)
+    return MonthChartData(10, values, labels)
 }
 
-/** 趋势图窗口数据：dayCount = 图上实际绘制的天数（当月不足10天时=本月前N天）。 */
+/** 趋势图窗口数据：恒 10 点（当月未满10天时未到之日=0）。 */
 private data class MonthChartData(val dayCount: Int, val values: List<Float>, val labels: List<String>)

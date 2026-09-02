@@ -52,10 +52,10 @@ import com.example.rinklnote.ui.theme.IncomeGreen
 
 private enum class ChartType { LINE, BAR }
 
-/** 趋势图标题：窗口天数不足10天时如实标注「本月前N日」，否则「最近10日」，避免硬说10日。 */
-private fun chartWindowTitle(chartType: ChartType, dayCount: Int): String {
+/** 趋势图标题：恒为「最近10日」——当月不足10天时由 computeMonthChartData 补足到10天（未到之日=0）。 */
+private fun chartWindowTitle(chartType: ChartType): String {
     val unit = if (chartType == ChartType.LINE) "走势" else "柱状"
-    return if (dayCount < 10) "本月前${dayCount}日$unit" else "最近10日$unit"
+    return "最近10日$unit"
 }
 
 @Composable
@@ -66,7 +66,6 @@ fun ChartBox(
     totalIncome: Double,
     labels: List<String>,
     currentMonth: Int = java.time.LocalDate.now().monthValue,
-    dayCount: Int = 10,
     onDetailClick: () -> Unit = {}
 ) {
     var chartType by remember { mutableStateOf(ChartType.LINE) }
@@ -143,7 +142,7 @@ fun ChartBox(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = chartWindowTitle(chartType, dayCount),
+                text = chartWindowTitle(chartType),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface
