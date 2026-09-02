@@ -74,7 +74,7 @@ fun BookkeepingScreen(
 
     // Cache grouped bills to avoid recomputation on every recomposition
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
-    val (chartData, chartLabels) = remember(state.bills, state.selectedMonthOffset) {
+    val chartData = remember(state.bills, state.selectedMonthOffset) {
         computeMonthChartData(state.bills, state.selectedMonthOffset)
     }
 
@@ -103,11 +103,12 @@ fun BookkeepingScreen(
             item(key = "chart") {
                 Spacer(modifier = Modifier.height(24.dp))
                 ChartBox(
-                    expenseData = chartData,
+                    expenseData = chartData.values,
                     totalExpense = state.totalExpense,
                     totalIncome = state.totalIncome,
-                    labels = chartLabels,
+                    labels = chartData.labels,
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
+                    dayCount = chartData.dayCount,
                     onDetailClick = { showMonthDetail = true }
                 )
             }
@@ -320,15 +321,16 @@ private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
         .associate { it.first to it.second }
 }
 
-/** 「最近几天」趋势：只展示所选月份末尾 10 天（当月截到今日；历史月为整月末 10 天），不下探到月初之前。 */
-private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Float>, List<String>> {
+/** 「最近几天」趋势：只展示所选月份末尾 10 天（当月截到今日；历史月为整月末 10 天），不下探到月初之前。
+ *  返回实际窗口天数 [MonthChartData.dayCount]，供图标题如实标注「本月前N日/最近10日」。 */
+private fun computeMonthChartData(bills: List<Bill>, offset: Int): MonthChartData {
     val zone = bookkeepingZone()
     val firstDay = LocalDate.now(zone).plusMonths(offset.toLong()).withDayOfMonth(1)
     val lastDay = if (offset == 0) LocalDate.now() else firstDay.plusMonths(1).minusDays(1)
     // 从 lastDay 往前推 10 天的窗口，若触到月初则截断到月初，避免出现跨月空点
     val windowStart = lastDay.minusDays(9L).let { if (it.isBefore(firstDay)) firstDay else it }
-    val days = (java.time.temporal.ChronoUnit.DAYS.between(windowStart, lastDay).toInt()) + 1
-    val data = List(days) { windowStart.plusDays(it.toLong()) }
+    val dayCount = (java.time.temporal.ChronoUnit.DAYS.between(windowStart, lastDay).toInt()) + 1
+    val data = List(dayCount) { windowStart.plusDays(it.toLong()) }
     val values = data.map { d ->
         bills.filter { bill ->
             bill.billType == "EXPENSE" &&
@@ -336,5 +338,8 @@ private fun computeMonthChartData(bills: List<Bill>, offset: Int): Pair<List<Flo
         }.sumOf { it.amount }.toFloat()
     }
     val labels = data.map { "${it.monthValue}.${it.dayOfMonth}" }
-    return values to labels
+    return MonthChartData(dayCount, values, labels)
 }
+
+/** 趋势图窗口数据：dayCount = 图上实际绘制的天数（当月不足10天时=本月前N天）。 */
+private data class MonthChartData(val dayCount: Int, val values: List<Float>, val labels: List<String>)
