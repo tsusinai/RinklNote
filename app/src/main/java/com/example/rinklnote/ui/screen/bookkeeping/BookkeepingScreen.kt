@@ -19,10 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +52,7 @@ import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
@@ -79,6 +82,11 @@ fun BookkeepingScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = { viewModel.onEvent(BookkeepingEvent.PullRefresh) },
+            modifier = Modifier.fillMaxSize()
+        ) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item(key = "topbar") {
                 TopBar(
@@ -137,6 +145,7 @@ fun BookkeepingScreen(
                 }
             }
             item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(100.dp)) }
+        }
         }
 
         // FAB

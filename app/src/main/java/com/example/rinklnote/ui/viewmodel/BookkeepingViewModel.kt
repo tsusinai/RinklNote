@@ -24,6 +24,7 @@ data class BookkeepingState(
     val totalExpense: Double = 0.0,
     val totalIncome: Double = 0.0,
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val currentDate: Long = System.currentTimeMillis(),
     // Offset of the month currently shown: 0 = current month, -1 = previous.
     // Drives the main list, the chart and the totals together.
@@ -39,6 +40,9 @@ data class BookkeepingState(
 
 sealed interface BookkeepingEvent {
     data object Refresh : BookkeepingEvent
+
+    /** 首页下拉刷新：拉一次服务端同步，再重算当月合计。 */
+    data object PullRefresh : BookkeepingEvent
     data class EditBill(val bill: Bill) : BookkeepingEvent
     data object CancelEdit : BookkeepingEvent
     data class ConfirmEdit(val bill: Bill) : BookkeepingEvent
@@ -82,6 +86,7 @@ class BookkeepingViewModel(
     fun onEvent(event: BookkeepingEvent) {
         when (event) {
             is BookkeepingEvent.Refresh -> refreshTotals()
+            is BookkeepingEvent.PullRefresh -> pullRefresh()
             is BookkeepingEvent.EditBill -> _state.update { it.copy(editingBill = event.bill) }
             is BookkeepingEvent.CancelEdit -> _state.update { it.copy(editingBill = null) }
             is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
@@ -108,6 +113,22 @@ class BookkeepingViewModel(
         _state.update { it.copy(selectedMonthOffset = offset) }
         collectBills()
         refreshTotals()
+    }
+
+    /** 首页下拉刷新：先拉一次服务端同步（账单经 syncManager 落库，Room 响应式自动刷新列表），
+     *  再重算当月合计（合计是一次性查询，非响应式，需显式刷新）。 */
+    private fun pullRefresh() {
+        if (_state.value.isRefreshing) return
+        _state.update { it.copy(isRefreshing = true) }
+        viewModelScope.launch {
+            try {
+                syncManager?.sync()
+            } catch (_: Exception) {
+                // 同步失败不阻断刷新——本地数据保持原样，仅供下次重试
+            }
+            refreshTotals()
+            _state.update { it.copy(isRefreshing = false) }
+        }
     }
 
     private fun refreshTotals() {
