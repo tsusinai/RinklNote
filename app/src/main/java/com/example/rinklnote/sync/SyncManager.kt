@@ -43,6 +43,14 @@ class SyncManager(
         if (!tokenManager.isLoggedIn()) return SyncResult.NotLoggedIn
 
         return try {
+            // 0. Sync accounts first so the local account↔server-id mapping is in place
+            //    before bills are pushed/pulled. The App stores a bill's accountId as the
+            //    local Room account id, while the server expects the id of the account row
+            //    on ITS side. Without the mapping established first, a push sends a local id
+            //    (rejected 400) and a pull can't resolve the server account id it receives
+            //    (Room FK violation).
+            syncAccounts()
+
             // 1. Push: upload local unsynced bills (create/update/delete branching)
             var pushed = 0
             val unsynced = billDao.getUnsynced()
@@ -89,7 +97,10 @@ class SyncManager(
                         categoryId = dto.categoryId,
                         categoryName = dto.categoryName,
                         subCategoryName = dto.subCategoryName,
-                        accountId = dto.accountId,
+                        // Server bills carry the server account id; map it back to the
+                        // local account id so the Room FK (bills.account_id → accounts.id)
+                        // is satisfied.
+                        accountId = resolveLocalAccountId(dto.accountId),
                         remark = dto.remark,
                         date = dto.date,
                         createdAt = dto.createdAt,
@@ -122,9 +133,6 @@ class SyncManager(
 
             // 4. Sync budgets (push unsynced, then pull all + LWW merge)
             syncBudgets()
-
-            // 5. Sync accounts (push unsynced, then pull all + LWW merge)
-            syncAccounts()
 
             SyncResult.Success(pushed, pulled)
         } catch (e: Exception) {
@@ -163,21 +171,37 @@ class SyncManager(
                 true
             }
             else -> {
-                val dto = api.uploadBill(bill.toRequest())
+                // Create: resolve the local account id to the server account id before
+                // uploading, otherwise the server's ownership check rejects it (400).
+                val req = mappedBillRequest(bill) ?: return false
+                val dto = api.uploadBill(req)
                 billDao.updateServerId(bill.id, dto.id, dto.updatedAt ?: dto.createdAt)
                 true
             }
         }
     }
 
-    /**
-     * PUT a bill; on 409 (version conflict) fetch the server's current row to re-base
-     * and push exactly once more. Returning the final DTO lets the caller stamp the
-     * new base for the next conditional PUT.
-     */
+    /** Resolve the server account id for a locally-stored bill. The App's Bill stores
+     * accountId as the local Room account id; the server expects the id of the account
+     * row on ITS side. Returns null when the account has no server id yet (e.g. an
+     * unreconciled seeded account) — callers leave the bill for a later sync. */
+    private suspend fun mappedBillRequest(bill: Bill): CreateBillRequest? {
+        val serverAccountId = accountDao?.getById(bill.accountId)?.serverId ?: return null
+        return bill.toRequest().copy(accountId = serverAccountId)
+    }
+
+    /** Map a server account id back to the local Room account id (for the pull merge). */
+    private suspend fun resolveLocalAccountId(serverAccountId: Long): Long {
+        val dao = accountDao ?: return serverAccountId
+        return dao.getByServerId(serverAccountId)?.id
+            ?: dao.getAllActive().firstOrNull()?.id
+            ?: serverAccountId
+    }
+
     private suspend fun updateWithReplay(bill: Bill): BillDTO {
         val serverId = bill.serverId ?: error("bill has no server id")
-        val base = bill.toRequest().copy(baseUpdatedAt = bill.baseUpdatedAt)
+        val base = mappedBillRequest(bill)?.copy(baseUpdatedAt = bill.baseUpdatedAt)
+            ?: error("无法解析账户")
         return try {
             api.updateBill(serverId, base)
         } catch (e: HttpException) {
@@ -285,27 +309,42 @@ class SyncManager(
         try {
             api.getAccounts().forEach { dto ->
                 val serverTime = dto.updatedAt ?: 0L
-                val local = dao.getByServerId(dto.id)
+                var local = dao.getByServerId(dto.id)
                 if (local == null) {
-                    dao.upsert(
-                        Account(
+                    // Reconcile by name: a local seeded/custom account of the same name that
+                    // hasn't been stamped with a server id yet should ADOPT the server id and
+                    // data, rather than becoming a duplicate row. This collapses the seed
+                    // accounts (local ids 1/2/3) into the per-user server accounts (e.g.
+                    // ids 214/215/216) so their local id maps to the right server id.
+                    val byName = dao.getByNameActive(dto.name)
+                    local = if (byName != null && !byName.dirty) {
+                        byName.copy(
                             serverId = dto.id, name = dto.name, balance = dto.balance,
                             iconColor = dto.iconColor, updatedAt = serverTime,
                             deleted = dto.deleted, dirty = false
-                        )
-                    )
-                } else {
-                    if (local.dirty) return@forEach
-                    val localTime = local.updatedAt ?: 0L
-                    if (serverTime > localTime) {
+                        ).also { dao.upsert(it) }
+                    } else {
                         dao.upsert(
-                            local.copy(
-                                name = dto.name, balance = dto.balance,
+                            Account(
+                                serverId = dto.id, name = dto.name, balance = dto.balance,
                                 iconColor = dto.iconColor, updatedAt = serverTime,
                                 deleted = dto.deleted, dirty = false
                             )
                         )
+                        dao.getByServerId(dto.id)
                     }
+                }
+                if (local == null) return@forEach
+                if (local.dirty) return@forEach
+                val localTime = local.updatedAt ?: 0L
+                if (serverTime > localTime) {
+                    dao.upsert(
+                        local.copy(
+                            name = dto.name, balance = dto.balance,
+                            iconColor = dto.iconColor, updatedAt = serverTime,
+                            deleted = dto.deleted, dirty = false
+                        )
+                    )
                 }
             }
         } catch (_: Exception) {}

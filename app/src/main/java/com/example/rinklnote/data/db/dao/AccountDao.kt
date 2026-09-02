@@ -34,6 +34,15 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE server_id = :serverId")
     suspend fun getByServerId(serverId: Long): Account?
 
+    @Query("SELECT * FROM accounts WHERE id = :id")
+    suspend fun getById(id: Long): Account?
+
+    // Reconcile a local seeded/custom account (no server_id yet) with a server
+    // account of the same name, so it adopts the server id instead of becoming a
+    // duplicate. Only targets rows not yet stamped with a server id.
+    @Query("SELECT * FROM accounts WHERE deleted = 0 AND name = :name AND server_id IS NULL ORDER BY id ASC LIMIT 1")
+    suspend fun getByNameActive(name: String): Account?
+
     @androidx.room.Upsert
     suspend fun upsert(account: Account)
 

@@ -380,7 +380,9 @@ class QuickAddViewModel(
     // ── Template ──
     private fun onTemplateClick(template: BillTemplate) {
         val cat = _state.value.categories.find { it.id == template.categoryId } ?: return
-        val acct = _state.value.accounts.find { it.id == template.accountId } ?: return
+        // Template.accountId is the SERVER account id (synced server→local); match the
+        // local account by its serverId, not by its local Room id.
+        val acct = _state.value.accounts.find { it.serverId == template.accountId } ?: return
         // 子分类必须从"模板自身分类"解析，而不是当前弹层快照（可能为空/属于别的父级），
         // 否则模板携带的子分类会被静默丢弃。逐条异步拉取模板分类的二分类。
         viewModelScope.launch {

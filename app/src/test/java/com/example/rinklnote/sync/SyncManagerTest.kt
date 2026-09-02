@@ -110,6 +110,10 @@ class SyncManagerTest {
     @Test
     fun `new bill uploads and stamps the returned server id`() = runTest {
         val b = bill(id = 7, deleted = false, serverId = null)
+        // Local account id=1 must resolve to a server id before upload.
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 99)
+        )
         whenever(api.uploadBill(any())).thenReturn(
             BillDTO(id = 500, amount = 10.0, billType = "EXPENSE", categoryId = 1,
                 categoryName = "三餐", accountId = 1, date = 100, source = "APP",
@@ -271,6 +275,9 @@ class SyncManagerTest {
     @Test
     fun `bill update on 409 re-bases and replays exactly once`() = runTest {
         val b = bill(id = 7, deleted = false, serverId = 99).copy(baseUpdatedAt = 1000)
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 99)
+        )
         val ok = BillDTO(id = 99, amount = 10.0, billType = "EXPENSE", categoryId = 1,
             categoryName = "三餐", accountId = 1, date = 100, source = "APP",
             createdAt = 100, updatedAt = 2000)
@@ -284,5 +291,79 @@ class SyncManagerTest {
         verify(api).getBill(99L)
         verify(api).updateBill(eq(99L), argThat<CreateBillRequest> { req -> req.baseUpdatedAt == 2000L })
         verify(billDao).updateServerId(7, 99, 2000)
+    }
+
+    @Test
+    fun `bill push maps local account id to the server account id`() = runTest {
+        val b = bill(id = 7, deleted = false, serverId = null)
+        // Local account id=1 maps to the server account id=214 (per-user global ids).
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 214)
+        )
+        whenever(api.uploadBill(any())).thenReturn(
+            BillDTO(id = 500, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+                categoryName = "三餐", accountId = 214, date = 100, source = "APP",
+                createdAt = 100, updatedAt = 1000)
+        )
+        manager.pushBill(b)
+        // The wire payload must carry the server account id, not the local Room id.
+        verify(api).uploadBill(argThat<CreateBillRequest> { req -> req.accountId == 214L })
+        verify(billDao).updateServerId(7, 500, 1000)
+    }
+
+    @Test
+    fun `bill push leaves unsyncable bill when no account server id yet`() = runTest {
+        val b = bill(id = 7, deleted = false, serverId = null)
+        // No server id for the account yet (unreconciled seed) → skip upload, keep it local.
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = null)
+        )
+        manager.pushBill(b)
+        verify(api, never()).uploadBill(any())
+        verify(billDao, never()).updateServerId(any(), any(), any())
+    }
+
+    @Test
+    fun `bill pull maps server account id to local account id`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        // Server bill references the server account id=214; local account id=1 maps back.
+        whenever(accountDao.getByServerId(214L)).thenReturn(
+            Account(id = 1, serverId = 214, name = "微信", balance = 0.0, iconColor = "#000000")
+        )
+        val dto = billDTO(9, 900).copy(accountId = 214)
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(listOf(dto), serverTime = 1000))
+        manager.sync()
+        verify(billDao).upsertAll(argThat<List<Bill>> { bills ->
+            bills.any { it.serverId == 9L && it.accountId == 1L }
+        })
+    }
+
+    @Test
+    fun `account pull reconciles a same-named seed account instead of duplicating`() = runTest {
+        stubLoggedIn(true)
+        whenever(accountDao.getUnsynced()).thenReturn(emptyList())
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(emptyList(), serverTime = 0))
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        // Local seed 微信 (id=1, no server id) matches server 微信 (id=214).
+        whenever(accountDao.getByServerId(214L)).thenReturn(null)
+        whenever(accountDao.getByNameActive("微信")).thenReturn(
+            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#28C145", serverId = null, updatedAt = 0)
+        )
+        whenever(api.getAccounts()).thenReturn(
+            listOf(AccountDTO(id = 214, name = "微信", balance = 0.0, iconColor = "#28C145", updatedAt = 999))
+        )
+        manager.sync()
+        // The seed row is reconciled (adopts the server id) rather than duplicated.
+        verify(accountDao).upsert(
+            argThat<Account> { acc -> acc.serverId == 214L && acc.id == 1L && !acc.dirty }
+        )
     }
 }
