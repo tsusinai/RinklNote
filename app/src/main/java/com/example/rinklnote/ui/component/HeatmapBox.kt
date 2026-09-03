@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.Blue40
 import com.example.rinklnote.util.bookkeepingZone
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 import java.time.LocalDate
 
 /** 月度每日支出热力图：周一起始的月历格子，每个格子按当日支出深浅着色。
@@ -63,10 +67,12 @@ private fun heatRangeTotals(dailyExpense: Map<Int, Float>, daysInMonth: Int): Li
     return ranges.map { r -> r.fold(0f) { acc, d -> acc + (dailyExpense[d] ?: 0f) } }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun HeatmapBox(
     modifier: Modifier = Modifier,
     heatmap: MonthHeatmap,
+    hazeState: HazeState,
     onDetailClick: () -> Unit = {}
 ) {
     val hotColor = Blue40
@@ -91,9 +97,9 @@ fun HeatmapBox(
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp)
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .shadow(2.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
         // 标题行：左侧标题+chevron 可点（切换展开/收起），右侧「明细」独立打开汇总。

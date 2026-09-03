@@ -1,11 +1,18 @@
 package com.example.rinklnote.ui.screen.profile
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -40,12 +48,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.ThemeMode
@@ -77,15 +87,35 @@ fun ProfileScreen(
     val state by authViewModel.state.collectAsStateWithLifecycle()
     val themeMode by settingsManager.themeMode.collectAsStateWithLifecycle(ThemeMode.SYSTEM)
     val autoSync by settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
+    val backgroundUri by settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
     val lastSync by tokenManager.lastSyncTime.collectAsStateWithLifecycle(initialValue = 0L)
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // 图库选背景：把结果拷到应用内部存储（自建文件路径，跨重启稳定），再写回设置。
+    val pickBackgroundLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch {
+                val path = copyBackgroundToInternal(context, uri)
+                if (path != null) settingsManager.setBackgroundUri(path)
+                else Toast.makeText(context, "未读到图片，请换一张重试", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     var showPassword by remember { mutableStateOf(false) }
     var showUnbindQQ by remember { mutableStateOf(false) }
     var showTheme by remember { mutableStateOf(false) }
     var showLogout by remember { mutableStateOf(false) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
+    val versionName = remember {
+        runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull() ?: "1.0"
+    }
 
     // Refresh profile when login state changes (login / logout / re-bind)
     LaunchedEffect(state.isLoggedIn) {
@@ -99,23 +129,15 @@ fun ProfileScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(key = "userbox") {
-            UserBox(state = state, onLogin = onLoginClick)
+        item(key = "header") {
+            ProfileHeader(state = state, onLogin = onLoginClick)
         }
-        item(key = "func") {
-            FuncBox(
-                state = state,
-                themeMode = themeMode,
+        item(key = "sync") {
+            SyncCard(
                 autoSync = autoSync,
                 lastSync = lastSync,
                 syncStatus = syncStatus,
-                onPasswordClick = { showPassword = true },
-                onBindQQClick = onBindQQClick,
-                onQqBotGuideClick = onQqBotGuideClick,
-                onUnbindQQ = { showUnbindQQ = true },
-                onThemeClick = { showTheme = true },
                 onAutoSyncChange = { coroutineScope.launch { settingsManager.setAutoSync(it) } },
-                onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) },
                 onSyncNow = {
                     coroutineScope.launch {
                         syncStatus = "同步中..."
@@ -125,7 +147,32 @@ fun ProfileScreen(
                             is SyncResult.Error -> r.message
                         }
                     }
+                }
+            )
+        }
+        item(key = "account") {
+            AccountCard(
+                state = state,
+                themeMode = themeMode,
+                backgroundUri = backgroundUri,
+                onThemeClick = { showTheme = true },
+                onBackgroundClick = {
+                    pickBackgroundLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
                 },
+                onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
+                onPasswordClick = { showPassword = true },
+                onBindQQClick = onBindQQClick,
+                onUnbindQQ = { showUnbindQQ = true },
+                onQqBotGuideClick = onQqBotGuideClick,
+                onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) }
+            )
+        }
+        item(key = "about") {
+            AboutCard(
+                isLoggedIn = state.isLoggedIn,
+                versionName = versionName,
                 onExportClick = {
                     coroutineScope.launch {
                         val bills = repository.observeAllBills().first()
@@ -181,8 +228,9 @@ fun ProfileScreen(
     }
 }
 
+/** 通栏宽头：左大号头像 + 右昵称/副行；未登录给「登录/注册」胶囊按钮。 */
 @Composable
-private fun UserBox(state: AuthState, onLogin: () -> Unit) {
+private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -193,12 +241,12 @@ private fun UserBox(state: AuthState, onLogin: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (!state.isLoggedIn) {
-            AvatarBadge(character = "账")
-            Spacer(modifier = Modifier.width(12.dp))
+            AvatarBadge(character = "账", size = 64.dp)
+            Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "未登录",
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -211,12 +259,12 @@ private fun UserBox(state: AuthState, onLogin: () -> Unit) {
             Spacer(modifier = Modifier.width(12.dp))
             Button(onClick = onLogin) { Text("登录 / 注册") }
         } else {
-            AvatarBadge(character = state.accountPhone.firstOrNull()?.toString() ?: "账")
-            Spacer(modifier = Modifier.width(12.dp))
+            AvatarBadge(character = state.accountPhone.firstOrNull()?.toString() ?: "账", size = 64.dp)
+            Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = maskPhone(state.accountPhone),
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -238,40 +286,28 @@ private fun UserBox(state: AuthState, onLogin: () -> Unit) {
 }
 
 @Composable
-private fun AvatarBadge(character: String) {
+private fun AvatarBadge(character: String, size: androidx.compose.ui.unit.Dp = 56.dp) {
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(size)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = character,
-            fontSize = 24.sp,
+            fontSize = (size.value * 0.43f).sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
 }
 
+/** 分组卡片：浅色小标题（可选）+ 多行设置。 */
 @Composable
-private fun FuncBox(
-    state: AuthState,
-    themeMode: ThemeMode,
-    autoSync: Boolean,
-    lastSync: Long,
-    syncStatus: String?,
-    onPasswordClick: () -> Unit,
-    onBindQQClick: () -> Unit,
-    onQqBotGuideClick: () -> Unit,
-    onUnbindQQ: () -> Unit,
-    onThemeClick: () -> Unit,
-    onAutoSyncChange: (Boolean) -> Unit,
-    onSetAiDisabled: (Boolean) -> Unit,
-    onSyncNow: () -> Unit,
-    onExportClick: () -> Unit,
-    onLogoutClick: () -> Unit
+private fun GroupCard(
+    title: String? = null,
+    content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -279,79 +315,200 @@ private fun FuncBox(
             .shadow(4.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .padding(vertical = 4.dp)
+            .padding(vertical = 2.dp)
     ) {
-        FuncRow(label = "修改密码", onClick = onPasswordClick)
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        FuncRow(
-            label = if (state.isQQBound) "解绑QQ号" else "绑定QQ号",
-            onClick = if (state.isQQBound) onUnbindQQ else onBindQQClick
+        if (title != null) {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 2.dp)
+            )
+        }
+        content()
+    }
+}
+
+/** 单行设置：前置图标 + 标签 + 右侧值/「>」/开关。 */
+@Composable
+private fun SettingsRow(
+    icon: Int? = null,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
+    label: String,
+    value: String? = null,
+    labelColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+        }
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            color = labelColor,
+            modifier = Modifier.weight(1f)
         )
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        FuncRow(label = "QQ 机器人绑定引导", onClick = onQqBotGuideClick)
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        FuncRow(label = "导出账单 (CSV)", onClick = onExportClick)
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        FuncRow(label = "主题", value = themeLabel(themeMode), onClick = onThemeClick)
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("关闭 AI 主动推送", fontSize = 15.sp)
-            Switch(checked = state.aiDisabled, onCheckedChange = onSetAiDisabled)
+        if (value != null) {
+            Text(value, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(6.dp))
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("自动同步", fontSize = 15.sp)
-            Switch(checked = autoSync, onCheckedChange = onAutoSyncChange)
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("上次同步: ${formatSyncTime(lastSync)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (syncStatus != null) {
-                Text(syncStatus, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Button(onClick = onSyncNow, modifier = Modifier.fillMaxWidth()) { Text("立即同步") }
-        }
-        if (state.isLoggedIn) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            FuncRow(
-                label = "退出登录",
-                onClick = onLogoutClick,
-                labelColor = MaterialTheme.colorScheme.error
+        if (trailing != null) {
+            trailing()
+        } else if (onClick != null) {
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
             )
         }
     }
 }
 
+/** «同步» 组：自动同步开关 + 立即同步行（附「上次同步」小字）+ 同步结果。 */
 @Composable
-private fun FuncRow(
-    label: String,
-    onClick: () -> Unit,
-    value: String? = null,
-    labelColor: Color = MaterialTheme.colorScheme.onSurface
+private fun SyncCard(
+    autoSync: Boolean,
+    lastSync: Long,
+    syncStatus: String?,
+    onAutoSyncChange: (Boolean) -> Unit,
+    onSyncNow: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 15.sp, color = labelColor)
-        if (value != null) {
-            Text(value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    GroupCard(title = "同步") {
+        SettingsRow(
+            icon = R.drawable.ic_sync,
+            label = "自动同步",
+            trailing = { Switch(checked = autoSync, onCheckedChange = onAutoSyncChange) }
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_sync,
+            label = "立即同步",
+            value = "上次同步 ${formatSyncTime(lastSync)}",
+            onClick = onSyncNow
+        )
+        if (syncStatus != null) {
+            Text(
+                text = syncStatus,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            )
+        }
+    }
+}
+
+/** «账户与个性化» 组：主题、背景、修改密码、QQ 绑定、机器人引导、AI 推送。 */
+@Composable
+private fun AccountCard(
+    state: AuthState,
+    themeMode: ThemeMode,
+    backgroundUri: String?,
+    onThemeClick: () -> Unit,
+    onBackgroundClick: () -> Unit,
+    onRemoveBackground: () -> Unit,
+    onPasswordClick: () -> Unit,
+    onBindQQClick: () -> Unit,
+    onUnbindQQ: () -> Unit,
+    onQqBotGuideClick: () -> Unit,
+    onSetAiDisabled: (Boolean) -> Unit
+) {
+    GroupCard(title = "账户与个性化") {
+        SettingsRow(
+            icon = R.drawable.ic_theme,
+            label = "主题",
+            value = themeLabel(themeMode),
+            onClick = onThemeClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_image,
+            label = "选择背景",
+            value = if (backgroundUri != null) "已设置" else "未设置",
+            onClick = onBackgroundClick
+        )
+        if (backgroundUri != null) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            SettingsRow(
+                icon = R.drawable.ic_image,
+                iconTint = MaterialTheme.colorScheme.error,
+                label = "移除背景",
+                labelColor = MaterialTheme.colorScheme.error,
+                onClick = onRemoveBackground
+            )
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_lock,
+            label = "修改密码",
+            onClick = onPasswordClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_link,
+            label = if (state.isQQBound) "解绑QQ号" else "绑定QQ号",
+            onClick = if (state.isQQBound) onUnbindQQ else onBindQQClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_link,
+            label = "QQ 机器人绑定引导",
+            onClick = onQqBotGuideClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_ai,
+            label = "AI 主动推送",
+            trailing = {
+                Switch(checked = !state.aiDisabled, onCheckedChange = { onSetAiDisabled(!it) })
+            }
+        )
+    }
+}
+
+/** «关于» 组：导出账单、版本信息、退出登录（红字置底）。 */
+@Composable
+private fun AboutCard(
+    isLoggedIn: Boolean,
+    versionName: String,
+    onExportClick: () -> Unit,
+    onLogoutClick: () -> Unit
+) {
+    GroupCard(title = "关于") {
+        SettingsRow(
+            icon = R.drawable.ic_export,
+            label = "导出账单 (CSV)",
+            onClick = onExportClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_info,
+            label = "版本",
+            value = versionName
+        )
+        if (isLoggedIn) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+            SettingsRow(
+                icon = R.drawable.ic_logout,
+                iconTint = MaterialTheme.colorScheme.error,
+                label = "退出登录",
+                labelColor = MaterialTheme.colorScheme.error,
+                onClick = onLogoutClick
+            )
         }
     }
 }
@@ -440,6 +597,21 @@ private fun formatSyncTime(epochMillis: Long): String {
     return Instant.ofEpochMilli(epochMillis)
         .atZone(bookkeepingZone())
         .format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
+}
+
+/** 把图库选的照片拷进应用内部存储并返回其绝对路径；PhotoPicker 的 content:// 仅在会话内可读，
+ *  拷到 filesDir 后跨重启稳定，Coil 可直接按路径加载。失败返回 null。 */
+private fun copyBackgroundToInternal(context: Context, uri: Uri): String? {
+    return try {
+        val dir = File(context.filesDir, "backgrounds").apply { mkdirs() }
+        val file = File(dir, "bg_${System.currentTimeMillis()}.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use { output -> input.copyTo(output) }
+        }
+        file.absolutePath
+    } catch (_: Exception) {
+        null
+    }
 }
 
 private fun exportBills(context: android.content.Context, bills: List<Bill>) {

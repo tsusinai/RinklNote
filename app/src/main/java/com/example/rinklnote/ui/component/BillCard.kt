@@ -40,10 +40,15 @@ import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.toDateString
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 
 /** 一天一张卡：日期头 + 该日所有账单。内部经 derivedStateOf 读取 revealed/menu，
  *  侧滑只重组真正受影响的行，而非整卡。 */
 @SuppressLint("DefaultLocale")
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun BillCard(
     date: Long,
@@ -56,14 +61,15 @@ fun BillCard(
     onMenuChange: (Bill?) -> Unit,
     onEdit: (Bill) -> Unit,
     onDelete: (Bill) -> Unit,
+    hazeState: HazeState,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp)
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .shadow(2.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(

@@ -2,7 +2,6 @@ package com.example.rinklnote.ui.component
 
 import androidx.compose.animation.core.animate
 import com.example.rinklnote.ui.theme.Motion
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -74,6 +73,8 @@ fun SwipeableBillItem(
             modifier = Modifier.matchParentSize(),
             contentAlignment = Alignment.CenterEnd
         ) {
+            // 左滑时随位移渐显，关闭态 alpha=0 —— 不透过毛玻璃留下红色/白色残留。
+            val deleteAlpha = (-offsetX / revealPx).coerceIn(0f, 1f)
             Text(
                 text = "删除",
                 fontSize = 16.sp,
@@ -81,20 +82,20 @@ fun SwipeableBillItem(
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .clickable { onDelete() }
+                    .graphicsLayer { alpha = deleteAlpha }
+                    .clickable(enabled = revealed) { onDelete() }
             )
         }
 
-        // Foreground row content — opaque surface so the red panel only becomes
-        // visible when the row is swiped left.
-        // IMPORTANT: graphicsLayer must come BEFORE background, otherwise the
+        // Foreground row content —— 透明，让下层的毛玻璃卡片透出；红“删除”用左侧渐显，
+        // 因此不再需要不透明 surface 来遮它。
+        // IMPORTANT: graphicsLayer must come BEFORE any background, otherwise the
         // background() layer is applied outside the transform and stays fixed,
         // permanently covering the red delete panel (only the content slides).
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer { translationX = offsetX }
-                .background(MaterialTheme.colorScheme.surface)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragStart = { },

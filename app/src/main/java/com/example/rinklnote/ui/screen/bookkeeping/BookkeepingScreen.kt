@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -44,8 +45,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.local.SettingsManager
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
@@ -65,11 +70,14 @@ fun BookkeepingScreen(
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAiClick: () -> Unit,
+    settingsManager: SettingsManager,
     viewModel: BookkeepingViewModel
 ) {
     val horizonalPadding = 10.dp
 
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // 用户自选背景图（毛玻璃背后）：无则用主题背景色。
+    val backgroundUri by settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
 
     val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {
@@ -77,7 +85,7 @@ fun BookkeepingScreen(
         "${d.year}年${d.monthValue}月"
     }
 
-    // 顶部横幅背景：按当前时段对应四张图（数据由 ViewModel 的 state.dayPart 给出）。
+    // 未选照片时仍显示时段横幅（对应四张图）；选了照片则整页铺照片、横幅让位
     val headerBg = when (state.dayPart) {
         DayPart.MORNING -> R.drawable.morning
         DayPart.DAY -> R.drawable.moon
@@ -98,6 +106,10 @@ fun BookkeepingScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // 定制背景 + 毛玻璃源：整页铺一张（用户选的）图库照片或主题背景色，供各卡片 hazeEffect 采样。
+        val hazeState = remember { HazeState() }
+        BackgroundLayer(backgroundUri = backgroundUri, hazeState = hazeState)
+
         PullToRefreshBox(
             isRefreshing = state.isRefreshing,
             onRefresh = { viewModel.onEvent(BookkeepingEvent.PullRefresh) },
@@ -108,6 +120,7 @@ fun BookkeepingScreen(
                 TopBar(
                     monthLabel = monthLabel,
                     headerBg = headerBg,
+                    showDayBanner = backgroundUri == null,
                     offset = state.selectedMonthOffset,
                     onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
                     onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
@@ -129,6 +142,7 @@ fun BookkeepingScreen(
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     aiSummary = if (isCurrentMonth) state.aiSummary else null,
                     aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false,
+                    hazeState = hazeState
                 )
             }
 
@@ -137,11 +151,11 @@ fun BookkeepingScreen(
             item(key = "chart") {
                 HeatmapBox(
                     heatmap = heatmap,
+                    hazeState = hazeState,
                     onDetailClick = { showMonthDetail = true }
                 )
             }
             item(key = "spacer-2") { Spacer(modifier = Modifier.height(horizonalPadding)) }
-
 
             groupedBills.forEach { (date, bills) ->
                 item(key = date) {
@@ -152,6 +166,7 @@ fun BookkeepingScreen(
                         bills = bills,
                         revealedBillId = revealedBillId,
                         menuBill = menuBill,
+                        hazeState = hazeState,
                         onRevealChange = { revealedBillId = it },
                         onMenuChange = { menuBill = it },
                         onEdit = { bill ->
@@ -233,8 +248,43 @@ fun BookkeepingScreen(
             monthLabel = monthLabel,
             bills = state.bills,
             month = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
+            expenseTotal = state.totalExpense,
+            incomeTotal = state.totalIncome,
+            monthDetail = state.monthDetail,
             onDismiss = { showMonthDetail = false }
         )
+    }
+}
+
+/** 记账页整页背景：作为毛玻璃的 blur 源。有用户自选照片则铺照片，否则用主题背景色。 */
+@Composable
+private fun BackgroundLayer(backgroundUri: String?, hazeState: HazeState) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (backgroundUri != null) {
+            AsyncImage(
+                model = backgroundUri,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(hazeState),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            // 默认背景：柔和的主色→背景渐变。纯色会让玻璃无从“模糊”，看起来像没改过的白卡。
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+                    .hazeSource(hazeState)
+            )
+        }
     }
 }
 
@@ -242,6 +292,7 @@ fun BookkeepingScreen(
 private fun TopBar(
     monthLabel: String,
     headerBg: Int,
+    showDayBanner: Boolean,
     offset: Int,
     onPrev: () -> Unit,
     onNext: () -> Unit,
@@ -254,18 +305,33 @@ private fun TopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp),
-        contentAlignment = Alignment.TopCenter
-
+            .height(150.dp)
     ) {
-        // 时段横幅背景：四张图按当前时段切换，铺满标题栏（含状态栏后方），ContentScale.Crop 裁切铺满
-        Image(
-            painter = painterResource(headerBg),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.Crop
-        )
-        // 内容层：状态栏避让 + 内容内边距，置于背景图之上，不影响图的满铺
+        if (showDayBanner) {
+            // 未选照片：时段横幅铺满标题栏（含状态栏后方）
+            Image(
+                painter = painterResource(headerBg),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            // 选了照片（或默认渐变）：顶部浅色渐隐遮罩，保证白字/白图标清晰，不遮挡照片主体
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.30f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
+        // 内容层：状态栏避让 + 内容内边距，悬浮于照片/渐变/横幅之上
         Box(
             modifier = Modifier
                 .matchParentSize()

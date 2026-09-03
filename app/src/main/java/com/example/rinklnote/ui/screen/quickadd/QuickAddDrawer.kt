@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.quickadd
 
+import android.annotation.SuppressLint
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -12,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
@@ -59,6 +62,8 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.ui.theme.AxisLabelGray
+import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
@@ -121,10 +126,10 @@ fun QuickAddDrawer(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
-                    .width(236.dp)
-                    .shadow(4.dp)
+                    .width(200.dp)
+                    .shadow(3.dp)
                     .clip(RoundedCornerShape(topStart = 15.dp, bottomStart = 15.dp))
-                    .background(MaterialTheme.colorScheme.background)
+                    .background(Color.White)
                     .clickable(enabled = false) {} // consume click
                     .pointerInput(Unit) {
                         var dragOffset = 0f
@@ -176,7 +181,7 @@ private fun DrawerContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp)
+            .padding(16.dp)
     ) {
         // 可滚动内容区
         Column(
@@ -187,20 +192,20 @@ private fun DrawerContent(
         ) {
             // Top bar
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 30.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                Text("快捷记账", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Icon(
                     painter = painterResource(R.drawable.ic_register),
                     contentDescription = "登记",
-                    modifier = Modifier.size(30.dp),
+                    modifier = Modifier.size(26.dp),
                     tint = Color.Unspecified
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             state.suggestion?.let { suggestion ->
                 SuggestionSection(
@@ -235,22 +240,22 @@ private fun DrawerContent(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 36.dp),
+                .padding(top = 8.dp, bottom = 34.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .shadow(4.dp, CircleShape)
+                    .shadow(2.dp, CircleShape)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable { onVoiceInput() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_ai),
+                    painter = painterResource(R.drawable.ic_voice_bill),
                     contentDescription = "语音记账",
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(26.dp),
                     tint = Color.Unspecified
                 )
             }
@@ -348,7 +353,7 @@ private fun CategorySection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .shadow(2.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp)
@@ -358,10 +363,16 @@ private fun CategorySection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("标签栏", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text("标签", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Text("长按呼出二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(modifier = Modifier.height(8.dp))
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Canvas(modifier = Modifier.fillMaxWidth()) {
+            drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+
         // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
         val visibleParentId = if (showSubCategories) expandedParentId else null
         categories.forEach { category ->
@@ -411,7 +422,7 @@ private fun CategoryRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -504,7 +515,7 @@ private fun AccountSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("账户选择", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Icon(
                 painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
                 contentDescription = if (hidden) "显示余额" else "隐藏余额",
@@ -514,7 +525,11 @@ private fun AccountSection(
                 tint = Color.Unspecified
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+        Canvas(modifier = Modifier.fillMaxWidth()) {
+            drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
         accounts.forEach { account ->
             AccountRow(
                 account = account,
@@ -526,6 +541,7 @@ private fun AccountSection(
     }
 }
 
+@SuppressLint("DefaultLocale")
 @Composable
 private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, onClick: () -> Unit) {
     Row(
@@ -566,23 +582,31 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
 @Composable
 private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
     val isExpense = state.billType == "EXPENSE"
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .height(36.dp)
-            .shadow(4.dp, RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable { onAmountTap() },
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = state.amount.ifEmpty { "0.00" },
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Normal,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
-        )
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ){
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp)
+                .height(36.dp)
+                .shadow(2.dp, RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(15.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .clickable { onAmountTap() },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = state.amount.ifEmpty { "0.00" },
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("点击输入金额", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

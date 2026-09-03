@@ -313,6 +313,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onFinanceClick = { navigateTo("assets") },
                         onMoreClick = { navigateTo("profile") },
                         onAiClick = { navigateTo("ai") },
+                        settingsManager = app.settingsManager,
                         viewModel = bookkeepingVM
                     )
 

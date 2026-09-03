@@ -9,7 +9,10 @@ import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.domain.MonthDetailData
+import com.example.rinklnote.domain.buildMonthDetail
 import com.example.rinklnote.sync.SyncManager
+import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.CancellationException
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -63,7 +67,9 @@ data class BookkeepingState(
     val aiSummary: String? = null,
     val aiSummaryLoading: Boolean = false,
     // 顶部横幅背景：由本 ViewModel 按当前时段给出（决定用哪张图）。
-    val dayPart: DayPart = DayPart.current()
+    val dayPart: DayPart = DayPart.current(),
+    // 当月图表聚合数据：每日支出、分类占比、日序列。随当月账单算一次（不依赖 UI）。
+    val monthDetail: MonthDetailData = MonthDetailData(emptyMap(), emptyList(), emptyList(), 1f)
 ) {
     val categories: List<Category>
         get() = if (editingBill?.billType == "INCOME") incomeCategories else expenseCategories
@@ -137,8 +143,16 @@ class BookkeepingViewModel(
         billCollectorJob = viewModelScope.launch {
             val monthStart = getMonthStart(offset)
             val nextMonthStart = getNextMonthStart(offset)
+            val daysInMonth = Instant.ofEpochMilli(monthStart)
+                .atZone(bookkeepingZone()).toLocalDate().lengthOfMonth()
             repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
-                _state.update { it.copy(bills = bills, isLoading = false) }
+                _state.update {
+                    it.copy(
+                        bills = bills,
+                        isLoading = false,
+                        monthDetail = buildMonthDetail(bills, daysInMonth)
+                    )
+                }
             }
         }
     }

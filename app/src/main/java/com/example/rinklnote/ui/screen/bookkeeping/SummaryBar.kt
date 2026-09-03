@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
@@ -32,15 +31,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 
 @SuppressLint("DefaultLocale")
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun SummaryBar(
     currentMonth: Int = java.time.LocalDate.now().monthValue,
     totalExpense: Double,
     totalIncome: Double,
     aiSummary: String? = null,
-    aiSummaryLoading: Boolean = false
+    aiSummaryLoading: Boolean = false,
+    hazeState: HazeState
 ) {
     // 展开/收起状态：默认收起，点击卡片切换。仅有总结内容时才可交互。
     var expanded by remember { mutableStateOf(false) }
@@ -64,9 +69,9 @@ fun SummaryBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .shadow(2.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .then(clickModifier)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

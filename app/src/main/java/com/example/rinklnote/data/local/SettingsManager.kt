@@ -19,6 +19,7 @@ class SettingsManager(private val context: Context) {
     companion object {
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_AUTO_SYNC = booleanPreferencesKey("auto_sync")
+        private val KEY_BACKGROUND_URI = stringPreferencesKey("background_uri")
     }
 
     val themeMode: Flow<ThemeMode> = context.settingsDataStore.data.map {
@@ -31,11 +32,21 @@ class SettingsManager(private val context: Context) {
 
     val autoSync: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_AUTO_SYNC] ?: true }
 
+    /** 自定义背景：记账页毛玻璃背后铺的图库照片路径；null 表示未设置（用主题背景色）。 */
+    val backgroundUri: Flow<String?> = context.settingsDataStore.data.map { it[KEY_BACKGROUND_URI] }
+
     suspend fun setThemeMode(mode: ThemeMode) {
         context.settingsDataStore.edit { it[KEY_THEME_MODE] = mode.name }
     }
 
     suspend fun setAutoSync(enabled: Boolean) {
         context.settingsDataStore.edit { it[KEY_AUTO_SYNC] = enabled }
+    }
+
+    suspend fun setBackgroundUri(uri: String?) {
+        context.settingsDataStore.edit {
+            if (uri == null) it.remove(KEY_BACKGROUND_URI)
+            else it[KEY_BACKGROUND_URI] = uri
+        }
     }
 }

@@ -65,6 +65,13 @@ dependencies {
     // DataStore
     implementation(libs.datastore.preferences)
 
+    // Haze - 毛玻璃/模糊效果
+    implementation(libs.haze)
+    implementation(libs.haze.materials)
+
+    // Coil - 图片加载
+    implementation(libs.coil.compose)
+
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

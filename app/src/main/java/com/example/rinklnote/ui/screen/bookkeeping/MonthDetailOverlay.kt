@@ -5,7 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import com.example.rinklnote.ui.theme.Motion
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,56 +37,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.MonthDetailData
+import com.example.rinklnote.ui.component.MonthChartPager
 import com.example.rinklnote.ui.theme.Blue80
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
 import java.time.LocalDate
-import kotlin.math.cos
-import kotlin.math.roundToInt
-import kotlin.math.sin
 
-/** 月度明细筛选状态：无 | 只看某天 | 只看某分类。热力图/饼图始终显示整月，仅下方明细跟随收窄。 */
+/** 月度明细筛选状态：无 | 只看某天 | 只看某分类。热力图/图表始终显示整月，仅下方明细跟随收窄。 */
 private sealed interface MonthFilter {
     data object None : MonthFilter
     data class Day(val day: Int) : MonthFilter
     data class Category(val name: String) : MonthFilter
 }
-
-/** 饼图切片：分类名 + 金额 + 占比(0..1)。 */
-private data class PieSlice(val name: String, val amount: Double, val pct: Float)
-
-/** 单月汇总数据（不可变种子，随 bills 变化重算一次）。 */
-private data class MonthSummary(
-    val expenseTotal: Double,
-    val incomeTotal: Double,
-    val dayAmounts: Map<Int, Double>,
-    val pieSlices: List<PieSlice>
-)
-
-/** 饼图配色：主蓝起头，末位灰色固定给「其他」。 */
-private val PiePalette = listOf(
-    Color(0xFF7EC1FC),
-    Color(0xFFF97D1D),
-    Color(0xFF04A433),
-    Color(0xFF9B59B6),
-    Color(0xFFF2B134),
-    Color(0xFFCA3032),
-    Color(0xFFB0B0B0)
-)
 
 @Composable
 fun MonthDetailOverlay(
@@ -95,8 +67,30 @@ fun MonthDetailOverlay(
     monthLabel: String,
     bills: List<Bill>,
     month: LocalDate,
+    expenseTotal: Double,
+    incomeTotal: Double,
+    monthDetail: MonthDetailData,
     onDismiss: () -> Unit
 ) {
+    // 选中筛选；切换可见/换月时自动重置为「无」
+    var filter by remember(visible, bills) { mutableStateOf<MonthFilter>(MonthFilter.None) }
+
+    // 明细清单：跟随筛选收窄，否则整月
+    val filteredBills = remember(bills, filter) {
+        val current = filter
+        when (current) {
+            MonthFilter.None -> bills
+            is MonthFilter.Day -> bills.filter {
+                Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth == current.day
+            }
+            is MonthFilter.Category -> bills.filter { it.categoryName == current.name }
+        }
+    }
+    val filteredGroup = remember(filteredBills) {
+        filteredBills.groupBy { it.categoryName }
+            .map { (name, bl) -> Triple(name, bl.sumOf { it.amount }, bl) }
+    }
+
     BackHandler(enabled = visible) { onDismiss() }
 
     AnimatedVisibility(
@@ -104,88 +98,48 @@ fun MonthDetailOverlay(
         enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
         exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
-                .statusBarsPadding()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = monthLabel,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                TextButton(onClick = onDismiss) {
-                    Text("关闭", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // 汇总与分组只在 bills 变化时算一次，避免每次重组重新 filter/groupBy/sum
-            val summary = remember(bills) {
-                val expenseTotal = bills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
-                val incomeTotal = bills.filter { it.billType == "INCOME" }.sumOf { it.amount }
-                val dayAmounts = bills.filter { it.billType == "EXPENSE" }
-                    .groupBy { Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth }
-                    .mapValues { it.value.sumOf { b -> b.amount } }
-                MonthSummary(expenseTotal, incomeTotal, dayAmounts, buildPieSlices(bills.filter { it.billType == "EXPENSE" }))
-            }
-
-            // 选中筛选；切换可见/换月时自动重置为「无」
-            var filter by remember(visible, bills) { mutableStateOf<MonthFilter>(MonthFilter.None) }
-
-            // 明细清单：跟随筛选收窄，否则整月
-            val filteredBills = remember(bills, filter) {
-                val current = filter
-                when (current) {
-                    MonthFilter.None -> bills
-                    is MonthFilter.Day -> bills.filter {
-                        Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth == current.day
-                    }
-                    is MonthFilter.Category -> bills.filter { it.categoryName == current.name }
-                }
-            }
-            val filteredGroup = remember(filteredBills) {
-                filteredBills.groupBy { it.categoryName }
-                    .map { (name, bl) -> Triple(name, bl.sumOf { it.amount }, bl) }
-            }
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                contentPadding = PaddingValues(start = 14.dp, top = 180.dp, end = 14.dp, bottom = 8.dp)
             ) {
-                item(key = "totals") { TotalsCard(summary.expenseTotal, summary.incomeTotal) }
-                if (filter != MonthFilter.None) {
-                    item(key = "filter") { FilterBanner(filter) { filter = MonthFilter.None } }
-                }
-                item(key = "heatmap") {
-                    MonthHeatmap(
+                // 图表（占比|折线|柱状 三段可滑）
+                item(key = "chart-pager") {
+                    MonthChartPager(
                         month = month,
-                        dayAmounts = summary.dayAmounts,
-                        selectedDay = (filter as? MonthFilter.Day)?.day,
-                        onDayTap = { day ->
-                            filter = if (filter == MonthFilter.Day(day)) MonthFilter.None else MonthFilter.Day(day)
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-                item(key = "pie") {
-                    ExpensePie(
-                        slices = summary.pieSlices,
+                        pieSlices = monthDetail.pieSlices,
+                        daySeries = monthDetail.daySeries,
+                        maxSeries = monthDetail.maxSeries,
                         selectedCategory = (filter as? MonthFilter.Category)?.name,
                         onCategoryTap = { name ->
                             filter = if (filter == MonthFilter.Category(name)) MonthFilter.None else MonthFilter.Category(name)
                         }
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
+
+                item { Spacer(modifier = Modifier.height(6.dp)) }
+
+                // 每日支出热力图 → 点天筛选
+                item(key = "heatmap") {
+                    MonthHeatmap(
+                        month = month,
+                        dayAmounts = monthDetail.dayAmounts,
+                        selectedDay = (filter as? MonthFilter.Day)?.day,
+                        onDayTap = { day ->
+                            filter = if (filter == MonthFilter.Day(day)) MonthFilter.None else MonthFilter.Day(day)
+                        }
+                    )
+                }
+
+                if (filter != MonthFilter.None) {
+                    item(key = "filter") { FilterBanner(filter) { filter = MonthFilter.None } }
+                }
+
+                item { Spacer(modifier = Modifier.height(6.dp)) }
 
                 if (filteredBills.isEmpty()) {
                     item(key = "empty") {
@@ -209,25 +163,49 @@ fun MonthDetailOverlay(
                     }
                 }
             }
+
+            // 顶部固定层：树形图头部 + 月名/关闭 + 合计金额卡（覆盖在树图上，白底内容在其下方）
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(170.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.tree),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 24.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = monthLabel,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiary,
+                        )
+                        TextButton(onClick = onDismiss) {
+                            Text("关闭", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    TotalsCard(
+                        expenseTotal = expenseTotal,
+                        incomeTotal = incomeTotal,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                    )
+                }
+            }
         }
     }
-}
-
-/** 单月支出按分类占比 → 切片；>6 类时取前 5 + 「其他」，小项归一。 */
-private fun buildPieSlices(expense: List<Bill>): List<PieSlice> {
-    val total = expense.sumOf { it.amount }
-    if (total <= 0.0) return emptyList()
-    val byCategory = expense.groupBy { it.categoryName }
-        .mapValues { it.value.sumOf { b -> b.amount } }
-        .entries.sortedByDescending { it.value }
-        .map { it.key to it.value }
-
-    val keep: List<Pair<String, Double>> = if (byCategory.size <= 6) {
-        byCategory
-    } else {
-        byCategory.take(5) + ("其他" to byCategory.drop(5).sumOf { it.second })
-    }
-    return keep.map { (name, amount) -> PieSlice(name, amount, (amount / total).toFloat()) }
 }
 
 /** 4x8 矩阵热力图：黑白两对角，主蓝透明度随当日支出金额加深；点击网格 → 筛当天。 */
@@ -242,8 +220,8 @@ private fun MonthHeatmap(
     val maxAmount = dayAmounts.values.maxOrNull() ?: 0.0
     val primary = MaterialTheme.colorScheme.primary
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("每日支出热力图", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(6.dp))
+        Text("每日支出热力图", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(3.dp))
         repeat(4) { row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -266,7 +244,7 @@ private fun MonthHeatmap(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .aspectRatio(1f)
+                                .aspectRatio(1.8f)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(fill)
                                 .then(
@@ -285,89 +263,6 @@ private fun MonthHeatmap(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
-        }
-    }
-}
-
-/** 饼图：切片按占比画扇区（内标 %），下方图例列「分类 ¥金额 · 占比」；点切片/图例 → 筛该分类。 */
-@Composable
-private fun ExpensePie(
-    slices: List<PieSlice>,
-    selectedCategory: String?,
-    onCategoryTap: (String) -> Unit
-) {
-    if (slices.isEmpty()) {
-        Text("本月暂无支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        return
-    }
-    Text("支出分类占比", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(modifier = Modifier.height(8.dp))
-
-    val textMeasurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Color.White, fontSize = 9.sp)
-    // 提前测量各切片百分比文案；小切片(<6%)不标，避免挤
-    val layouts = slices.map {
-        if (it.pct >= 0.06f) textMeasurer.measure(AnnotatedString("${(it.pct * 100).roundToInt()}%"), labelStyle) else null
-    }
-
-    Canvas(modifier = Modifier.fillMaxWidth().height(180.dp)) {
-        val radius = size.minDimension / 2f
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        var startAngle = -90f
-        slices.forEachIndexed { index, slice ->
-            val sweep = slice.pct * 360f
-            drawArc(
-                color = PiePalette[index % PiePalette.size],
-                startAngle = startAngle,
-                sweepAngle = sweep,
-                useCenter = true,
-                topLeft = Offset(cx - radius, cy - radius),
-                size = Size(radius * 2, radius * 2)
-            )
-            layouts[index]?.let { layout ->
-                val midAngle = startAngle + sweep / 2f
-                val rad = Math.toRadians(midAngle.toDouble())
-                val labelR = radius * 0.6f
-                drawText(
-                    layout,
-                    topLeft = Offset(
-                        cx + (cos(rad) * labelR).toFloat() - layout.size.width / 2f,
-                        cy + (sin(rad) * labelR).toFloat() - layout.size.height / 2f
-                    )
-                )
-            }
-            startAngle += sweep
-        }
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-    slices.forEachIndexed { index, slice ->
-        val isSelected = selectedCategory == slice.name
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent)
-                .clickable { onCategoryTap(slice.name) }
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(PiePalette[index % PiePalette.size])
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(slice.name, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                "¥${String.format("%.2f", slice.amount)} · ${(slice.pct * 100).roundToInt()}%",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -381,7 +276,7 @@ private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
         is MonthFilter.Category -> filter.name
     }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth() ,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("已筛选：$label", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -393,22 +288,23 @@ private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
 }
 
 @Composable
-private fun TotalsCard(expenseTotal: Double, incomeTotal: Double) {
+private fun TotalsCard(
+    expenseTotal: Double,
+    incomeTotal: Double,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        Row {
             Text("支出", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("¥${String.format("%.2f", expenseTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Row {
             Text("收入", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("¥${String.format("%.2f", incomeTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = IncomeGreen)
         }

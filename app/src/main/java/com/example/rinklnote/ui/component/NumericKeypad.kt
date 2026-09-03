@@ -47,6 +47,7 @@ fun NumericKeypad(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -68,7 +69,7 @@ fun NumericKeypad(
                 Text(
                     text = amount.ifEmpty { "0.00" },
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.Bold,
                     color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
                 )
             }
@@ -159,7 +160,7 @@ fun NumericKeypad(
             KeyButton("7", onClick = { onDigit("7") })
             KeyButton("8", onClick = { onDigit("8") })
             KeyButton("9", onClick = { onDigit("9") })
-            KeyButton(" ", onClick = {})
+            Spacer(modifier = Modifier.width(85.dp))
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -198,7 +199,7 @@ private fun KeyButton(
         Text(
             text = text,
             fontSize = textSize.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
     }
