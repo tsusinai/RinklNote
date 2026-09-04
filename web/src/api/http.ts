@@ -1,0 +1,43 @@
+export class HttpError extends Error {
+  statusCode: number
+  constructor(status: number, message?: string) {
+    super(message ?? `HTTP ${status}`);
+    this.statusCode = status
+  }
+}
+
+const TOKEN_KEY = 'rkl_token'
+export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY) }
+export function setToken(t: string): void { localStorage.setItem(TOKEN_KEY, t) }
+export function clearToken(): void { localStorage.removeItem(TOKEN_KEY) }
+
+interface ApiOptions {
+  method?: string
+  body?: unknown
+  headers?: Record<string, string>
+  query?: Record<string, string | number | undefined>
+}
+
+export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise<T> {
+  const token = getToken()
+  const h: Record<string, string> = { 'Content-Type': 'application/json', ...opts.headers }
+  if (token) h['Authorization'] = 'Bearer ' + token
+
+  let url = path
+  if (opts.query) {
+    const q = new URLSearchParams()
+    Object.entries(opts.query).forEach(([k, v]) => { if (v !== undefined) q.set(k, String(v)) })
+    const qs = q.toString()
+    if (qs) url += (url.includes('?') ? '&' : '?') + qs
+  }
+
+  const r = await fetch(url, {
+    method: opts.method ?? 'GET',
+    headers: h,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  })
+
+  if (r.status === 401 && token) { clearToken(); window.location.href = '/login' }
+  if (r.status === 409) throw new HttpError(409, '并发冲突')
+  return r.json() as Promise<T>
+}
