@@ -23,5 +23,12 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    fakeTimers: {
+      toFake: [
+        'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+        'setImmediate', 'clearImmediate', 'Date',
+        'requestAnimationFrame', 'cancelAnimationFrame', 'performance',
+      ],
+    },
   },
 })
