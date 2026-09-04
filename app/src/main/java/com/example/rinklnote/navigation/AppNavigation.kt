@@ -623,7 +623,7 @@ private fun CustomBottomBar(
         label = "indicator"
     )
 
-    Box(modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 20.dp, start = 10.dp, end = 10.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp, start = 10.dp, end = 10.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()

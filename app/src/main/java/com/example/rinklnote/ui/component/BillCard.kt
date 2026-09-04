@@ -69,7 +69,7 @@ fun BillCard(
             .padding(horizontal = 14.dp)
             .shadow(2.dp, RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
+            .hazeEffect(hazeState, HazeMaterials.regular())
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
