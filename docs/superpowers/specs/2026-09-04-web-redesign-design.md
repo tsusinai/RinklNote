@@ -70,7 +70,7 @@
 
 ## 控制台 —— 个人记账（登录后、真数据）
 
-布局：顶部/侧边导航 + 内容区。功能等同原 web 的 6 tab，每 tab 一页：
+布局：顶部/侧边导航 + 内容区。功能**对齐原 web 全部能力，1:1 保留**（用户已裁定"原 web 功能全部保留"），每 tab 一页：
 
 | tab | 内容 | 后端对接 |
 |-----|------|----------|
@@ -79,7 +79,9 @@
 | 图表 | 趋势折线、分类饼图、月度柱状（ECharts） | `/api/bills`、统计 |
 | 资产 | 账户列表、期初+派生余额、净资 | `/api/accounts` |
 | 我的 | 账户信息、注销、AI 推送开关 | `/api/auth/me` |
-| 设置 | 主题、偏好 | settings |
+| 设置 | 主题、偏好、**QQ 机器人配置** | `/api/qq-bot/*`、settings |
+
+> 以现有 `web/index.html` 为准逐功能迁移，**非原 web 的功能不加**，不做全局多用户管理后台 / 系统监控。
 
 控制台**复用原 web 已验证的核心逻辑**：`fetchAllBills`（composite cursor 分页）、`api()` 封装（401 自动跳登录）、金额 `countUp`、暗黑切换、移动端响应式。这些从原 `web/index.html` 移植，**以 TypeScript 类型化重写**（`fetchAllBills` / `api()` 为**既有可复用逻辑，需保持行为一致**，不是重复造轮子）。所有服务端 DTO（Bill/Account/Category/Budget 等）在 `src/types.ts` 有对应 TS 接口，`api/` 层据此强类型。
 
@@ -111,6 +113,7 @@ ErrorHandling、Security、Database，**无 staticFiles 静态托管、无 CORS 
 
 ## 不做的事（YAGNI）
 
-- 不做控制台的「管理用户 / QQ 机器人 / 系统监控」——控制台是个人记账，不是管理员后台（用户已澄清）。
+- 不做原 web 之外的新功能（控制台 = 原 web 全量功能 1:1，无删减；落地页是唯一新增面）。
+- 不做全局多用户管理后台 / 系统监控（原 web 无此功能，不加）。
 - 不改动 `server`、`app` 的实现（web 后端 API 已存在）。
 - 不引第三方 UI 组件库（用 Vue + 自建组件，贴合 App 规格）。
