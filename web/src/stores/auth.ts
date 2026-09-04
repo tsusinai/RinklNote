@@ -8,11 +8,13 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(phone: string, password: string) {
       const r = await auth.login(phone, password)
+      if (!r.token) throw new Error((r as any).message || '登录失败')
       this.token = r.token; setToken(r.token); this.ready = true
       await this.refresh()
     },
     async loginByQq(code: string) {
       const r = await auth.qqLogin(code)
+      if (!r.token) throw new Error((r as any).message || 'QQ 登录失败')
       this.token = r.token; setToken(r.token); this.ready = true
       await this.refresh()
     },
