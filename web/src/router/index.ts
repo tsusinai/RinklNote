@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { installGuards } from './guards'
 
 const routes = [
-  { path: '/', name: 'landing', component: { template: '<div>落地页（待建）</div>' } },
-  { path: '/login', name: 'login', component: { template: '<div>登录（待建）</div>' } },
-  { path: '/console', name: 'console', component: { template: '<div>控制台（待建）</div>' } },
+  { path: '/', name: 'landing', component: () => import('../views/Landing.vue') },
+  { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
+  { path: '/console', name: 'console', component: () => import('../views/console/ConsoleLayout.vue') },
 ]
 
-export default createRouter({
-  history: createWebHistory(),
-  routes,
-})
+const router = createRouter({ history: createWebHistory(), routes })
+installGuards(router)
+export default router
