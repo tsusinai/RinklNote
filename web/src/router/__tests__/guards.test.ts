@@ -18,4 +18,12 @@ describe('authGuard', () => {
     const s = useAuthStore(); s.token = 't'; s.ready = true
     expect(await authGuard({ path: '/console' })).toBe(true)
   })
+  it('redirects unauthenticated /console/bills to /login', async () => {
+    const s = useAuthStore(); s.token = null; s.ready = true
+    expect(await authGuard({ path: '/console/bills' })).toBe('/login')
+  })
+  it('allows authenticated /console/bills', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true
+    expect(await authGuard({ path: '/console/bills' })).toBe(true)
+  })
 })
