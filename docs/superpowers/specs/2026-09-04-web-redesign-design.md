@@ -1,7 +1,7 @@
 # Web 前端重做设计
 
 日期：2026-09-04
-范围：`web/` 前端重写（当前单文件 CDN React SPA → 工程化 Vue 3 SPA）
+范围：`web/` 前端重写（当前单文件 CDN React SPA → 工程化 Vue 3 + TypeScript SPA）
 用户发起：`/frontend-design` + `/grill-me 讨论前端更新范围`
 
 ## 目标
@@ -19,6 +19,7 @@
 | 风格基准 | App 规格 + 强视觉（保留 App 根字体/主题色，用显示对比托张力） |
 | 构建 | Vite 现代构建 |
 | 框架 | 换框架重写 → Vue 3（组合式 API） |
+| 语言 | **TypeScript**（用户已裁定采用） |
 | 状态 | Pinia |
 | 路由 | Vue Router |
 | 图表 | ECharts（vue-echarts） |
@@ -28,12 +29,13 @@
 
 ## 架构
 
-- **栈**：Vite + Vue 3 `<script setup>` + Pinia + Vue Router + ECharts(vue-echarts)。
+- **栈**：Vite + Vue 3 `<script setup lang="ts">` + TypeScript + Pinia + Vue Router + ECharts(vue-echarts)。
 - **三面**：
   1. `/` 落地页（Demo 展示，公开、Mock 数据）
   2. `/login` 登录页
   3. `/console` 控制台（路由守卫，未登录跳 `/login`）
 - 落地页与控制台**数据源隔离**：落地页只 import `src/demo-data.js` 的 Mock；控制台走 `src/api/` 真后端封装（`Authorization: Bearer`）。两者 store 互不 import，防止污染。
+- **TypeScript**：`<script setup lang="ts">`、`tsconfig`（含 `vue-tsc` 类型检查）、`src/types.ts` 集中定义服务端 DTO 接口、`src/api/` 与 store 全程强类型。`vue-tsc --noEmit` 纳入构建前校验。
 
 ## 路由结构
 
@@ -79,7 +81,7 @@
 | 我的 | 账户信息、注销、AI 推送开关 | `/api/auth/me` |
 | 设置 | 主题、偏好 | settings |
 
-控制台**复用原 web 已验证的核心逻辑**：`fetchAllBills`（composite cursor 分页）、`api()` 封装（401 自动跳登录）、金额 `countUp`、暗黑切换、移动端响应式。这些从原 `web/index.html` 移植（`fetchAllBills` / `api()` 为**既有可复用逻辑，需保持行为一致**，不是重复造轮子）。
+控制台**复用原 web 已验证的核心逻辑**：`fetchAllBills`（composite cursor 分页）、`api()` 封装（401 自动跳登录）、金额 `countUp`、暗黑切换、移动端响应式。这些从原 `web/index.html` 移植，**以 TypeScript 类型化重写**（`fetchAllBills` / `api()` 为**既有可复用逻辑，需保持行为一致**，不是重复造轮子）。所有服务端 DTO（Bill/Account/Category/Budget 等）在 `src/types.ts` 有对应 TS 接口，`api/` 层据此强类型。
 
 ## 数据流
 
@@ -112,4 +114,3 @@ ErrorHandling、Security、Database，**无 staticFiles 静态托管、无 CORS 
 - 不做控制台的「管理用户 / QQ 机器人 / 系统监控」——控制台是个人记账，不是管理员后台（用户已澄清）。
 - 不改动 `server`、`app` 的实现（web 后端 API 已存在）。
 - 不引第三方 UI 组件库（用 Vue + 自建组件，贴合 App 规格）。
-- 不引入 TypeScript（原 web 用 JS；本轮未提 TS，沿用 JS 以控复杂度）——如需 TS 可在实现计划确认。
