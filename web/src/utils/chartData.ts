@@ -31,16 +31,20 @@ export function dailyExpense(bills: Bill[], period: ChartPeriod, now = Date.now(
 
 // 月度趋势：全部账单，按 YYYY年M月 分组，取最近 12 月
 export function monthlyTrend(bills: Bill[], now = Date.now()): { name: string; expense: number; income: number }[] {
-  const buckets: Record<string, { expense: number; income: number }> = {}
+  const buckets: Record<string, { expense: number; income: number; sortKey: number }> = {}
   const monthMs = 30 * 86400000
   for (const b of bills) {
     if (b.date < now - 12 * monthMs) continue
-    const key = new Date(b.date).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short' })
-    if (!buckets[key]) buckets[key] = { expense: 0, income: 0 }
+    const d = new Date(b.date)
+    const key = d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short' })
+    const sortKey = d.getFullYear() * 12 + d.getMonth()
+    if (!buckets[key]) buckets[key] = { expense: 0, income: 0, sortKey }
     if (b.billType === 'EXPENSE') buckets[key].expense += b.amount
     else buckets[key].income += b.amount
   }
-  return Object.entries(buckets).sort((a, b) => a[0].localeCompare(b[0])).map(([name, v]) => ({ name, expense: Math.round(v.expense * 100) / 100, income: Math.round(v.income * 100) / 100 }))
+  return Object.entries(buckets)
+    .sort((a, b) => a[1].sortKey - b[1].sortKey)
+    .map(([name, v]) => ({ name, expense: Math.round(v.expense * 100) / 100, income: Math.round(v.income * 100) / 100 }))
 }
 
 // 支出分类饼图

@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart, LineChart, BarChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent, TitleComponent } from 'echarts/components'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
 import { useDataStore } from '../../stores/data'
 import { insights } from '../../api/insights'
@@ -11,7 +11,7 @@ import { toMonthStr } from '../../utils/date'
 import { dailyExpense, monthlyTrend, expenseByCategory, type ChartPeriod } from '../../utils/chartData'
 import type { MonthlyReview } from '../../types'
 
-use([CanvasRenderer, PieChart, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent])
+use([CanvasRenderer, PieChart, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
 
 const data = useDataStore()
 const period = ref<ChartPeriod>('month')
@@ -56,7 +56,7 @@ const barOption = computed(() => ({
 }))
 
 async function loadReview() {
-  if (!review.value) review.value = null
+  review.value = null
   reviewLoading.value = true
   try {
     review.value = await insights.monthlyReview(revMonth.value)
