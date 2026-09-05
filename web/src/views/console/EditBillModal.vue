@@ -21,6 +21,7 @@ const st = reactive({
 })
 const err = ref('')
 const busy = ref(false)
+const baseUpdatedAt = ref(props.bill.updatedAt ?? undefined)
 const cats = computed(() => data.cats.filter((c) => c.type === st.billType))
 const catSel = computed(() => data.cats.find((c) => c.id === Number(st.catId)) ?? null)
 const subs = computed(() => catSel.value?.subCategories ?? [])
@@ -35,7 +36,7 @@ async function save() {
     await bills.update(props.bill.id, {
       amount: amt, billType: st.billType, categoryId: cat.id, categoryName: cat.name,
       subCategoryName: st.subCatName || null, accountId: Number(st.acctId),
-      remark: st.remark || null, baseUpdatedAt: props.bill.updatedAt ?? undefined,
+      remark: st.remark || null, baseUpdatedAt: baseUpdatedAt.value,
     })
     toast.push('账单已更新')
     emit('saved')
@@ -50,6 +51,7 @@ async function save() {
         st.subCatName = fresh.subCategoryName ?? ''
         st.acctId = String(fresh.accountId)
         st.remark = fresh.remark ?? ''
+        baseUpdatedAt.value = fresh.updatedAt ?? undefined
         err.value = '账单已在其他设备修改，已载入最新内容，请确认后重新保存'
         // 不 emit('saved')：弹窗保持打开，用户确认最新内容后点「保存」会以 fresh.updatedAt 作为 baseUpdatedAt 重发；父级列表在用户保存/关闭后刷新。
         return
