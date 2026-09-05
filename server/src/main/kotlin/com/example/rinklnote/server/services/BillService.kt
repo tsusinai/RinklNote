@@ -288,7 +288,7 @@ class BillService {
             listOf(
                 Triple("微信", "#28C145", 0.0),
                 Triple("支付宝", "#06B4FD", 0.0),
-                Triple("默认", "#F97D1D", 0.0)
+                Triple("无账户", "#F97D1D", 0.0)
             ).forEach { (name, color, balance) ->
                 if (name in existing) return@forEach
                 AccountsTable.insert {
@@ -458,7 +458,7 @@ class BillService {
         val accounts = listOf(
             Triple("微信", "#28C145", 0.0),
             Triple("支付宝", "#06B4FD", 0.0),
-            Triple("默认", "#F97D1D", 0.0)
+            Triple("无账户", "#F97D1D", 0.0)
         )
         accounts.forEach { (name, color, balance) ->
             AccountsTable.insert {

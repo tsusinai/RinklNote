@@ -31,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
@@ -97,7 +96,7 @@ fun HeatmapBox(
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp)
-            .shadow(2.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .hazeEffect(hazeState, HazeMaterials.thin())
             .padding(horizontal = 12.dp, vertical = 12.dp)

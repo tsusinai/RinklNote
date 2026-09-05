@@ -39,11 +39,19 @@ interface BillDao {
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
 
-    // Logout cleanup: purge only bills already pushed to the server (server_id set)
-    // AND not locally edited (dirty = 0). Locally-edited / never-pushed rows are kept
-    // so they are not permanently lost and get pushed on the next login's sync.
-    @Query("DELETE FROM bills WHERE server_id IS NOT NULL AND dirty = 0")
-    suspend fun deleteSynced()
+    // Cleanup count of rows that still need pushing (never pushed OR locally edited/deleted).
+    // Used by logout's "push-first-then-wipe" to decide whether a best-effort sync fully
+    // drained the pending set before declining local data.
+    @Query("SELECT COUNT(*) FROM bills WHERE server_id IS NULL OR dirty = 1")
+    suspend fun countUnsynced(): Long
+
+    // Net effect of a single account's bills: income adds, expense subtracts. Used by the
+    // account-level "对账" (reconcile) so a balance can be recomputed from its own records.
+    @Query(
+        "SELECT SUM(CASE WHEN bill_type = 'EXPENSE' THEN -amount ELSE amount END) " +
+            "FROM bills WHERE deleted = 0 AND account_id = :accountId"
+    )
+    suspend fun getAccountNet(accountId: Long): Double?
 
     @Query("UPDATE bills SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)
@@ -55,6 +63,9 @@ interface BillDao {
 
     @Query("SELECT * FROM bills WHERE server_id = :serverId")
     suspend fun getByServerId(serverId: Long): Bill?
+
+    @Query("SELECT * FROM bills WHERE id = :id")
+    suspend fun getById(id: Long): Bill?
 
     @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt, base_updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)

@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -200,7 +199,7 @@ fun VoiceInputBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 24.dp, end = 24.dp, bottom = 56.dp) // clear the 32dp bottom bar + 8dp margin
-            .shadow(8.dp, RoundedCornerShape(24.dp))
+            .rinkShadow(RoundedCornerShape(24.dp))
             .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 10.dp),

@@ -19,3 +19,16 @@ data class Account(
     val deleted: Boolean = false,
     val dirty: Boolean = false
 )
+
+/**
+ * 「无账户」兜底账户名：记账时未显式选择账户，金额记入该桶（不再强选账户）。
+ * 名称保留：用户不能新建/重命名出第二个「无账户」，桶在资产页也不允许重命名/删除。
+ * 桶随普通账户参与余额联动与总资产求和，是未分配资金的公共归属地。
+ */
+const val ACCOUNT_BUCKET_NAME = "无账户"
+
+/** 是否为「无账户」兜底账户桶。真实钱包 = !isBucket()。 */
+fun Account.isBucket(): Boolean = name == ACCOUNT_BUCKET_NAME
+
+/** 供选择器/界面用：仅真实钱包账户（排除「无账户」桶）。 */
+fun Account.isWallet(): Boolean = !isBucket()

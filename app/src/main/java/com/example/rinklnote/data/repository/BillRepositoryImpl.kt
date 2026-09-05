@@ -1,6 +1,8 @@
 package com.example.rinklnote.data.repository
 
+import androidx.room.withTransaction
 import com.example.rinklnote.data.db.AppDatabase
+import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
@@ -13,7 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
+internal class BillRepositoryImpl(private val db: AppDatabase) : BillRepository {
 
     private val billDao = db.billDao()
     private val categoryDao = db.categoryDao()
@@ -53,13 +55,48 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
     override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double =
         billDao.getTotalIncome(monthStart, nextMonthStart) ?: 0.0
 
-    override suspend fun addBill(bill: Bill): Long = billDao.insert(bill)
+    override suspend fun addBill(bill: Bill): Long = db.withTransaction {
+        val id = billDao.insert(bill)
+        nudgeAccount(bill.accountId, balanceDelta(bill))
+        id
+    }
 
-    override suspend fun updateBill(bill: Bill) = billDao.update(bill)
+    override suspend fun updateBill(bill: Bill) = db.withTransaction {
+        // 编辑需按「旧账→新账」的差额回补余额；若可能改了账户，则旧账户回滚、新账户应用。
+        val old = billDao.getById(bill.id)
+        if (old != null) {
+            if (old.accountId == bill.accountId) {
+                nudgeAccount(bill.accountId, balanceDelta(bill) - balanceDelta(old))
+            } else {
+                nudgeAccount(old.accountId, -balanceDelta(old))
+                nudgeAccount(bill.accountId, balanceDelta(bill))
+            }
+        }
+        billDao.update(bill)
+    }
 
-    override suspend fun deleteBill(bill: Bill) {
+    override suspend fun deleteBill(bill: Bill) = db.withTransaction {
         // Soft delete locally — server gets pushed the deletion via SyncManager.
         billDao.softDelete(bill.id, System.currentTimeMillis())
+        // 反向回补删除的这笔对该账户余额的影响。
+        nudgeAccount(bill.accountId, -balanceDelta(bill))
+    }
+
+    /** 记账对目标账户余额的增量：支出为负、收入为正。 */
+    private fun balanceDelta(bill: Bill): Double =
+        if (bill.billType == "EXPENSE") -bill.amount else bill.amount
+
+    /** 把余额增量应用给账户并置 dirty，等待下次全量同步推送。 */
+    private suspend fun nudgeAccount(accountId: Long, delta: Double) {
+        if (delta == 0.0) return
+        val account = accountDao.getById(accountId) ?: return
+        accountDao.update(
+            account.copy(
+                balance = account.balance + delta,
+                updatedAt = System.currentTimeMillis(),
+                dirty = true
+            )
+        )
     }
 
     override suspend fun insertAccount(account: Account): Long = accountDao.insert(account)
@@ -86,13 +123,43 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
 
     override suspend fun clearLocalData() {
         // Wipe per-user data on logout. Keep categories (shared reference data).
-        // Only server-synced rows are removed — never-pushed bills/accounts survive
-        // logout so they are not lost and get pushed after the next login.
-        billDao.deleteSynced()
+        // ALL per-user rows are removed — the caller (ProfileScreen logout) first does a
+        // best-effort push of pending rows to THIS user's server, then calls this. So it is
+        // safe to wipe dirty/never-pushed rows here: a cross-user leak would otherwise push
+        // a previous user's data onto the next logged-in account.
+        billDao.deleteAll()
         budgetDao.deleteAll()
         templateDao.deleteAll()
         chatDao.deleteAll()
-        accountDao.deleteSyncedClean()
+        accountDao.deleteAll()
+    }
+
+    override suspend fun countUnsynced(): Long =
+        billDao.countUnsynced() +
+            accountDao.countUnsynced() +
+            budgetDao.getUnsynced().size
+
+    override suspend fun getAccountNet(accountId: Long): Double =
+        billDao.getAccountNet(accountId) ?: 0.0
+
+    override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account {
+        // 期末余额 = 期初偏移(现实里有、账里没的资金) + 该账户账单收支合计。
+        // 置 dirty 让下一步同步把校正后的余额推给服务端。
+        val updated = account.copy(
+            balance = openingOffset + getAccountNet(account.id),
+            updatedAt = System.currentTimeMillis(),
+            dirty = true
+        )
+        accountDao.update(updated)
+        return updated
+    }
+
+    override suspend fun reconcileAllAccounts(): List<Account> {
+        val updated = mutableListOf<Account>()
+        accountDao.getAllActive().forEach { account ->
+            updated += reconcileAccount(account, 0.0)
+        }
+        return updated
     }
 
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
@@ -109,10 +176,25 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
         val accCount = accountDao.count()
         if (catCount == 0) seedCategories()
         if (accCount == 0) seedAccounts()
+        ensureBucket()
         // 幂等补齐二级分类：全新安装由 seedCategories 建类后经此补齐；
         // 已有安装（类已存在、跳过 seedCategories）也在此补上缺失的二级分类。
         seedSubCategories()
         loadReferenceData()
+    }
+
+    /** 确保存在「无账户」桶：全新安装由 seedAccounts 直接建；既有安装把种子「默认」改名为桶。
+     *  幂等；找不到「默认」且无桶时静默跳过（默认记账仍回退到首个账户）。 */
+    private suspend fun ensureBucket() {
+        if (accountDao.getActiveByName(ACCOUNT_BUCKET_NAME) != null) return
+        val legacy = accountDao.getActiveByName("默认") ?: return
+        accountDao.update(
+            legacy.copy(
+                name = ACCOUNT_BUCKET_NAME,
+                updatedAt = System.currentTimeMillis(),
+                dirty = true
+            )
+        )
     }
 
     private suspend fun seedCategories() {
@@ -166,7 +248,7 @@ internal class BillRepositoryImpl(db: AppDatabase) : BillRepository {
         val accounts = listOf(
             Account(name = "微信", iconColor = "#28C145"),
             Account(name = "支付宝", iconColor = "#06B4FD"),
-            Account(name = "默认", iconColor = "#F97D1D"),
+            Account(name = ACCOUNT_BUCKET_NAME, iconColor = "#F97D1D"),
         )
         for (a in accounts) {
             accountDao.insert(a)

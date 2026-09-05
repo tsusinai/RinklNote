@@ -51,4 +51,12 @@ interface BillRepository {
     suspend fun clearLocalData()
     suspend fun loadReferenceData()
     suspend fun seedIfNeeded()
+
+    // Unsynced (pending push) count, used by logout's push-first-then-wipe.
+    suspend fun countUnsynced(): Long
+
+    // Balance reconciliation against each account's own record net (income − expense).
+    suspend fun getAccountNet(accountId: Long): Double
+    suspend fun reconcileAccount(account: Account, openingOffset: Double): Account
+    suspend fun reconcileAllAccounts(): List<Account>
 }

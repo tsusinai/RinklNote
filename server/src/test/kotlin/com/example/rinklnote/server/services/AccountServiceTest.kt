@@ -47,9 +47,9 @@ class AccountServiceTest {
     @Test
     fun `ensureDefaultAccounts seeds the 3 defaults once and is idempotent`() {
         service.ensureDefaultAccounts(1L)
-        assertEquals(listOf("微信", "支付宝", "默认"), service.accountsFor(1L).map { it.name })
+        assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
         service.ensureDefaultAccounts(1L)
-        assertEquals(listOf("微信", "支付宝", "默认"), service.accountsFor(1L).map { it.name })
+        assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
     }
 
     @Test
@@ -57,7 +57,7 @@ class AccountServiceTest {
         val w = service.createAccount(1L, "招商银行", "#123456", 0.0)
         assertTrue(w.id > 0)
         // 自定义账户与默认账户共存（无顺序要求）
-        assertEquals(setOf("微信", "支付宝", "默认", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
+        assertEquals(setOf("微信", "支付宝", "无账户", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
     }
 
     @Test

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
@@ -96,6 +97,10 @@ class QuickAddViewModel(
     private val _effects = Channel<QuickAddEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
+    /** 记账默认账户：优先「无账户」桶（不要求用户强选），兜底到首个真实账户。 */
+    private fun defaultAccount(accounts: List<Account>): Account? =
+        accounts.find { it.isBucket() } ?: accounts.firstOrNull()
+
     init {
         // Collect from cached repository StateFlows — no Room reactive Flow
         viewModelScope.launch {
@@ -116,7 +121,7 @@ class QuickAddViewModel(
         viewModelScope.launch {
             repository.accounts.collect { accounts ->
                 _state.update {
-                    it.copy(accounts = accounts, selectedAccount = accounts.firstOrNull())
+                    it.copy(accounts = accounts, selectedAccount = defaultAccount(accounts))
                 }
             }
         }
@@ -359,7 +364,7 @@ class QuickAddViewModel(
         val cat = catName?.let { n -> allCats.find { it.name == n } }
             ?: s.expenseCategories.firstOrNull()
             ?: return null
-        val acct = s.selectedAccount ?: s.accounts.firstOrNull() ?: return null
+        val acct = s.selectedAccount ?: defaultAccount(s.accounts) ?: return null
         val bill = Bill(
             amount = amount,
             billType = cat.billType,
@@ -406,7 +411,7 @@ class QuickAddViewModel(
     private fun onSuggestionClick() {
         val s = _state.value.suggestion ?: return
         val cat = _state.value.categories.find { it.name == s.categoryName } ?: return
-        val acct = _state.value.accounts.firstOrNull() ?: return
+        val acct = defaultAccount(_state.value.accounts) ?: return
         _state.update {
             it.copy(
                 amount = s.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
@@ -505,7 +510,7 @@ class QuickAddViewModel(
                 accounts = s.accounts,
                 expenseCategories = s.expenseCategories,
                 incomeCategories = s.incomeCategories,
-                selectedAccount = s.accounts.firstOrNull(),
+                selectedAccount = defaultAccount(s.accounts),
                 selectedCategory = s.expenseCategories.firstOrNull()
             )
         }

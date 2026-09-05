@@ -35,7 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -190,7 +190,7 @@ fun BookkeepingScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
-                .shadow(4.dp, CircleShape)
+                .rinkShadow(CircleShape)
                 .size(51.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface)

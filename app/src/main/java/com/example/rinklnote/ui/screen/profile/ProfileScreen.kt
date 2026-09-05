@@ -45,7 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -109,7 +109,34 @@ fun ProfileScreen(
     var showUnbindQQ by remember { mutableStateOf(false) }
     var showTheme by remember { mutableStateOf(false) }
     var showLogout by remember { mutableStateOf(false) }
+    var showUnsynced by remember { mutableStateOf(false) }
+    var unsyncedCount by remember { mutableStateOf(0) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
+
+    // 登出「先推后清」：先把当前用户的 pending/dirty 尽力推到它自己的服务器，成功后清空本机
+    // per-user 数据。这样旧用户的数据落到旧账号，新用户登入时零遗产，绝不跨用户污染。
+    val finishLogout: () -> Unit = {
+        coroutineScope.launch {
+            repository.clearLocalData()
+            authViewModel.onEvent(AuthEvent.Logout)
+        }
+    }
+    val attemptLogout: () -> Unit = {
+        coroutineScope.launch {
+            if (repository.countUnsynced() == 0L) {
+                finishLogout()
+                return@launch
+            }
+            // 尽力同步（推送当前用户未同步项）。成功后重新统计，判断是否已排空。
+            syncManager.sync()
+            if (repository.countUnsynced() == 0L) {
+                finishLogout()
+            } else {
+                unsyncedCount = repository.countUnsynced().toInt()
+                showUnsynced = true
+            }
+        }
+    }
     val versionName = remember {
         runCatching {
             @Suppress("DEPRECATION")
@@ -215,15 +242,40 @@ fun ProfileScreen(
         AlertDialog(
             onDismissRequest = { showLogout = false },
             title = { Text("退出登录") },
-            text = { Text("退出将清除本地数据，未同步的账单可能丢失。确定退出？") },
+            text = { Text("退出前会先把未同步的账单推送到你的账号，再清除本地数据。确定退出？") },
             confirmButton = {
                 TextButton(onClick = {
                     showLogout = false
-                    coroutineScope.launch { repository.clearLocalData() }
-                    authViewModel.onEvent(AuthEvent.Logout)
+                    attemptLogout()
                 }) { Text("退出") }
             },
             dismissButton = { TextButton(onClick = { showLogout = false }) { Text("取消") } }
+        )
+    }
+
+    if (showUnsynced) {
+        AlertDialog(
+            onDismissRequest = { showUnsynced = false },
+            title = { Text("有未同步的数据") },
+            text = {
+                Text(
+                    "当前有 $unsyncedCount 条账单/账户尚未同步，无法干净退出。\n\n" +
+                        "·「仍然登出并丢弃」将丢失这些未同步数据。\n" +
+                        "·「联网重试」会先把它们推送到你的账号再退出。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUnsynced = false
+                    finishLogout()
+                }) { Text("仍然登出并丢弃", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showUnsynced = false
+                    attemptLogout()
+                }) { Text("联网重试") }
+            }
         )
     }
 }
@@ -234,7 +286,7 @@ private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(16.dp),
@@ -312,7 +364,7 @@ private fun GroupCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(vertical = 2.dp)

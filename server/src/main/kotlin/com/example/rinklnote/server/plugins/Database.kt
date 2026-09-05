@@ -76,7 +76,7 @@ private fun Transaction.runMigrations() {
     // createMissingTablesAndColumns 只会加表/加列：既不会 drop 旧唯一约束，也不会给既有表补新的唯一索引。
     // 当唯一约束从「name 全局唯一」改成「(user_id, name)」时，旧 schema 留下的唯一约束（H2 自动命名，
     // 如 ACCOUNTS_NAME_UNIQUE_INDEX_6 / CONSTRAINT_INDEX_A 形式的 backing index）会残留。
-    // 它禁止跨用户同名账户（微信/支付宝/默认）插入，于是 ensureDefaultAccounts 抛唯一冲突 → GET /api/accounts 500
+    // 它禁止跨用户同名账户（微信/支付宝/无账户）插入，于是 ensureDefaultAccounts 抛唯一冲突 → GET /api/accounts 500
     // → Web/App 账户下拉为空、模板新建失败。
     //
     // 注意：H2 2.3 的 INFORMATION_SCHEMA.INDEX_COLUMNS / KEY_COLUMN_USAGE / CONSTRAINT_COLUMN_USAGE 均为空，

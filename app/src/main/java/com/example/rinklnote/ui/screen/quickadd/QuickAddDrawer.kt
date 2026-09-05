@@ -48,7 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -127,7 +127,7 @@ fun QuickAddDrawer(
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
                     .width(200.dp)
-                    .shadow(3.dp)
+                    .rinkShadow()
                     .clip(RoundedCornerShape(topStart = 15.dp, bottomStart = 15.dp))
                     .background(Color.White)
                     .clickable(enabled = false) {} // consume click
@@ -246,7 +246,7 @@ private fun DrawerContent(
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .shadow(2.dp, CircleShape)
+                    .rinkShadow(CircleShape)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
                     .clickable { onVoiceInput() },
@@ -272,7 +272,7 @@ private fun SuggestionSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable { onUse() }
@@ -305,7 +305,7 @@ private fun TemplatesSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp)
@@ -353,7 +353,7 @@ private fun CategorySection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(2.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp)
@@ -505,7 +505,7 @@ private fun AccountSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp)
@@ -591,7 +591,7 @@ private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
                 .height(36.dp)
-                .shadow(2.dp, RoundedCornerShape(15.dp))
+                .rinkShadow(RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .clickable { onAmountTap() },

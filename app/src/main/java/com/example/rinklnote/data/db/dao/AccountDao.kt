@@ -43,6 +43,11 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE deleted = 0 AND name = :name AND server_id IS NULL ORDER BY id ASC LIMIT 1")
     suspend fun getByNameActive(name: String): Account?
 
+    // 按名称取活动账户（不限 server_id）。用于把既有种子「默认」改名为「无账户」桶，
+    // 无论它是否已同步（server_id 可能已落库）。只为存储安全，不作为货币/余额。
+    @Query("SELECT * FROM accounts WHERE deleted = 0 AND name = :name ORDER BY id ASC LIMIT 1")
+    suspend fun getActiveByName(name: String): Account?
+
     @androidx.room.Upsert
     suspend fun upsert(account: Account)
 
@@ -58,8 +63,9 @@ interface AccountDao {
     @Query("UPDATE accounts SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)
 
-    @Query("DELETE FROM accounts WHERE server_id IS NOT NULL AND dirty = 0")
-    suspend fun deleteSyncedClean()
+    // Cleanup count of accounts still needing push; used by logout's push-first-then-wipe.
+    @Query("SELECT COUNT(*) FROM accounts WHERE server_id IS NULL OR dirty = 1")
+    suspend fun countUnsynced(): Long
 
     @Query("DELETE FROM accounts")
     suspend fun deleteAll()

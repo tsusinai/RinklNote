@@ -20,9 +20,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,13 +37,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,7 +53,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
+import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
+import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
@@ -78,6 +83,8 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
     var addingAccount by remember { mutableStateOf(false) }
     var renamingAccount by remember { mutableStateOf<Account?>(null) }
     var deletingAccount by remember { mutableStateOf<Account?>(null) }
+    var reconcilingAccount by remember { mutableStateOf<Account?>(null) }
+    var reconcilingAll by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -85,12 +92,23 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
             .statusBarsPadding()
             .padding(16.dp)
     ) {
-        Text(
-            text = "资产管理",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "资产管理",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium
+            )
+            // 全部对账：将每个账户余额重算为各自账单收支合计（期初偏移 0）。
+            if (state.accounts.isNotEmpty()) {
+                TextButton(onClick = { reconcilingAll = true }) { Text("全部对账") }
+            }
+        }
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -104,7 +122,8 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
                     hidden = balanceHidden,
                     onClick = { editingAccount = account },
                     onRename = { renamingAccount = account },
-                    onDelete = { deletingAccount = account }
+                    onDelete = { deletingAccount = account },
+                    onReconcile = { reconcilingAccount = account }
                 )
             }
             item(key = "add") {
@@ -168,6 +187,30 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
             }
         )
     }
+
+    reconcilingAccount?.let { account ->
+        ReconcileDialog(
+            account = account,
+            onConfirm = { offset ->
+                reconcilingAccount = null
+                viewModel.onEvent(AssetsEvent.ReconcileAccount(account, offset))
+            },
+            onDismiss = { reconcilingAccount = null },
+            loadNet = viewModel::getAccountNet
+        )
+    }
+
+    if (reconcilingAll) {
+        ReconcileAllDialog(
+            accounts = state.accounts,
+            onConfirm = {
+                reconcilingAll = false
+                viewModel.onEvent(AssetsEvent.ReconcileAll)
+            },
+            onDismiss = { reconcilingAll = false },
+            loadNet = viewModel::getAccountNet
+        )
+    }
 }
 
 @Composable
@@ -214,18 +257,20 @@ private fun AccountCard(
     hidden: Boolean,
     onClick: () -> Unit,
     onRename: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onReconcile: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     // 保持最新回调引用：父级重组时避免 stale lambda 或整卡不必要的重组
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnRename by rememberUpdatedState(onRename)
     val currentOnDelete by rememberUpdatedState(onDelete)
+    val currentOnReconcile by rememberUpdatedState(onReconcile)
     Box {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(4.dp, RoundedCornerShape(15.dp))
+                .rinkShadow(RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .clickable { currentOnClick() }
@@ -253,19 +298,27 @@ private fun AccountCard(
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            // 「无账户」桶为保留账户：不可重命名/删除，仅可改余额；真实钱包 ⋮ 菜单额外给重命名/删除。
+            // 所有账户都提供「对账」（把余额重算为其账单收支合计）。
             IconButton(onClick = { menuExpanded = true }) {
                 Text("⋮", fontSize = 24.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        }
-        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-            DropdownMenuItem(
-                text = { Text("重命名") },
-                onClick = { menuExpanded = false; currentOnRename() }
-            )
-            DropdownMenuItem(
-                text = { Text("删除账户") },
-                onClick = { menuExpanded = false; currentOnDelete() }
-            )
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("对账") },
+                    onClick = { menuExpanded = false; currentOnReconcile() }
+                )
+                if (!account.isBucket()) {
+                    DropdownMenuItem(
+                        text = { Text("重命名") },
+                        onClick = { menuExpanded = false; currentOnRename() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("删除账户") },
+                        onClick = { menuExpanded = false; currentOnDelete() }
+                    )
+                }
+            }
         }
     }
 }
@@ -341,7 +394,8 @@ private fun AddAccountDialog(
                     if (n.isBlank()) return@TextButton
                     onConfirm(n, color, balance.toDoubleOrNull() ?: 0.0)
                 },
-                enabled = name.trim().isNotBlank()
+                // 「无账户」为保留名，禁止用户再建一个。
+                enabled = name.trim().isNotBlank() && name.trim() != ACCOUNT_BUCKET_NAME
             ) { Text("创建") }
         },
         dismissButton = {
@@ -376,11 +430,120 @@ private fun RenameAccountDialog(
                     if (n.isBlank()) return@TextButton
                     onConfirm(n)
                 },
-                enabled = name.trim().isNotBlank()
+                // 禁止重命名成「无账户」（保留名）。
+                enabled = name.trim().isNotBlank() && name.trim() != ACCOUNT_BUCKET_NAME
             ) { Text("保存") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
         }
+    )
+}
+
+/** 单账户对账：显示 当前余额 / 账单收支合计 / 期初偏移(可填) / 重算后结果，确认后覆盖。 */
+@Composable
+private fun ReconcileDialog(
+    account: Account,
+    onConfirm: (Double) -> Unit,
+    onDismiss: () -> Unit,
+    loadNet: suspend (Long) -> Double
+) {
+    val net by produceState<Double?>(initialValue = null, account.id) {
+        value = loadNet(account.id)
+    }
+    var offset by remember(account.id) { mutableStateOf("") }
+
+    val netVal = net ?: 0.0
+    val offsetVal = offset.toDoubleOrNull() ?: 0.0
+    val result = offsetVal + netVal
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("对账 · ${account.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                PreviewRow("当前余额", String.format("%.2f", account.balance))
+                PreviewRow("账单收支合计", String.format("%.2f", netVal))
+                OutlinedTextField(
+                    value = offset,
+                    onValueChange = { offset = it },
+                    label = { Text("期初偏移（可选，现实里有、账里没的资金）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                PreviewRow("重算后余额", String.format("%.2f", result))
+                Text(
+                    text = "确认后将以「重算后余额」覆盖当前余额，并同步到云端。",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(offsetVal) }) { Text("覆盖") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun PreviewRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** 全部对账：列出每个账户的 当前余额 → 账单合计，确认后统一重算（期初偏移 0）。 */
+@Composable
+private fun ReconcileAllDialog(
+    accounts: List<Account>,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    loadNet: suspend (Long) -> Double
+) {
+    val nets by produceState<Map<Long, Double>>(initialValue = emptyMap(), accounts) {
+        value = accounts.associate { it.id to loadNet(it.id) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("全部对账") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "将每个账户余额重算为各自账单收支合计（期初偏移 0）。",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                accounts.forEach { account ->
+                    val net = nets[account.id] ?: 0.0
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(account.name, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            text = "${String.format("%.2f", account.balance)} → ${String.format("%.2f", net)}",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("全部覆盖") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }

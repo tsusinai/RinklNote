@@ -22,6 +22,11 @@ sealed interface AssetsEvent {
     data class RenameAccount(val account: Account, val name: String) : AssetsEvent
     data class ChangeBalance(val account: Account, val balance: Double) : AssetsEvent
     data class DeleteAccount(val account: Account) : AssetsEvent
+
+    /** 单账户对账：期末余额 = openingOffset + 该账户账单收支合计。 */
+    data class ReconcileAccount(val account: Account, val openingOffset: Double) : AssetsEvent
+    /** 全部对账：每个账户余额重算为各自账单合计（期初偏移 0）。 */
+    data object ReconcileAll : AssetsEvent
 }
 
 /** 资产页 ViewModel：账户清单取自 repository 缓存的 accounts（StateFlow，非 Room 实时流），
@@ -48,8 +53,13 @@ class AssetsViewModel(
             is AssetsEvent.RenameAccount -> renameAccount(event)
             is AssetsEvent.ChangeBalance -> changeBalance(event)
             is AssetsEvent.DeleteAccount -> deleteAccount(event)
+            is AssetsEvent.ReconcileAccount -> reconcileAccount(event)
+            is AssetsEvent.ReconcileAll -> reconcileAll()
         }
     }
+
+    /** 供对账对话框加载该账户的账单收支合计（非删除账单）。 */
+    suspend fun getAccountNet(accountId: Long): Double = repository.getAccountNet(accountId)
 
     private fun addAccount(event: AssetsEvent.AddAccount) {
         viewModelScope.launch {
@@ -103,6 +113,21 @@ class AssetsViewModel(
                 updatedAt = System.currentTimeMillis()
             )
             syncManager?.let { launch { it.pushAccount(tombstone) } }
+        }
+    }
+
+    private fun reconcileAccount(event: AssetsEvent.ReconcileAccount) {
+        viewModelScope.launch {
+            val updated = repository.reconcileAccount(event.account, event.openingOffset)
+            syncManager?.let { launch { it.pushAccount(updated) } }
+        }
+    }
+
+    private fun reconcileAll() {
+        viewModelScope.launch {
+            repository.reconcileAllAccounts().forEach { updated ->
+                syncManager?.let { launch { it.pushAccount(updated) } }
+            }
         }
     }
 

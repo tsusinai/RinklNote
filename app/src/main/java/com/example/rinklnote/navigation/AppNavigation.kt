@@ -53,7 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
@@ -448,7 +448,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         Box(
                             modifier = Modifier
                                 .padding(bottom = 8.dp)
-                                .shadow(6.dp, RoundedCornerShape(18.dp))
+                                .rinkShadow(RoundedCornerShape(18.dp))
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(MaterialTheme.colorScheme.surface)
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -628,7 +628,7 @@ private fun CustomBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
-                .shadow(3.dp, RoundedCornerShape(18.dp))
+                .rinkShadow(RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(20.dp))
                 .background(MaterialTheme.colorScheme.surface)
         ) {

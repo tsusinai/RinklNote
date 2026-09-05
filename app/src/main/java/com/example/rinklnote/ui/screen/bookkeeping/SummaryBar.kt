@@ -26,7 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,7 +69,7 @@ fun SummaryBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
-            .shadow(2.dp, RoundedCornerShape(15.dp))
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
             .hazeEffect(hazeState, HazeMaterials.thin())
             .then(clickModifier)

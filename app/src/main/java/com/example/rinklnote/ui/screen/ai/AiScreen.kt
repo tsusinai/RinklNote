@@ -38,7 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
@@ -226,7 +226,7 @@ private fun ChatBubble(message: ChatMessage) {
         Box(
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .shadow(2.dp, RoundedCornerShape(18.dp))
+                .rinkShadow(RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(18.dp))
                 .background(if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -276,7 +276,7 @@ private fun TypingBubble() {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Row(
             modifier = Modifier
-                .shadow(2.dp, RoundedCornerShape(18.dp))
+                .rinkShadow(RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
