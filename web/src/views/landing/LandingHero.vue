@@ -13,7 +13,7 @@ function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ be
 <template>
   <section class="hero" v-reveal>
     <span class="hero-chip">个人记账 · 资产 · AI 洞察</span>
-    <h1 class="hero-title">把钱记在日本，<br /><span class="grad">每一笔都值得被看见</span></h1>
+    <h1 class="hero-title">把钱记在账本里，<br /><span class="grad">每一笔都值得被看见</span></h1>
     <p class="hero-sub">快速记账、收入支出一目了然；资产净额、月度预算、AI 月结复盘，一个控制台全搞定。</p>
     <div class="hero-cta">
       <button class="btn btn-primary" @click="cta">进入控制台</button>

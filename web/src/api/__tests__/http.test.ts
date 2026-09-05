@@ -46,3 +46,22 @@ describe('api', () => {
     await expect(api('/api/auth/password', { method: 'POST', allow401: true })).rejects.toMatchObject({ statusCode: 401, message: '原密码错误' })
   })
 })
+
+describe('getToken', () => {
+  it('returns a normal token', () => {
+    localStorage.setItem('rkl_token', 'abc')
+    expect(getToken()).toBe('abc')
+  })
+  it('treats a stale literal "undefined" token as logged-out', () => {
+    localStorage.setItem('rkl_token', 'undefined')
+    expect(getToken()).toBeNull()
+  })
+  it('treats a stale literal "null" token as logged-out', () => {
+    localStorage.setItem('rkl_token', 'null')
+    expect(getToken()).toBeNull()
+  })
+  it('returns null for an empty token', () => {
+    localStorage.setItem('rkl_token', '')
+    expect(getToken()).toBeNull()
+  })
+})

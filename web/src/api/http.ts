@@ -9,7 +9,12 @@ export class HttpError extends Error {
 }
 
 const TOKEN_KEY = 'rkl_token'
-export function getToken(): string | null { return localStorage.getItem(TOKEN_KEY) }
+// 只返回「有效」token。历史上登录失败可能把字面 'undefined'/'null' 写进 localStorage，
+// 这类垃圾值若不归一为 null 会被守卫误判为「已登录」，导致未登录也能进入 /console。
+export function getToken(): string | null {
+  const t = localStorage.getItem(TOKEN_KEY)
+  return t && t !== 'undefined' && t !== 'null' ? t : null
+}
 export function setToken(t: string): void { localStorage.setItem(TOKEN_KEY, t) }
 export function clearToken(): void { localStorage.removeItem(TOKEN_KEY) }
 
