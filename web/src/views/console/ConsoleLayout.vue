@@ -32,4 +32,21 @@ function go(name: string) { router.push({ name }) }
   </div>
 </template>
 
-<style scoped src="./console.css"></style>
+<style scoped>
+.console { display: flex; min-height: 100vh; background: var(--bg); }
+.sidebar { width: 200px; padding: 20px 12px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--border-light); }
+.sidebar h1 { font-size: 20px; margin: 0 0 16px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 4px; }
+.sidebar nav button, .logout { text-align: left; padding: 10px 12px; border-radius: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; font-family: inherit; }
+.sidebar nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.logout { margin-top: auto; color: var(--expense); }
+.content { flex: 1; padding: 20px 24px; overflow-y: auto; }
+.mobile-nav { display: none; }
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .mobile-nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 60px; background: var(--card); border-top: 1px solid var(--border-light); padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+  .mobile-nav button { flex: 1; border: none; background: none; color: var(--muted); font-size: 11px; }
+  .mobile-nav button.active { color: var(--primary); font-weight: 600; }
+  .content { padding: 16px 14px 84px; }
+}
+</style>

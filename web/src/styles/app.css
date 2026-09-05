@@ -1,0 +1,68 @@
+/* 通用卡片 */
+.card { background: var(--card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+
+/* 按钮 */
+.btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; font-family: inherit; transition: transform .12s var(--ease); }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn-ghost, .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn.danger { background: var(--expense); color: #fff; }
+.block { width: 100%; }
+
+/* 收支/语义 */
+.text-expense { color: var(--expense); }
+.text-income { color: var(--income); }
+
+/* 开关 */
+.toggle { display: flex; gap: 8px; }
+.toggle-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn.on { background: var(--primary); color: #0b2b44; font-weight: 600; border-color: transparent; }
+
+/* 金额输入 */
+.amount-input { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* 网格 */
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+/* 选中 */
+.sel { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 15px; font-family: inherit; }
+
+/* 分类按钮 */
+.cat-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
+.cat-btn.on { background: var(--primary-soft); border-color: var(--primary); }
+.cat-icon { font-size: 22px; }
+
+/* 标签 */
+.tag { padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+.tag-qq { background: var(--tag-qq-bg); color: var(--tag-qq-fg); }
+.tag-web { background: var(--tag-web-bg); color: var(--tag-web-fg); }
+.tag-app { background: var(--tag-app-bg); color: var(--tag-app-fg); }
+.tag-other { background: var(--border-light); color: var(--muted); }
+
+/* 消息 */
+.msg { font-size: 14px; margin: 10px 0; }
+.msg.ok { color: var(--income); }
+.msg.err { color: var(--expense); }
+
+/* 表格滚动 */
+.tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* 空状态 */
+.empty-inline, .empty-cell { text-align: center; color: var(--muted); padding: 16px 0; font-size: 13px; }
+
+/* 汇总卡 */
+.summary-card { background: var(--card); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
+.summary-card .label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.summary-card .val { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 页面居中（Bookkeeping/Me 有 scoped .page 覆盖，其余控制台页面共用） */
+.page { max-width: 960px; margin: 0 auto; }
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: repeat(3, 1fr); }
+  .card { padding: 16px; }
+}
