@@ -47,11 +47,17 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
       throw new HttpError(401, (body as { message?: string } | null)?.message ?? 'HTTP 401', body)
     }
     clearToken(); window.location.href = '/login'
+    return r.json() as Promise<T>
   }
   if (r.status === 409) {
     let body: unknown
     try { body = await r.json() } catch { /* 无 body */ }
     throw new HttpError(409, '并发冲突', body)
+  }
+  if (!r.ok) {
+    let body: unknown
+    try { body = await r.json() } catch { /* 无 body */ }
+    throw new HttpError(r.status, (body as { message?: string } | null)?.message ?? `HTTP ${r.status}`, body)
   }
   return r.json() as Promise<T>
 }

@@ -14,10 +14,13 @@ onMounted(load)
 
 async function add() {
   if (!kw.value || !catName.value) return
-  await keywords.create(kw.value, catName.value)
-  toast.push('已添加'); kw.value = ''; catName.value = ''; await load()
+  try { await keywords.create(kw.value, catName.value); toast.push('已添加'); kw.value = ''; catName.value = ''; await load() }
+  catch (e: any) { toast.push(e?.message || '添加失败', 'err') }
 }
-async function remove(id: number) { await keywords.remove(id); await load() }
+async function remove(id: number) {
+  try { await keywords.remove(id); await load() }
+  catch (e: any) { toast.push(e?.message || '删除失败', 'err') }
+}
 </script>
 
 <template>

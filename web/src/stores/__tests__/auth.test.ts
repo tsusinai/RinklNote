@@ -7,7 +7,7 @@ beforeEach(() => setActivePinia(createPinia()))
 describe('auth store', () => {
   it('login stores token and marks ready', async () => {
     const s = useAuthStore()
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 200, json: async () => ({ token: 't', userId: 1 }) } as unknown as Response)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ status: 200, ok: true, json: async () => ({ token: 't', userId: 1 }) } as unknown as Response)
     await s.login('123', 'pwd')
     expect(s.token).toBe('t')
     expect(localStorage.getItem('rkl_token')).toBe('t')

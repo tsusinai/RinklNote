@@ -7,9 +7,8 @@ const disabled = ref<boolean | null>(null)
 onMounted(async () => { try { disabled.value = (await auth.aiStatus()).disabled } catch { /* 加载失败保持 null */ } })
 async function toggle() {
   const next = !disabled.value
-  await auth.setAiDisabled(next)
-  disabled.value = next
-  toast.push(next ? 'AI 推送已关闭' : 'AI 推送已开启')
+  try { await auth.setAiDisabled(next); disabled.value = next; toast.push(next ? 'AI 推送已关闭' : 'AI 推送已开启') }
+  catch (e: any) { toast.push(e?.message || '切换失败', 'err') }
 }
 </script>
 

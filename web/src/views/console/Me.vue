@@ -22,8 +22,19 @@ onMounted(async () => {
   if (authStore.token) { await authStore.refresh(); me.value = authStore.user }
 })
 
-async function bindQq() { setBusy(); await auth.bindQq(qqNumber.value); toast.push('已绑定'); await refreshMe(); resetBusy() }
-async function unbindQq() { if (confirm('解绑QQ号？')) { await auth.unbindQq(); toast.push('已解绑'); await refreshMe() } }
+async function bindQq() {
+  busy.value = true
+  try { await auth.bindQq(qqNumber.value); toast.push('已绑定'); await refreshMe() }
+  catch (e: any) { toast.push(e?.message || '绑定失败', 'err') }
+  finally { busy.value = false }
+}
+async function unbindQq() {
+  if (!confirm('解绑QQ号？')) return
+  busy.value = true
+  try { await auth.unbindQq(); toast.push('已解绑'); await refreshMe() }
+  catch (e: any) { toast.push(e?.message || '解绑失败', 'err') }
+  finally { busy.value = false }
+}
 async function changePwd() {
   if (newPwd.value.length < 6) { pwdMsg.value = '新密码至少6位'; return }
   busy.value = true
@@ -35,8 +46,6 @@ async function changePwd() {
   finally { busy.value = false }
 }
 async function refreshMe() { await authStore.refresh(); me.value = authStore.user }
-function setBusy() { busy.value = true }
-function resetBusy() { busy.value = false }
 function logout() {
   if (confirm('退出将清除本地缓存数据')) {
     authStore.logout()

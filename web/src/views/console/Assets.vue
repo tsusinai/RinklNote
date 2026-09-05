@@ -21,22 +21,24 @@ async function createAccount() {
   const bal = window.prompt('请输入账户余额', '0')
   const balance = parseFloat(bal ?? '0')
   if (name && isFinite(balance) && balance >= 0 && !isNaN(balance)) {
-    await accounts.create(name, palette[data.accts.length % 6], balance)
-    await data.refreshAccounts(); toast.push('已新建账户')
+    try { await accounts.create(name, palette[data.accts.length % 6], balance); await data.refreshAccounts(); toast.push('已新建账户') }
+    catch (e: any) { toast.push(e?.message || '新建失败', 'err') }
   }
 }
 async function editBalance(id: number, cur: number) {
   const v = window.prompt('输入新余额', String(cur))
   if (v == null) return
   const n = parseFloat(v)
-  if (isFinite(n)) { await accounts.update(id, { balance: n }); await data.refreshAccounts(); toast.push('已更新余额') }
+  if (isFinite(n)) { try { await accounts.update(id, { balance: n }); await data.refreshAccounts(); toast.push('已更新余额') } catch (e: any) { toast.push(e?.message || '更新失败', 'err') } }
 }
 async function rename(id: number, cur: string) {
   const v = window.prompt('输入新名称', cur)
-  if (v && v !== cur) { await accounts.update(id, { name: v }); await data.refreshAccounts(); toast.push('已重命名') }
+  if (v && v !== cur) { try { await accounts.update(id, { name: v }); await data.refreshAccounts(); toast.push('已重命名') } catch (e: any) { toast.push(e?.message || '重命名失败', 'err') } }
 }
 async function remove(id: number, name: string) {
-  if (window.confirm(`确定删除账户 ${name}？`)) { await accounts.remove(id); await data.refreshAccounts(); toast.push('已删除') }
+  if (!window.confirm(`确定删除账户 ${name}？`)) return
+  try { await accounts.remove(id); await data.refreshAccounts(); toast.push('已删除') }
+  catch (e: any) { toast.push(e?.message || '删除失败', 'err') }
 }
 onMounted(() => { if (!data.accts.length) data.loadData() })
 </script>

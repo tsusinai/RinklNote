@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { api, setToken, getToken, clearToken } from '../http'
 
 function mockFetch(status: number, json: unknown) {
-  return vi.fn().mockResolvedValue({ status, json: async () => json })
+  return vi.fn().mockResolvedValue({ status, ok: status >= 200 && status < 300, json: async () => json })
 }
 
 describe('api', () => {

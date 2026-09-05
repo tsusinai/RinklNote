@@ -6,7 +6,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('insights', () => {
   it('monthlyReview uses month query', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({ status: 200, json: async () => ({ summary: 's' }) }) as any
+    globalThis.fetch = vi.fn().mockResolvedValue({ status: 200, ok: true, json: async () => ({ summary: 's' }) }) as any
     await insights.monthlyReview('2026-08')
     expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringContaining('month=2026-08'), expect.anything())
   })

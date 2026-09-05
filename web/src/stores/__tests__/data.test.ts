@@ -9,9 +9,9 @@ afterEach(() => vi.restoreAllMocks())
 describe('data store loadData', () => {
   it('loads cats and accts', async () => {
     globalThis.fetch = vi.fn(async (url: string) => {
-      if (url.includes('/categories')) return { status: 200, json: async () => [{ id: 1, name: '三餐', billType: 'EXPENSE', subCategories: [] }] }
-      if (url.includes('/accounts')) return { status: 200, json: async () => [{ id: 1, name: '微信', iconColor: 'x', balance: 0 }] }
-      return { status: 200, json: async () => [] }
+      if (url.includes('/categories')) return { status: 200, ok: true, json: async () => [{ id: 1, name: '三餐', billType: 'EXPENSE', subCategories: [] }] }
+      if (url.includes('/accounts')) return { status: 200, ok: true, json: async () => [{ id: 1, name: '微信', iconColor: 'x', balance: 0 }] }
+      return { status: 200, ok: true, json: async () => [] }
     }) as any
     const s = useDataStore()
     await s.loadData()
@@ -23,11 +23,11 @@ describe('data store loadData', () => {
     const calls: string[] = []
     globalThis.fetch = vi.fn(async (url: string) => {
       calls.push(url)
-      if (url.includes('/sync')) return { status: 200, json: async () => ({ bills: [{ id: 1, updatedAt: 1 }, { id: 2, updatedAt: 2 }], hasMore: false, nextAfter: null, nextAfterId: null }) }
-      if (url.includes('/categories')) return { status: 200, json: async () => [] }
-      if (url.includes('/accounts')) return { status: 200, json: async () => [] }
-      if (url.includes('/keywords')) return { status: 200, json: async () => [] }
-      return { status: 200, json: async () => [] }
+      if (url.includes('/sync')) return { status: 200, ok: true, json: async () => ({ bills: [{ id: 1, updatedAt: 1 }, { id: 2, updatedAt: 2 }], hasMore: false, nextAfter: null, nextAfterId: null }) }
+      if (url.includes('/categories')) return { status: 200, ok: true, json: async () => [] }
+      if (url.includes('/accounts')) return { status: 200, ok: true, json: async () => [] }
+      if (url.includes('/keywords')) return { status: 200, ok: true, json: async () => [] }
+      return { status: 200, ok: true, json: async () => [] }
     }) as any
     const s = useDataStore()
     await s.loadData()

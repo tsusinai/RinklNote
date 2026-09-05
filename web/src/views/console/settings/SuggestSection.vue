@@ -10,7 +10,10 @@ async function load() {
   finally { loaded.value = true }
 }
 onMounted(load)
-async function save() { await insights.saveSuggestConfig(cfg.value) }
+async function save() {
+  try { await insights.saveSuggestConfig(cfg.value) }
+  catch (e: any) { err.value = e?.message || '保存失败' }
+}
 </script>
 
 <template>

@@ -30,16 +30,18 @@ onMounted(load)
 
 async function saveConfig() {
   if (!appId.value) { err.value = '请填写 AppID'; return }
-  await qqBot.saveConfig(appId.value, secret.value)
-  if (1) { err.value = ''; appId.value = ''; secret.value = ''; showSecret.value = false; await load() }
+  try { await qqBot.saveConfig(appId.value, secret.value); err.value = ''; appId.value = ''; secret.value = ''; showSecret.value = false; await load() }
+  catch (e: any) { err.value = e?.message || '保存失败' }
 }
 async function doBind() {
   if (!code.value) return
-  const r = await qqBot.bind(code.value)
-  if ((r as any).message?.includes('失败')) { err.value = (r as any).message; return }
-  err.value = ''; code.value = ''; await load()
+  try { await qqBot.bind(code.value); err.value = ''; code.value = ''; await load() }
+  catch (e: any) { err.value = e?.message || '绑定失败' }
 }
-async function doUnbind() { await qqBot.unbind(); toast.push('已解绑'); await load() }
+async function doUnbind() {
+  try { await qqBot.unbind(); toast.push('已解绑'); await load() }
+  catch (e: any) { toast.push(e?.message || '解绑失败', 'err') }
+}
 </script>
 
 <template>
