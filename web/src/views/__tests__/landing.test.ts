@@ -2,11 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { demoDays, demoAccounts, demoBudget } from '../../mock/demo-data'
 
 describe('landing derived', () => {
-  it('总支出动画值 = 今日 + 昨日 totals（演示用）', () => {
-    // Hero 的 count-up 目标取 demoDays 前两项的 total 之和（今日 68.5 + 昨日 342）
-    const recent = demoDays.slice(0, 2)
-    const sum = recent.reduce((s, d) => s + d.total, 0)
-    expect(sum).toBeCloseTo(410.5)
+  it('总支出动画值 = 三日 totals 之和（BookkeepingDemo 的 countUp 目标）', () => {
+    // BookkeepingDemo.vue 的 countUp 目标取 demoDays 全部三项的 total 之和（68.5 + 342 + 35.5 = 446）
+    const sum = demoDays.reduce((s, d) => s + d.total, 0)
+    expect(sum).toBeCloseTo(446)
   })
   it('净资 = 资产 - 负债', () => {
     const asset = demoAccounts.filter((a) => a.kind === 'asset').reduce((s, a) => s + a.balance, 0)
