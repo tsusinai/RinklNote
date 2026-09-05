@@ -1,8 +1,10 @@
 export class HttpError extends Error {
   statusCode: number
-  constructor(status: number, message?: string) {
-    super(message ?? `HTTP ${status}`);
+  data: unknown
+  constructor(status: number, message?: string, data?: unknown) {
+    super(message ?? `HTTP ${status}`)
     this.statusCode = status
+    this.data = data
   }
 }
 
@@ -38,6 +40,10 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
   })
 
   if (r.status === 401 && token) { clearToken(); window.location.href = '/login' }
-  if (r.status === 409) throw new HttpError(409, '并发冲突')
+  if (r.status === 409) {
+    let body: unknown
+    try { body = await r.json() } catch { /* 无 body */ }
+    throw new HttpError(409, '并发冲突', body)
+  }
   return r.json() as Promise<T>
 }

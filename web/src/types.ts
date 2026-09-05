@@ -41,3 +41,17 @@ export interface MeResponse {
   id: number; phone: string | null; qqNumber: string | null;
   qqOpenid: string | null; createdAt: string | null; aiDisabled: boolean;
 }
+
+// ── 控制台扩展类型（原 web 全量 1:1）──
+export interface Keyword { id: number; keyword: string; categoryName: string; priority: number }
+export interface Template { id: number; label: string; amount: number; categoryId: number; categoryName: string; accountId: number; sortOrder: number }
+export interface MonthlyReviewSpike { date: string; amount: number; ratioPct: number }
+export interface MonthlyReviewTopCategory { name: string; amount: number }
+export interface MonthlyReview {
+  summary: string; totalExpense: number; totalIncome: number; highlights: string[];
+  spikeDays: MonthlyReviewSpike[]; biggestSingle: { categoryName: string; amount: number; date: string } | null;
+  topCategories: MonthlyReviewTopCategory[];
+}
+export interface SuggestConfig { enabled: boolean; lookbackDays: number; minOccurrences: number; displayDuration: number }
+export interface QqBotStatus { configured: string; maskedAppId: string }
+export interface QqBotBindStatus { bound: string; openid: string }
