@@ -13,6 +13,7 @@ export const auth = {
     api<MessageResponse>('/api/auth/password', { method: 'POST', body: { oldPassword, newPassword }, allow401: true }),
   setAiDisabled: (disabled: boolean) =>
     api<MessageResponse>('/api/auth/ai', { method: 'PUT', body: { disabled } }),
+  aiStatus: () => api<{ disabled: boolean }>('/api/auth/ai'),
   bindQq: (qqNumber: string) =>
     api<MessageResponse>('/api/auth/bind-qq', { method: 'POST', body: { qqNumber } }),
   unbindQq: () => api<MessageResponse>('/api/auth/unbind-qq', { method: 'POST' }),
