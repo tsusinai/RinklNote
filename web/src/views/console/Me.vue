@@ -28,9 +28,9 @@ async function changePwd() {
   if (newPwd.value.length < 6) { pwdMsg.value = '新密码至少6位'; return }
   busy.value = true
   try {
-    const r = await auth.changePassword(oldPwd.value, newPwd.value)
-    pwdMsg.value = (r as any).message || ((r as any).oldPassword ? '原密码错误' : '修改失败')
-    if (!(r as any).oldPassword) { oldPwd.value = ''; newPwd.value = ''; await refreshMe() }
+    await auth.changePassword(oldPwd.value, newPwd.value)
+    pwdMsg.value = '密码修改成功'
+    oldPwd.value = ''; newPwd.value = ''; await refreshMe()
   } catch (e: any) { pwdMsg.value = e?.message || '修改失败' }
   finally { busy.value = false }
 }

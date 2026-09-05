@@ -38,4 +38,11 @@ describe('api', () => {
     globalThis.fetch = f as any
     await expect(api('/api/bills/1', { method: 'PUT' })).rejects.toMatchObject({ statusCode: 409 })
   })
+
+  it('allow401 throws HttpError instead of redirecting', async () => {
+    setToken('abc')
+    const f = mockFetch(401, { message: '原密码错误' })
+    globalThis.fetch = f as any
+    await expect(api('/api/auth/password', { method: 'POST', allow401: true })).rejects.toMatchObject({ statusCode: 401, message: '原密码错误' })
+  })
 })

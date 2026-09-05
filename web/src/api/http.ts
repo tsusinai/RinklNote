@@ -18,6 +18,7 @@ interface ApiOptions {
   body?: unknown
   headers?: Record<string, string>
   query?: Record<string, string | number | undefined>
+  allow401?: boolean   // 新增
 }
 
 export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise<T> {
@@ -39,7 +40,14 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
 
-  if (r.status === 401 && token) { clearToken(); window.location.href = '/login' }
+  if (r.status === 401 && token) {
+    if (opts.allow401) {
+      let body: unknown
+      try { body = await r.json() } catch { /* 无 body */ }
+      throw new HttpError(401, (body as { message?: string } | null)?.message ?? 'HTTP 401', body)
+    }
+    clearToken(); window.location.href = '/login'
+  }
   if (r.status === 409) {
     let body: unknown
     try { body = await r.json() } catch { /* 无 body */ }

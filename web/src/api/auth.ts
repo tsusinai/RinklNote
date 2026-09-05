@@ -10,7 +10,7 @@ export const auth = {
     api<AuthResponse>('/api/auth/qq-login', { method: 'POST', body: { code } }),
   me: () => api<MeResponse>('/api/auth/me'),
   changePassword: (oldPassword: string, newPassword: string) =>
-    api<MessageResponse>('/api/auth/password', { method: 'POST', body: { oldPassword, newPassword } }),
+    api<MessageResponse>('/api/auth/password', { method: 'POST', body: { oldPassword, newPassword }, allow401: true }),
   setAiDisabled: (disabled: boolean) =>
     api<MessageResponse>('/api/auth/ai', { method: 'PUT', body: { disabled } }),
   bindQq: (qqNumber: string) =>
