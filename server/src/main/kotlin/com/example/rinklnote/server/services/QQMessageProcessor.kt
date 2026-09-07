@@ -93,7 +93,7 @@ object QQMessageProcessor {
                 return
             }
 
-            val router = QQIntentRouter(billService, budgetService, insightService, nluService)
+            val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
             val reply = router.route(content, user.id)
             val out = if (isNew) "欢迎！已开通 QQ 记账账号。用中文说「午餐20元」即可记账；回复「登录」可获取网页登录码。\n\n$reply" else reply
             if (groupOpenid != null) {

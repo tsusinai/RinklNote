@@ -27,11 +27,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * Pure-natural-language QQ bot intent routing. The real LLM is never reached:
- * the dummy LLM points at a closed port and returns null fast, so monthlySummary
- * and naturalQuery fall back to their deterministic copy.
+ * Pure-natural-language intent routing for QQ bot and phone AI assistants. The real LLM
+ * is never reached: the dummy LLM points at a closed port and returns null fast, so
+ * monthlySummary and naturalQuery fall back to their deterministic copy.
  */
-class QQIntentRouterTest {
+class PhoneIntentRouterTest {
 
     private val shanghai = ZoneId.of("Asia/Shanghai")
     private val llmParser = LLMParser(
@@ -41,7 +41,7 @@ class QQIntentRouterTest {
     private val budgetService = BudgetService()
     private val insightService = InsightService(llmParser, billService)
     private val nlu = DefaultNLUService(RuleBasedParser(), llmParser, billService)
-    private val router = QQIntentRouter(billService, budgetService, insightService, nlu)
+    private val router = PhoneIntentRouter(billService, budgetService, insightService, nlu)
 
     @Before
     fun setup() {
@@ -214,5 +214,23 @@ class QQIntentRouterTest {
         insertBill(1L, 500.0, "三餐", currentMonthStart())
         val reply = router.route("分析一下这个月", 1L)
         assertTrue("reply=$reply", reply.contains("总支出"))
+    }
+
+    @Test
+    fun `balance intent sums all accounts`() = runBlocking {
+        billService.accountsFor(1L)   // ensureDefaultAccounts -> 微信/支付宝/无账户
+        val reply = router.route("看看我的余额", 1L)
+        assertTrue("reply=$reply", reply.contains("余额合计"))
+        assertTrue(reply.contains("微信"))
+    }
+
+    @Test
+    fun `ai source is persisted on the bill`() = runBlocking {
+        val reply = router.route("午餐20元", 1L, "AI")
+        assertTrue("reply=$reply", reply.contains("已记录"))
+        val source = transaction {
+            BillsTable.selectAll().where { BillsTable.userId eq 1L }.single()[BillsTable.billSource]
+        }
+        assertEquals("AI", source)
     }
 }

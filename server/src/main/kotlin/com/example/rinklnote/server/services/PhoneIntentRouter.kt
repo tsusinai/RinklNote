@@ -9,10 +9,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Pure-natural-language intent routing for the QQ bot.
+ * Pure-natural-language intent routing for the QQ bot and phone AI assistants.
  *
  * The bot speaks plain Chinese ("午餐20元", "今天花了多少") with no command prefix.
- * Routing priority: help → delete → query → bookkeeping → ask-for-amount → LLM fallback.
+ * Routing priority: help → balance → delete → query → bookkeeping → ask-for-amount → LLM fallback.
  * The hard constraint is not to misclassify bookkeeping: a message carrying a concrete
  * amount ("打车花了20") is treated as bookkeeping unless it also contains an explicit
  * ask-word like 多少/几笔. Query replies are computed from the same services the web
@@ -21,8 +21,10 @@ import java.time.format.DateTimeFormatter
  *
  * This class is a pure computation unit — it never sends messages. The caller
  * ([QQMessageProcessor]) resolves openid, binding, and delivery (C2C vs group).
+ * Phone AI assistants (小爱同学等) pass `source="AI"` so the created bill records
+ * the correct source.
  */
-class QQIntentRouter(
+class PhoneIntentRouter(
     private val billService: BillService,
     private val budgetService: BudgetService,
     private val insightService: InsightService,
@@ -31,7 +33,7 @@ class QQIntentRouter(
 ) {
     private val shanghai = ZoneId.of("Asia/Shanghai")
 
-    suspend fun route(content: String, userId: Long): String {
+    suspend fun route(content: String, userId: Long, source: String = "QQ"): String {
         // Greeting — say hi back; never fall into bookkeeping/「请补金额」.
         if (isGreeting(content)) return greetingText()
 
@@ -42,13 +44,17 @@ class QQIntentRouter(
         // (刚才/那笔) only narrow down the target, never trigger deletion.
         if (DELETE_VERB.containsMatchIn(content)) return deleteIntent(content, userId)
 
-        // C. Summary / Anomaly — explicit intent words, checked before the amount gate so
+        // C. Balance — explicit intent words, checked before the amount gate so
+        // "余额" doesn't get misread as a bookkeeping attempt.
+        if (BALANCE.containsMatchIn(content)) return balance(userId)
+
+        // D. Summary / Anomaly — explicit intent words, checked before the amount gate so
         // a historical month ("分析一下8月", "8月异常") doesn't get its "8" misread as an
         // amount and pushed into bookkeeping. Supports any month via resolveYearMonth.
         if (SUMMARY.containsMatchIn(content)) return monthlySummary(content, userId)
         if (ANOMALY.containsMatchIn(content)) return anomaly(content, userId)
 
-        // D. Query
+        // E. Query
         val hasAmount = extractAmount(content) != null
         val askWord = ASK_WORD.containsMatchIn(content)
         if (!(hasAmount && !askWord)) {
@@ -68,10 +74,10 @@ class QQIntentRouter(
             if (SUGGEST.containsMatchIn(content)) return suggest(userId)
         }
 
-        // E. Bookkeeping
+        // F. Bookkeeping
         val result = nluService.parse(content, userId)
         if (result.amount != null && result.amount > 0) {
-            val bill = billService.createBill(userId, result.amount, result.categoryName, result.remark, "QQ")
+            val bill = billService.createBill(userId, result.amount, result.categoryName, result.remark, source)
             return listOf(
                 "已记录：${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
                 "已记录成功～ ${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
@@ -79,7 +85,7 @@ class QQIntentRouter(
             ).random()
         }
 
-        // E. A category was recognised but no amount — keep the bookkeeping UX alive.
+        // G. A category was recognised but no amount — keep the bookkeeping UX alive.
         // Only for a genuine half-finished bookkeeping entry (a real category keyword or
         // bookkeeping verb present), never for random chat/greetings that the LLM happened
         // to label with a catch-all category like 「其他」.
@@ -87,7 +93,7 @@ class QQIntentRouter(
             return "请补金额～ 说「${result.categoryName}20元」就帮你记上"
         }
 
-        // F. LLM fallback for anything that is neither a known query nor bookkeeping.
+        // H. LLM fallback for anything that is neither a known query nor bookkeeping.
         return insightService.naturalQuery(userId, content).answer
     }
 
@@ -185,6 +191,14 @@ class QQIntentRouter(
         ).random()
     }
 
+    private fun balance(userId: Long): String {
+        val accounts = billService.accountsFor(userId)
+        if (accounts.isEmpty()) return "还没有账户，先去 App 加一个吧～"
+        val total = Money.cents(accounts.sumOf { it.balance })
+        return "账户余额合计 ¥${"%.2f".format(total)}：\n" +
+            accounts.joinToString("\n") { "${it.name} ¥${"%.2f".format(it.balance)}" }
+    }
+
     // ── Delete intent ──
 
     private fun deleteIntent(content: String, userId: Long): String {
@@ -231,6 +245,7 @@ class QQIntentRouter(
         本月: 这个月花了多少
         分类: 打车花了多少
         预算: 这个月预算
+        余额: 看看我的余额
         最近: 最近几笔 / 最近10笔
         删除: 删除午餐 / 删掉刚才那笔
         总结: 分析一下这个月 / 8月
@@ -299,6 +314,7 @@ class QQIntentRouter(
         val SUMMARY = Regex("总结|分析|复盘|怎么样")
         val ANOMALY = Regex("异常|预警|超支|超标")
         val SUGGEST = Regex("建议|推荐")
+        val BALANCE = Regex("余额|还剩|balance|总资产|账户里有|卡里", RegexOption.IGNORE_CASE)
         val GREETING = Regex("^(你好|您好|哈喽|嗨|hi|hello|在吗|在不在|早上好|上午好|下午好|晚上好|晚安|早|早安)[呀哈哇啦哦]?[\\s!！。~～，,]*$", RegexOption.IGNORE_CASE)
         val BOOKKEEPING_VERB = Regex("记账|记一笔|记一下|记录|帮我记|帮记")
     }
