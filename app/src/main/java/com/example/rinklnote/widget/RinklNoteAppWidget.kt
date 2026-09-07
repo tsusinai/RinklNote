@@ -19,6 +19,7 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -67,6 +68,7 @@ class RinklNoteAppWidget : GlanceAppWidget() {
                 Box(
                     modifier = GlanceModifier
                         .fillMaxSize()
+                        .cornerRadius(12.dp)
                         .background(GlanceTheme.colors.surface)
                 ) {
                     when {
@@ -167,6 +169,7 @@ private fun Widget1x2(d: WidgetData) {
             modifier = GlanceModifier
                 .defaultWeight()
                 .fillMaxHeight()
+                .cornerRadius(12.dp)
                 .background(c.primaryContainer)
         ) {
             Column(
@@ -184,6 +187,7 @@ private fun Widget1x2(d: WidgetData) {
             modifier = GlanceModifier
                 .defaultWeight()
                 .fillMaxHeight()
+                .cornerRadius(12.dp)
                 .background(c.tertiaryContainer)
         ) {
             Column(
@@ -259,7 +263,7 @@ private fun Widget2x2(d: WidgetData, size: DpSize) {
     Column(modifier = GlanceModifier.fillMaxSize().padding(8.dp)) {
         // Zone 1: 今日支出 | 今日收入 — split row
         Row(
-            modifier = GlanceModifier.fillMaxWidth().background(c.surfaceVariant),
+            modifier = GlanceModifier.fillMaxWidth().cornerRadius(8.dp).background(c.surfaceVariant),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             ZoneStat("今日支出", d.money(d.todayExpense), c.primary, GlanceModifier.defaultWeight())
@@ -318,8 +322,8 @@ private fun BudgetSection(ratio: Float, spent: String, barColor: ColorProvider, 
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
             Text("预算", style = TextStyle(fontSize = 10.sp, color = c.onSurface))
             Spacer(GlanceModifier.width(4.dp))
-            Box(modifier = GlanceModifier.defaultWeight().height(8.dp).background(c.surfaceVariant)) {
-                Box(modifier = GlanceModifier.fillMaxHeight().width(usable * 0.55f * ratio).background(barColor)) { }
+            Box(modifier = GlanceModifier.defaultWeight().height(8.dp).cornerRadius(4.dp).background(c.surfaceVariant)) {
+                Box(modifier = GlanceModifier.fillMaxHeight().width(usable * 0.55f * ratio).cornerRadius(4.dp).background(barColor)) { }
             }
             Spacer(GlanceModifier.width(4.dp))
             Text(spent, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = barColor), maxLines = 1)
@@ -339,6 +343,8 @@ private fun CategoryChip(cat: com.example.rinklnote.data.db.entity.Category, mod
     Column(
         modifier = modifier
             .padding(2.dp)
+            .cornerRadius(8.dp)
+            
             .background(c.surfaceVariant)
             .clickable(actionStartActivity(RinklNoteAppWidgetReceiver.categoryAddIntent(LocalContext.current, cat.id)))
             .padding(vertical = 4.dp),
