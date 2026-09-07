@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Build outputs
+server/build/
+web/dist/
+web/node_modules/

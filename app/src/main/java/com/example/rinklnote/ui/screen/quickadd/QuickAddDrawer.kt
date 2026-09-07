@@ -67,20 +67,10 @@ import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
+import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
-
-private fun categoryIconRes(name: String): Int = when (name) {
-    "三餐" -> R.drawable.ic_category_meals
-    "日用" -> R.drawable.ic_category_daily
-    "交通" -> R.drawable.ic_category_transport
-    "学习" -> R.drawable.ic_category_study
-    "运动" -> R.drawable.ic_category_sports
-    "娱乐" -> R.drawable.ic_category_entertainment
-    "网购" -> R.drawable.ic_category_shopping
-    else -> R.drawable.ic_category_meals
-}
 
 private fun accountIconRes(name: String): Int = when (name) {
     "微信" -> R.drawable.ic_wechat

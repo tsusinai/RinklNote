@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal class BillRepositoryImpl(private val db: AppDatabase) : BillRepository {
+internal class BillRepositoryImpl(
+    private val db: AppDatabase,
+    private val onBillMutated: () -> Unit = {}
+) : BillRepository {
 
     private val billDao = db.billDao()
     private val categoryDao = db.categoryDao()
@@ -59,7 +62,7 @@ internal class BillRepositoryImpl(private val db: AppDatabase) : BillRepository 
         val id = billDao.insert(bill)
         nudgeAccount(bill.accountId, balanceDelta(bill))
         id
-    }
+    }.also { onBillMutated() }
 
     override suspend fun updateBill(bill: Bill) = db.withTransaction {
         // 编辑需按「旧账→新账」的差额回补余额；若可能改了账户，则旧账户回滚、新账户应用。
@@ -73,14 +76,14 @@ internal class BillRepositoryImpl(private val db: AppDatabase) : BillRepository 
             }
         }
         billDao.update(bill)
-    }
+    }.also { onBillMutated() }
 
     override suspend fun deleteBill(bill: Bill) = db.withTransaction {
         // Soft delete locally — server gets pushed the deletion via SyncManager.
         billDao.softDelete(bill.id, System.currentTimeMillis())
         // 反向回补删除的这笔对该账户余额的影响。
         nudgeAccount(bill.accountId, -balanceDelta(bill))
-    }
+    }.also { onBillMutated() }
 
     /** 记账对目标账户余额的增量：支出为负、收入为正。 */
     private fun balanceDelta(bill: Bill): Double =

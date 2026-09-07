@@ -56,6 +56,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
 
+    // Glance - Home Screen AppWidgets
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+
     // Network
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx)

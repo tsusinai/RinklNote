@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">RinklNote</string>
+    <string name="app_widget_description">今日/本月收支概览，点击分类即可快速记账</string>
 </resources>
