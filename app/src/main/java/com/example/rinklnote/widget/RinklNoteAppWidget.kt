@@ -1,4 +1,4 @@
-package com.example.rinklnote.widget
+﻿package com.example.rinklnote.widget
 
 import android.content.Context
 import android.content.Intent
@@ -80,7 +80,7 @@ class RinklNoteAppWidget : GlanceAppWidget() {
                     }
                 }
             }
-        }
+    }
     }
 }
 
@@ -107,10 +107,11 @@ private data class WidgetData(
     val todayIncome: Double,
     val monthExpense: Double,
     val budget: Double?,
-    val categories: List<com.example.rinklnote.data.db.entity.Category>,
     val ranking: List<Pair<com.example.rinklnote.data.db.entity.Category, Double>>,
     val masked: Boolean
 )
+
+private var lastRefLoadTime = 0L
 
 @OptIn(androidx.glance.ExperimentalGlanceApi::class)
 private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.BillRepository): WidgetData {
@@ -121,7 +122,12 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
     val monthStart = getMonthStart()
     val nextMonthStart = getNextMonthStart()
 
-    repo.loadReferenceData()
+    // 避免每次 widget 刷新都重复查库；5 秒内跳过
+    val now = System.currentTimeMillis()
+    if (now - lastRefLoadTime > 5_000L) {
+        repo.loadReferenceData()
+        lastRefLoadTime = now
+    }
     val cats = repo.expenseCategories.value
     val catIdToCat = cats.associateBy { it.id }
 
@@ -137,7 +143,7 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
         .mapNotNull { (catId, list) ->
             val cat = catIdToCat[catId] ?: return@mapNotNull null
             cat to list.sumOf { it.amount }
-        }
+    }
         .sortedByDescending { it.second }
         .take(4)
 
@@ -146,7 +152,6 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
         todayIncome = todayIncome,
         monthExpense = monthExpense,
         budget = budget,
-        categories = cats.take(4),
         ranking = ranking,
         masked = BalancePrivacy.hidden.value
     )
@@ -181,7 +186,7 @@ private fun Widget1x2(d: WidgetData) {
                 Spacer(GlanceModifier.height(1.dp))
                 Text(d.money(d.todayExpense), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.primary), maxLines = 1)
             }
-        }
+    }
         // Income half — cool tinted background
         Box(
             modifier = GlanceModifier
@@ -199,7 +204,7 @@ private fun Widget1x2(d: WidgetData) {
                 Spacer(GlanceModifier.height(1.dp))
                 Text(d.money(d.todayIncome), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.tertiary), maxLines = 1)
             }
-        }
+    }
     }
 }
 
@@ -269,7 +274,7 @@ private fun Widget2x2(d: WidgetData, size: DpSize) {
             ZoneStat("今日支出", d.money(d.todayExpense), c.primary, GlanceModifier.defaultWeight())
             Box(modifier = GlanceModifier.width(1.dp).height(32.dp).background(c.surface)) { }
             ZoneStat("今日收入", d.money(d.todayIncome), c.tertiary, GlanceModifier.defaultWeight())
-        }
+    }
 
         Spacer(GlanceModifier.height(6.dp))
 
@@ -283,27 +288,27 @@ private fun Widget2x2(d: WidgetData, size: DpSize) {
                 else -> GlanceTheme.colors.error
             }
 
-            BudgetSection(ratio, d.money(d.monthExpense), barColor, usable, d.money(if (remain >= 0) remain else -remain), remain >= 0)
-        } ?: run {
+            BudgetSection(ratio, d.money(d.monthExpense), barColor, usable * 0.55f, d.money(if (remain >= 0) remain else -remain), remain >= 0)
+    } ?: run {
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
                 Text("本月", style = TextStyle(fontSize = 11.sp, color = c.onSurface))
                 Spacer(GlanceModifier.width(4.dp))
                 Text(d.money(d.monthExpense), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.primary))
             }
-        }
+    }
 
         Spacer(GlanceModifier.height(6.dp))
 
-        // Zone 3: 4 quick category chips
-        val chips = d.categories.take(4)
+        // Zone 3: 本月支出 Top 4 分类快捷记账芯片
+        val chips = d.ranking.map { it.first }
         if (chips.isNotEmpty()) {
             Row(modifier = GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-                val cellW = (usable - 4.dp) / chips.size.coerceAtLeast(1)
+                val cellW = (usable - 4.dp) / chips.size
                 chips.forEach { cat ->
                     CategoryChip(cat, GlanceModifier.width(cellW))
                 }
             }
-        }
+    }
     }
 }
 
@@ -316,18 +321,18 @@ private fun ZoneStat(label: String, value: String, color: ColorProvider, modifie
 }
 
 @Composable
-private fun BudgetSection(ratio: Float, spent: String, barColor: ColorProvider, usable: Dp, remainText: String, isRemain: Boolean) {
+private fun BudgetSection(ratio: Float, spent: String, barColor: ColorProvider, barMaxWidth: Dp, remainText: String, isRemain: Boolean) {
     val c = GlanceTheme.colors
     Column(modifier = GlanceModifier.fillMaxWidth()) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
             Text("预算", style = TextStyle(fontSize = 10.sp, color = c.onSurface))
             Spacer(GlanceModifier.width(4.dp))
             Box(modifier = GlanceModifier.defaultWeight().height(8.dp).cornerRadius(4.dp).background(c.surfaceVariant)) {
-                Box(modifier = GlanceModifier.fillMaxHeight().width(usable * 0.55f * ratio).cornerRadius(4.dp).background(barColor)) { }
+                Box(modifier = GlanceModifier.fillMaxHeight().width(barMaxWidth * ratio).cornerRadius(4.dp).background(barColor)) { }
             }
             Spacer(GlanceModifier.width(4.dp))
             Text(spent, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = barColor), maxLines = 1)
-        }
+    }
         Spacer(GlanceModifier.height(2.dp))
         Text(
             if (isRemain) "剩余 $remainText" else "超支 $remainText",
@@ -362,3 +367,10 @@ private fun CategoryChip(cat: com.example.rinklnote.data.db.entity.Category, mod
         )
     }
 }
+
+
+
+
+
+
+
