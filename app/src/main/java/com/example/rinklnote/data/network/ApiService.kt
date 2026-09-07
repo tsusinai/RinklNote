@@ -112,4 +112,17 @@ interface ApiService {
 
     @GET("api/insights/habit")
     suspend fun getHabit(): HabitResponse
+
+    // AI 助手接口：个人令牌管理（JWT）
+    @POST("api/ai/tokens")
+    suspend fun generateAiToken(@Body request: AiGenerateTokenRequest): AiTokenResponse
+
+    @GET("api/ai/tokens")
+    suspend fun listAiTokens(): List<AiTokenItem>
+
+    @POST("api/ai/tokens/{id}/revoke")
+    suspend fun revokeAiToken(@Path("id") id: Long): MessageResponse
+
+    @POST("api/ai/tokens/revoke-all")
+    suspend fun revokeAllAiTokens(): MessageResponse
 }

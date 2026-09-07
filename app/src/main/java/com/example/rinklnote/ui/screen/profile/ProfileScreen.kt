@@ -66,6 +66,7 @@ import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -80,6 +81,7 @@ fun ProfileScreen(
     tokenManager: TokenManager,
     syncManager: SyncManager,
     repository: BillRepository,
+    aiTokenViewModel: AiTokenViewModel,
     onLoginClick: () -> Unit,
     onBindQQClick: () -> Unit,
     onQqBotGuideClick: () -> Unit
@@ -112,6 +114,7 @@ fun ProfileScreen(
     var showUnsynced by remember { mutableStateOf(false) }
     var unsyncedCount by remember { mutableStateOf(0) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
+    var showAiToken by remember { mutableStateOf(false) }
 
     // 登出「先推后清」：先把当前用户的 pending/dirty 尽力推到它自己的服务器，成功后清空本机
     // per-user 数据。这样旧用户的数据落到旧账号，新用户登入时零遗产，绝不跨用户污染。
@@ -193,7 +196,8 @@ fun ProfileScreen(
                 onBindQQClick = onBindQQClick,
                 onUnbindQQ = { showUnbindQQ = true },
                 onQqBotGuideClick = onQqBotGuideClick,
-                onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) }
+                onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) },
+                onAiTokenClick = { showAiToken = true }
             )
         }
         item(key = "about") {
@@ -276,6 +280,13 @@ fun ProfileScreen(
                     attemptLogout()
                 }) { Text("联网重试") }
             }
+        )
+    }
+
+    if (showAiToken) {
+        AiTokenDialog(
+            viewModel = aiTokenViewModel,
+            onDismiss = { showAiToken = false }
         )
     }
 }
@@ -477,7 +488,8 @@ private fun AccountCard(
     onBindQQClick: () -> Unit,
     onUnbindQQ: () -> Unit,
     onQqBotGuideClick: () -> Unit,
-    onSetAiDisabled: (Boolean) -> Unit
+    onSetAiDisabled: (Boolean) -> Unit,
+    onAiTokenClick: () -> Unit
 ) {
     GroupCard(title = "账户与个性化") {
         SettingsRow(
@@ -520,6 +532,12 @@ private fun AccountCard(
             icon = R.drawable.ic_link,
             label = "QQ 机器人绑定引导",
             onClick = onQqBotGuideClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_ai,
+            label = "AI 助手接口",
+            onClick = onAiTokenClick
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
         SettingsRow(

@@ -82,6 +82,7 @@ import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.AiViewModel
+import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
@@ -166,6 +167,10 @@ fun AppNavigation(app: RinklNoteApp) {
     val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
     // 主屏小组件点分类 / 深链 rinklnote://add → 待预填参数（MainActivity 从 Intent 装入）。
     val pendingQuickAdd by app.pendingQuickAdd.collectAsStateWithLifecycle()
+
+    val aiTokenVM: AiTokenViewModel = viewModel(
+        factory = AiTokenViewModel.Factory(app.apiService)
+    )
 
     // Periodic auto-sync while logged in (respects the auto-sync setting). The
     // QQ-bound check was removed — syncing works whether or not QQ is bound. The
@@ -344,6 +349,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         tokenManager = app.tokenManager,
                         syncManager = app.syncManager,
                         repository = app.repository,
+                        aiTokenViewModel = aiTokenVM,
                         onLoginClick = { showLogin = true },
                         onBindQQClick = { showBindQQ = true },
                         onQqBotGuideClick = { showQqBotGuide = true }

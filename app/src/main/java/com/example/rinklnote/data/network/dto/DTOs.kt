@@ -174,3 +174,20 @@ data class MonthlyReviewResponse(
     val biggestSingle: SingleBill? = null,
     val topCategories: List<CategoryAmount> = emptyList()
 )
+
+// ── AI 助手接口：个人令牌 ──
+
+@Serializable
+data class AiGenerateTokenRequest(val name: String = "小爱")
+
+@Serializable
+data class AiTokenResponse(val id: Long, val token: String, val name: String, val createdAt: Long)
+
+@Serializable
+data class AiTokenItem(
+    val id: Long,
+    val name: String,
+    val createdAt: Long,
+    val revoked: Boolean,
+    val revokedAt: Long? = null
+)
