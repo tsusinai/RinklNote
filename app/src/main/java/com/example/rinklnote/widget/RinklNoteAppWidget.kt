@@ -3,6 +3,7 @@ package com.example.rinklnote.widget
 import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -19,10 +20,8 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
-import androidx.glance.unit.ColorProvider
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
@@ -35,8 +34,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
 import com.example.rinklnote.MainActivity
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.ui.util.BalancePrivacy
@@ -48,6 +47,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+
+// ── Color palette ──────────────────────────────────
+// Intentional warm/cool split: expense = primary (warm),
+// income = tertiary (cool), budget = neutral with progress.
+// Colors are resolved via GlanceTheme.colors inside each composable.
 
 class RinklNoteAppWidget : GlanceAppWidget() {
 
@@ -67,10 +71,10 @@ class RinklNoteAppWidget : GlanceAppWidget() {
                 ) {
                     when {
                         size.height <= 85.dp -> {
-                            if (size.width <= 180.dp) Compact13(data)
-                            else Wide14(data)
+                            if (size.width <= 180.dp) Widget1x2(data)
+                            else Widget1x4(data)
                         }
-                        else -> Square22(data, size)
+                        else -> Widget2x2(data, size)
                     }
                 }
             }
@@ -93,6 +97,8 @@ class RinklNoteAppWidgetReceiver : GlanceAppWidgetReceiver() {
             }
     }
 }
+
+// ── Data ────────────────────────────────────────────
 
 private data class WidgetData(
     val todayExpense: Double,
@@ -150,114 +156,147 @@ private fun fmtAmount(value: Double): String =
 private fun WidgetData.money(value: Double): String =
     if (masked) "¥••" else "¥${fmtAmount(value)}"
 
-// ── 1×2 (73×146) ──────────────────────────────────
+// ── 1×2 (73×146) — Split pulse: expense | income ──
 
 @Composable
-private fun Compact13(d: WidgetData) {
-    Row(
-        modifier = GlanceModifier.fillMaxSize().padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.Vertical.CenterVertically
-    ) {
-        Column(modifier = GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-            Text("支出", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface))
-            Spacer(GlanceModifier.height(2.dp))
-            Text(d.money(d.todayExpense), style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.primary))
+private fun Widget1x2(d: WidgetData) {
+    val c = GlanceTheme.colors
+    Row(modifier = GlanceModifier.fillMaxSize()) {
+        // Expense half — warm tinted background
+        Box(
+            modifier = GlanceModifier
+                .defaultWeight()
+                .fillMaxHeight()
+                .background(c.primaryContainer)
+        ) {
+            Column(
+                modifier = GlanceModifier.fillMaxSize().padding(6.dp),
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+            ) {
+                Text("支出", style = TextStyle(fontSize = 10.sp, color = c.onSurface))
+                Spacer(GlanceModifier.height(1.dp))
+                Text(d.money(d.todayExpense), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.primary), maxLines = 1)
+            }
         }
-        Spacer(GlanceModifier.width(12.dp))
-        Column(modifier = GlanceModifier.defaultWeight(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-            Text("收入", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface))
-            Spacer(GlanceModifier.height(2.dp))
-            Text(d.money(d.todayIncome), style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.tertiary))
+        // Income half — cool tinted background
+        Box(
+            modifier = GlanceModifier
+                .defaultWeight()
+                .fillMaxHeight()
+                .background(c.tertiaryContainer)
+        ) {
+            Column(
+                modifier = GlanceModifier.fillMaxSize().padding(6.dp),
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+            ) {
+                Text("收入", style = TextStyle(fontSize = 10.sp, color = c.onSurface))
+                Spacer(GlanceModifier.height(1.dp))
+                Text(d.money(d.todayIncome), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = c.tertiary), maxLines = 1)
+            }
         }
     }
 }
 
-// ── 1×4 (73×292) ──────────────────────────────────
+// ── 1×4 (73×292) — Dashboard row: 4 metrics ──────
 
 @Composable
-private fun Wide14(d: WidgetData) {
+private fun Widget1x4(d: WidgetData) {
+    val c = GlanceTheme.colors
+    val budgetRemain = d.budget?.let { it - d.monthExpense }
+    val budgetColor = when {
+        budgetRemain == null -> c.onSurface
+        budgetRemain >= 0 -> c.tertiary
+        else -> GlanceTheme.colors.error
+    }
+    val budgetLabel = when {
+        budgetRemain == null -> "未设置"
+        budgetRemain >= 0 -> d.money(budgetRemain)
+        else -> d.money(-budgetRemain)
+    }
+    val budgetTitle = if (budgetRemain != null) "预算剩余" else "预算"
+
     Row(
-        modifier = GlanceModifier.fillMaxSize().padding(horizontal = 8.dp),
+        modifier = GlanceModifier.fillMaxSize().padding(horizontal = 6.dp),
         verticalAlignment = Alignment.Vertical.CenterVertically
     ) {
-        CellWide("今日支出", d.money(d.todayExpense), GlanceTheme.colors.primary, GlanceModifier.defaultWeight())
-        CellWide("今日收入", d.money(d.todayIncome), GlanceTheme.colors.tertiary, GlanceModifier.defaultWeight())
-        CellWide("本月支出", d.money(d.monthExpense), GlanceTheme.colors.primary, GlanceModifier.defaultWeight())
-        val budgetRemain = d.budget?.let { it - d.monthExpense }
-        if (budgetRemain != null) {
-            val color = if (budgetRemain >= 0) GlanceTheme.colors.tertiary else GlanceTheme.colors.error
-            CellWide("预算剩余", d.money(budgetRemain), color, GlanceModifier.defaultWeight())
-        } else {
-            CellWide("预算", "未设置", GlanceTheme.colors.onSurface, GlanceModifier.defaultWeight())
-        }
+        MetricCell("今日支出", d.money(d.todayExpense), c.primary, GlanceModifier.defaultWeight())
+        Divider()
+        MetricCell("今日收入", d.money(d.todayIncome), c.tertiary, GlanceModifier.defaultWeight())
+        Divider()
+        MetricCell("本月支出", d.money(d.monthExpense), c.primary, GlanceModifier.defaultWeight())
+        Divider()
+        MetricCell(budgetTitle, budgetLabel, budgetColor, GlanceModifier.defaultWeight())
     }
 }
 
 @Composable
-private fun CellWide(label: String, value: String, color: ColorProvider, modifier: GlanceModifier) {
-    Column(modifier = modifier.padding(horizontal = 4.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-        Text(label, style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface), maxLines = 1)
+private fun MetricCell(label: String, value: String, color: ColorProvider, modifier: GlanceModifier) {
+    Column(modifier = modifier.padding(horizontal = 3.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+        Text(label, style = TextStyle(fontSize = 9.sp, color = GlanceTheme.colors.onSurface), maxLines = 1)
         Spacer(GlanceModifier.height(2.dp))
         Text(value, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color), maxLines = 1)
     }
 }
 
-// ── 2×2 (146×146) ──────────────────────────────────
+@Composable
+private fun Divider() {
+    Box(
+        modifier = GlanceModifier
+            .width(1.dp)
+            .height(28.dp)
+            .background(GlanceTheme.colors.surfaceVariant)
+    ) {}
+}
+
+// ── 2×2 (146×146) — Compact dashboard ─────────────
 
 @Composable
-private fun Square22(d: WidgetData, size: DpSize) {
+private fun Widget2x2(d: WidgetData, size: DpSize) {
+    val c = GlanceTheme.colors
     val usable = size.width - 16.dp
-    Column(modifier = GlanceModifier.fillMaxSize().padding(10.dp)) {
-        // Row 1: 今日支出 + 今日收入
-        Row(modifier = GlanceModifier.fillMaxWidth()) {
-            Column(modifier = GlanceModifier.width(usable / 2), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-                Text("今日支出", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface), maxLines = 1)
-                Text(d.money(d.todayExpense), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.primary), maxLines = 1)
-            }
-            Column(modifier = GlanceModifier.width(usable / 2), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-                Text("今日收入", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface), maxLines = 1)
-                Text(d.money(d.todayIncome), style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.tertiary), maxLines = 1)
-            }
+    Column(modifier = GlanceModifier.fillMaxSize().padding(8.dp)) {
+        // Zone 1: 今日支出 | 今日收入 — split row
+        Row(
+            modifier = GlanceModifier.fillMaxWidth().background(c.surfaceVariant),
+            verticalAlignment = Alignment.Vertical.CenterVertically
+        ) {
+            ZoneStat("今日支出", d.money(d.todayExpense), c.primary, GlanceModifier.defaultWeight())
+            Box(modifier = GlanceModifier.width(1.dp).height(32.dp).background(c.surface)) { }
+            ZoneStat("今日收入", d.money(d.todayIncome), c.tertiary, GlanceModifier.defaultWeight())
         }
 
         Spacer(GlanceModifier.height(6.dp))
 
-        // Row 2: 本月支出 + 预算进度条
+        // Zone 2: 本月预算进度
         d.budget?.let { budget ->
             val remain = budget - d.monthExpense
-            val ratio = if (budget > 0) (d.monthExpense / budget).toFloat().coerceIn(0f, 1f) else 0f
-            val barColor = if (ratio <= 0.7f) GlanceTheme.colors.tertiary
-                else if (ratio <= 0.9f) GlanceTheme.colors.secondary
-                else GlanceTheme.colors.error
-
-            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Text("本月", style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface))
-                Spacer(GlanceModifier.width(4.dp))
-                Box(modifier = GlanceModifier.defaultWeight().height(8.dp).background(GlanceTheme.colors.surfaceVariant)) {
-                    Box(modifier = GlanceModifier.fillMaxHeight().width((usable * 0.5f) * ratio).background(barColor)) {}
-                }
-                Spacer(GlanceModifier.width(4.dp))
-                Text(d.money(d.monthExpense), style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = barColor), maxLines = 1)
+            val ratio = (d.monthExpense / budget).toFloat().coerceIn(0f, 1f)
+            val barColor = when {
+                ratio <= 0.6f -> c.tertiary
+                ratio <= 0.85f -> GlanceTheme.colors.secondary
+                else -> GlanceTheme.colors.error
             }
-            Spacer(GlanceModifier.height(2.dp))
-            Text(
-                if (remain >= 0) "预算剩余 ${d.money(remain)}" else "已超支 ${d.money(-remain)}",
-                style = TextStyle(fontSize = 10.sp, color = GlanceTheme.colors.onSurface),
-                maxLines = 1
-            )
+
+            BudgetSection(ratio, d.money(d.monthExpense), barColor, usable, d.money(if (remain >= 0) remain else -remain), remain >= 0)
         } ?: run {
-            Text("本月支出 ${d.money(d.monthExpense)}", style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = GlanceTheme.colors.primary))
+            Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+                Text("本月", style = TextStyle(fontSize = 11.sp, color = c.onSurface))
+                Spacer(GlanceModifier.width(4.dp))
+                Text(d.money(d.monthExpense), style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.primary))
+            }
         }
 
         Spacer(GlanceModifier.height(6.dp))
 
-        // Row 3: 4 quick category buttons
-        Row(modifier = GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-            val chips = d.categories.take(4)
-            if (chips.isNotEmpty()) {
-                val cellW = (usable - 6.dp) / chips.size.coerceAtLeast(1)
+        // Zone 3: 4 quick category chips
+        val chips = d.categories.take(4)
+        if (chips.isNotEmpty()) {
+            Row(modifier = GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+                val cellW = (usable - 4.dp) / chips.size.coerceAtLeast(1)
                 chips.forEach { cat ->
-                    QuickChip(cat, GlanceModifier.width(cellW))
+                    CategoryChip(cat, GlanceModifier.width(cellW))
                 }
             }
         }
@@ -265,11 +304,42 @@ private fun Square22(d: WidgetData, size: DpSize) {
 }
 
 @Composable
-private fun QuickChip(cat: com.example.rinklnote.data.db.entity.Category, modifier: GlanceModifier) {
+private fun ZoneStat(label: String, value: String, color: ColorProvider, modifier: GlanceModifier) {
+    Column(modifier = modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+        Text(label, style = TextStyle(fontSize = 10.sp, color = GlanceTheme.colors.onSurface), maxLines = 1)
+        Text(value, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color), maxLines = 1)
+    }
+}
+
+@Composable
+private fun BudgetSection(ratio: Float, spent: String, barColor: ColorProvider, usable: Dp, remainText: String, isRemain: Boolean) {
+    val c = GlanceTheme.colors
+    Column(modifier = GlanceModifier.fillMaxWidth()) {
+        Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+            Text("预算", style = TextStyle(fontSize = 10.sp, color = c.onSurface))
+            Spacer(GlanceModifier.width(4.dp))
+            Box(modifier = GlanceModifier.defaultWeight().height(8.dp).background(c.surfaceVariant)) {
+                Box(modifier = GlanceModifier.fillMaxHeight().width(usable * 0.55f * ratio).background(barColor)) { }
+            }
+            Spacer(GlanceModifier.width(4.dp))
+            Text(spent, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = barColor), maxLines = 1)
+        }
+        Spacer(GlanceModifier.height(2.dp))
+        Text(
+            if (isRemain) "剩余 $remainText" else "超支 $remainText",
+            style = TextStyle(fontSize = 10.sp, color = if (isRemain) c.tertiary else GlanceTheme.colors.error),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun CategoryChip(cat: com.example.rinklnote.data.db.entity.Category, modifier: GlanceModifier) {
+    val c = GlanceTheme.colors
     Column(
         modifier = modifier
             .padding(2.dp)
-            .background(GlanceTheme.colors.secondaryContainer)
+            .background(c.surfaceVariant)
             .clickable(actionStartActivity(RinklNoteAppWidgetReceiver.categoryAddIntent(LocalContext.current, cat.id)))
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.Horizontal.CenterHorizontally
@@ -281,7 +351,7 @@ private fun QuickChip(cat: com.example.rinklnote.data.db.entity.Category, modifi
         )
         Text(
             text = cat.name,
-            style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, color = GlanceTheme.colors.onSurface),
+            style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, color = c.onSurface),
             maxLines = 1
         )
     }
