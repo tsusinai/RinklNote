@@ -2,8 +2,11 @@ package com.example.rinklnote.server
 
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
+import com.example.rinklnote.server.services.AiAssistService
+import com.example.rinklnote.server.services.AiTokenService
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
+import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQBotWebSocketClient
 import com.example.rinklnote.server.services.PushScheduler
@@ -97,6 +100,11 @@ fun Application.module() {
         billService = billService,
         anomalyThreshold = anomalyThreshold
     )
+
+    // AI 助手接口（小爱等手机 AI）—— 个人访问令牌 + 结构化查询
+    val aiTokenService = AiTokenService()
+    val phoneIntentRouter = PhoneIntentRouter(billService, budgetService, insightService, nluService)
+    val aiAssistService = AiAssistService(billService, budgetService, insightService)
 
     // QQ Official Bot — config stored in DB, managed via Web UI
     val qqBotService = QQBotService()
@@ -206,5 +214,6 @@ fun Application.module() {
         qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
         qqBotManageRoutes(qqBotService, userService)
         templateRoutes(templateService)
+        aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
     }
 }
