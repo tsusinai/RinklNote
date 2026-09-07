@@ -164,6 +164,8 @@ fun AppNavigation(app: RinklNoteApp) {
     )
     val authState by authVM.state.collectAsStateWithLifecycle()
     val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
+    // 主屏小组件点分类 / 深链 rinklnote://add → 待预填参数（MainActivity 从 Intent 装入）。
+    val pendingQuickAdd by app.pendingQuickAdd.collectAsStateWithLifecycle()
 
     // Periodic auto-sync while logged in (respects the auto-sync setting). The
     // QQ-bound check was removed — syncing works whether or not QQ is bound. The
@@ -192,6 +194,22 @@ fun AppNavigation(app: RinklNoteApp) {
         if (currentRoute != "ai") {
             aiVM.consumeBookingPending()
         }
+    }
+
+    // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并打开 QuickAdd 抽屉应用预填。
+    // 起点即 "bookkeeping"，导航到同 start 路由不会触发上面「离开记账页才关抽屉」的效果，故时序安全。
+    LaunchedEffect(pendingQuickAdd) {
+        val pending = pendingQuickAdd ?: return@LaunchedEffect
+        navController.navigate("bookkeeping") { launchSingleTop = true }
+        showDrawer = true
+        if (pending.categoryId != null) {
+            // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
+            quickAddVM.preselectCategory(pending.categoryId)
+        } else {
+            // 深链：金额/分类名/备注/类型 → 应用完整预填。
+            quickAddVM.applyQuickAddPrefill(pending)
+        }
+        app.setPendingQuickAdd(null)
     }
 
     // AI 页进入时注入欢迎语；已登录且未关闭 AI 主动推送时按需注入月总结/异常/习惯提醒。

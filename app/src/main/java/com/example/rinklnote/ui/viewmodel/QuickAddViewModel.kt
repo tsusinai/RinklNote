@@ -3,6 +3,7 @@ package com.example.rinklnote.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.rinklnote.PendingQuickAdd
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.isBucket
@@ -106,16 +107,21 @@ class QuickAddViewModel(
         viewModelScope.launch {
             repository.expenseCategories.collect { cats ->
                 _state.update {
+                    val pending = pendingPreselectId
+                    val target = pending?.let { pid -> cats.firstOrNull { c -> c.id == pid } }
                     it.copy(
                         expenseCategories = cats,
-                        selectedCategory = it.selectedCategory ?: cats.firstOrNull()
+                        selectedCategory = target ?: it.selectedCategory ?: cats.firstOrNull()
                     )
                 }
+                pendingPreselectId = null
+                applyPendingPrefillIfReady()
             }
         }
         viewModelScope.launch {
             repository.incomeCategories.collect { cats ->
                 _state.update { it.copy(incomeCategories = cats) }
+                applyPendingPrefillIfReady()
             }
         }
         viewModelScope.launch {
@@ -159,6 +165,12 @@ class QuickAddViewModel(
     // 二级分类异步加载的当前任务：连按多个母标签时取消旧任务，避免旧父级结果覆盖新父级
     private var subCategoryLoadJob: Job? = null
 
+    // 主屏小组件预选：expenseCategories 冷启动尚未加载时记录 id，待加载到位后再应用。
+    private var pendingPreselectId: Long? = null
+
+    // 深链预填参数：expense/income 分类冷启动尚未加载时暂存，待加载到位后再应用。
+    private var pendingPrefill: PendingQuickAdd? = null
+
     private fun onDigit(digit: String) {
         _state.update { current ->
             if (current.amount.contains(".") && digit == ".") return
@@ -198,6 +210,60 @@ class QuickAddViewModel(
                 subCategories = emptyList()
             )
         }
+    }
+
+    /**
+     * 主屏小组件点分类 → 预选该支出分类并清空金额/类型，为直接输入金额做准备。
+     * 若 expenseCategories 尚未加载完成（冷启动），先记录 id，待加载到位后再应用。
+     */
+    fun preselectCategory(categoryId: Long) {
+        subCategoryLoadJob?.cancel()
+        _state.update { it.copy(amount = "", billType = "EXPENSE") }
+        val existing = _state.value.expenseCategories.firstOrNull { it.id == categoryId }
+        if (existing != null) selectCategory(existing) else pendingPreselectId = categoryId
+    }
+
+    /**
+     * `rinklnote://add` 深链 → 预填金额/备注/类型并选中分类（按 id 或名称）。
+     * 分类全集未加载完成（冷启动）时先暂存 pendingPrefill，由 collector 加载到位后应用。
+     * 全空参数 → 打开抽屉并落到当前类型的默认首分类（保持「缺省不阻塞」语义）。
+     */
+    fun applyQuickAddPrefill(prefill: PendingQuickAdd) {
+        subCategoryLoadJob?.cancel()
+        pendingPrefill = prefill
+        applyPendingPrefillIfReady()
+    }
+
+    /** 分类已加载到位时应用暂存的预填；未就绪（目标类型分类还没加载）则等待下次 collector。 */
+    private fun applyPendingPrefillIfReady() {
+        val p = pendingPrefill ?: return
+        val s = _state.value
+        val type = p.billType ?: p.categoryName?.let { n ->
+            (s.expenseCategories + s.incomeCategories).firstOrNull { it.name == n }?.billType
+        } ?: "EXPENSE"
+        val expectedCats = if (type == "INCOME") s.incomeCategories else s.expenseCategories
+        val allCats = s.expenseCategories + s.incomeCategories
+        val hasCategoryRef = p.categoryId != null || p.categoryName != null
+        val target = when {
+            p.categoryId != null -> allCats.firstOrNull { it.id == p.categoryId }
+            p.categoryName != null -> allCats.firstOrNull { it.name == p.categoryName }
+            else -> null
+        }
+        // 指定了分类但目标类型的分类还没加载 → 等 collector，避免拿空列表兜底成首分类。
+        if (hasCategoryRef && target == null && expectedCats.isEmpty()) return
+        _state.update {
+            it.copy(
+                amount = p.amount ?: "",
+                billType = type,
+                remark = p.remark ?: "",
+                selectedCategory = target ?: expectedCats.firstOrNull(),
+                selectedSubCategory = null,
+                showSubCategories = false,
+                expandedParentId = null,
+                subCategories = emptyList()
+            )
+        }
+        pendingPrefill = null
     }
 
     private fun showSubCategories(category: Category) {
