@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,6 +64,7 @@ import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
+import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
@@ -91,6 +93,11 @@ fun ProfileScreen(
     val autoSync by settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
     val backgroundUri by settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
     val lastSync by tokenManager.lastSyncTime.collectAsStateWithLifecycle(initialValue = 0L)
+    val dailyReportEnabled by settingsManager.dailyReportEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
+    val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
+    val dailyReportQqBot by settingsManager.dailyReportQqBot.collectAsStateWithLifecycle(initialValue = false)
+    var showTimePicker by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -617,6 +624,58 @@ private fun PasswordChangeDialog(viewModel: AuthViewModel, onDismiss: () -> Unit
         },
         confirmButton = {
             TextButton(onClick = { viewModel.onEvent(AuthEvent.ChangePassword) }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun TimePickerDialog(
+    hour: Int,
+    minute: Int,
+    onConfirm: (Int, Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedHour by remember { mutableIntStateOf(hour) }
+    var selectedMinute by remember { mutableIntStateOf(minute) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置日报通知时间") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "%02d:%02d".format(selectedHour, selectedMinute),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    androidx.compose.material3.OutlinedButton(onClick = {
+                        selectedHour = (selectedHour - 1 + 24) % 24
+                    }) { Text("− 小时") }
+                    androidx.compose.material3.OutlinedButton(onClick = {
+                        selectedHour = (selectedHour + 1) % 24
+                    }) { Text("+ 小时") }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    androidx.compose.material3.OutlinedButton(onClick = {
+                        selectedMinute = (selectedMinute - 5 + 60) % 60
+                    }) { Text("− 5分") }
+                    androidx.compose.material3.OutlinedButton(onClick = {
+                        selectedMinute = (selectedMinute + 5) % 60
+                    }) { Text("+ 5分") }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) { Text("确定") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

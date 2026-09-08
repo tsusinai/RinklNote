@@ -16,6 +16,19 @@ data class QueryRequest(val query: String)
 fun Route.insightRoutes(insightService: InsightService) {
     authenticate("auth-jwt") {
         route("/api/insights") {
+            get("/daily-report") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val zone = java.time.ZoneId.of("Asia/Shanghai")
+                val now = java.time.ZonedDateTime.now(zone)
+                val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
+                val dayEnd = now.toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+                val stats = insightService.dailyReport(userId, dayStart, dayEnd)
+                call.respond(stats)
+            }
+
             get("/monthly") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()

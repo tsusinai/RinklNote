@@ -6,10 +6,18 @@ import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.RetrofitClient
+import com.example.rinklnote.data.repository.AccountRepository
+import com.example.rinklnote.data.repository.AccountRepositoryImpl
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.BillRepositoryImpl
+import com.example.rinklnote.data.repository.BudgetRepository
+import com.example.rinklnote.data.repository.BudgetRepositoryImpl
+import com.example.rinklnote.data.repository.ChatRepository
+import com.example.rinklnote.data.repository.ChatRepositoryImpl
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.util.BalancePrivacy
+import com.example.rinklnote.notification.DailyReportReceiver
+import com.example.rinklnote.notification.NotificationHelper
 import com.example.rinklnote.widget.RinklNoteAppWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -49,6 +58,9 @@ class RinklNoteApp : Application() {
     val settingsManager: SettingsManager by lazy { SettingsManager(this) }
     val apiService: ApiService by lazy { RetrofitClient.create(tokenManager) }
     val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao(), database.budgetDao(), database.accountDao()) }
+    val accountRepository: AccountRepository by lazy { AccountRepositoryImpl(database) }
+    val budgetRepository: BudgetRepository by lazy { BudgetRepositoryImpl(database) }
+    val chatRepository: ChatRepository by lazy { ChatRepositoryImpl(database) }
 
     // 主屏小组件点分类 / 深链 rinklnote://add → 欲预填快速记账抽屉的参数；
     // MainActivity 从 Intent extra / deep-link URI 装入，AppNavigation 消费后清空。
@@ -64,12 +76,22 @@ class RinklNoteApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // 金额隐私：注入持久化回写 + 启动时从 DataStore 恢复，App 与小组件共用同一开关。
-        BalancePrivacy.writer = { hidden ->
+        // 金额隐私：注册持久化监听器 + 启动时从 DataStore 恢复，App 与小组件共用同一开关。
+        BalancePrivacy.addListener { hidden ->
             applicationScope.launch { settingsManager.setBalanceHidden(hidden) }
         }
         applicationScope.launch {
             settingsManager.balanceHidden.collect { BalancePrivacy.restore(it) }
+        }
+        // Initialize notification channel and schedule daily report
+        NotificationHelper.createChannels(this)
+        applicationScope.launch {
+            val enabled = settingsManager.dailyReportEnabled.first()
+            if (enabled) {
+                val hour = settingsManager.dailyReportHour.first()
+                val minute = settingsManager.dailyReportMinute.first()
+                DailyReportReceiver.schedule(this@RinklNoteApp, hour, minute)
+            }
         }
         applicationScope.launch {
             repository.seedIfNeeded()

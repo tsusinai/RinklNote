@@ -1,6 +1,7 @@
 package com.example.rinklnote.data.network
 
 import com.example.rinklnote.data.network.dto.*
+import com.example.rinklnote.data.network.dto.DailyReportResponse
 import okhttp3.MultipartBody
 import retrofit2.http.*
 
@@ -109,6 +110,9 @@ interface ApiService {
 
     @POST("api/insights/query")
     suspend fun queryBillData(@Body request: QueryRequest): QueryResponse
+
+    @GET("api/insights/daily-report")
+    suspend fun getDailyReport(): DailyReportResponse
 
     @GET("api/insights/habit")
     suspend fun getHabit(): HabitResponse

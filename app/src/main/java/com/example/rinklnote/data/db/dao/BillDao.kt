@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.DailyCategoryAmount
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -67,6 +68,20 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE id = :id")
     suspend fun getById(id: Long): Bill?
 
+
+    @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd ORDER BY date DESC")
+    suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill>
+
+    @Query("SELECT category_name, SUM(amount) as total FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
+    suspend fun getDailyExpenseSummary(dayStart: Long, dayEnd: Long): List<DailyCategoryAmount>
+
+    @Query("SELECT category_name, SUM(amount) as total FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
+    suspend fun getDailyIncomeSummary(dayStart: Long, dayEnd: Long): List<DailyCategoryAmount>
+
+    @Query("SELECT COUNT(*) FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd")
+    suspend fun getDailyBillCount(dayStart: Long, dayEnd: Long): Int
+
     @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt, base_updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
+
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
 }

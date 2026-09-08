@@ -2,6 +2,7 @@ package com.example.rinklnote.data.repository
 
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.data.db.entity.DailyCategoryAmount
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
@@ -9,6 +10,15 @@ import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+
+data class DailyReport(
+    val date: String,
+    val totalExpense: Double,
+    val totalIncome: Double,
+    val expenseCategories: List<DailyCategoryAmount>,
+    val incomeCategories: List<DailyCategoryAmount>,
+    val billCount: Int
+)
 
 @androidx.compose.runtime.Stable
 interface BillRepository {
@@ -53,6 +63,8 @@ interface BillRepository {
     suspend fun seedIfNeeded()
 
     // Unsynced (pending push) count, used by logout's push-first-then-wipe.
+    suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport
+
     suspend fun countUnsynced(): Long
 
     // Balance reconciliation against each account's own record net (income − expense).

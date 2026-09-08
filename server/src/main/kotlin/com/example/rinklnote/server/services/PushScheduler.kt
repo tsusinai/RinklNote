@@ -34,6 +34,7 @@ class PushScheduler(
     private val monthlyProvider: suspend (userId: Long, month: String) -> String?,
     private val anomalyProvider: suspend (userId: Long) -> String?,
     private val habitProvider: suspend (userId: Long) -> String?,
+    private val dailyReportProvider: suspend (userId: Long) -> String?,
     private val clock: () -> LocalDateTime = { LocalDateTime.now(SHANGHAI) },
     private val intervalMs: Long = 30_000L,
     private val log: Logger
@@ -88,7 +89,16 @@ class PushScheduler(
                             markPushed(u.id, "HABIT", dayKey)
                             log.info("习惯已推送 user=${u.id}")
                         } else log.warn("习惯发送失败 user=${u.id}")
+                    
+                if (hour >= 9 && !alreadyPushed(u.id, "DAILY_REPORT", dayKey)) {
+                    val content = dailyReportProvider(u.id)
+                    if (content != null) {
+                        if (send(openid, content, UUID.randomUUID().toString())) {
+                            markPushed(u.id, "DAILY_REPORT", dayKey)
+                            log.info("日报已推送:user=${u.id}")
+                        } else log.warn("日报发送失败:user=${u.id}")
                     }
+                }}
                 }
             } catch (e: Exception) {
                 log.warn("push user=${u.id} failed: ${e.message}")
