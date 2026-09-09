@@ -49,12 +49,16 @@ private fun Transaction.runMigrations() {
             try { exec("DROP INDEX IF EXISTS $name") } catch (_: Exception) {}
         }
 
+    // v13 迁移：budgets 支持分类/子分类维度后，(user_id, month_start) 唯一索引不再成立
+    // （同月可共存总额/分类/子分类多条预算）。先 drop 旧唯一索引，再建普通索引。
+    try { exec("DROP INDEX IF EXISTS uq_budgets_user_month") } catch (_: Exception) {}
+    exec("CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month_start)")
+
     val indexes = listOf(
         "CREATE INDEX IF NOT EXISTS idx_bills_user_id ON bills(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_bills_user_date ON bills(user_id, date)",
         "CREATE INDEX IF NOT EXISTS idx_corrections_processed ON correction_log(processed, user_id)",
         "CREATE INDEX IF NOT EXISTS idx_templates_user ON bill_templates(user_id)",
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_user_month ON budgets(user_id, month_start)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_user_type_day ON push_log(user_id, type, day_key)",
         "CREATE INDEX IF NOT EXISTS idx_ai_tokens_user ON ai_api_tokens(user_id)",
     )
