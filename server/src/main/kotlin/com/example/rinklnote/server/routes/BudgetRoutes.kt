@@ -13,6 +13,14 @@ import io.ktor.server.routing.*
 fun Route.budgetRoutes(budgetService: BudgetService) {
     authenticate("auth-jwt") {
         route("/api/budgets") {
+            get("/summary") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                val periodStart = call.request.queryParameters["periodStart"]?.toLongOrNull()
+                    ?: System.currentTimeMillis()
+                call.respond(budgetService.summary(userId, periodStart))
+            }
+
             get {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
                     ?: return@get call.respond(HttpStatusCode.Unauthorized)
