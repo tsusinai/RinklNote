@@ -34,6 +34,10 @@ object QQMessageProcessor {
         insightService: InsightService
     ) {
         try {
+            // PROBE(voice): QQ 语音消息 content 为空/缺失，会在下面被静默丢弃。
+            // 先打印原始 payload，确认 attachments 的真实字段（content_type / url / file_info / size）
+            // 与音频文件头格式，再决定解码方案。格式确认后可移除。
+            logger.info("QQ raw event: t=$eventType d=$d")
             // Handle content as string or array
             val rawContent = when (val c = d["content"]) {
                 is JsonPrimitive -> c.content.trim()
@@ -43,13 +47,19 @@ object QQMessageProcessor {
                         obj["data"]?.jsonObject?.get("text")?.jsonPrimitive?.content
                     else null
                 }.joinToString("")
-                else -> return
+                else -> {
+                    logger.info("QQ event dropped: no content field (t=$eventType)")
+                    return
+                }
             }
             // Strip group mention markup like <@!123456>
             val content = rawContent.replace(Regex("""<@!\d+>"""), "").replace(Regex("""<@\d+>"""), "").trim()
             val msgId = d["id"]?.jsonPrimitive?.content ?: return
 
-            if (content.isBlank()) return
+            if (content.isBlank()) {
+                logger.info("QQ event dropped: blank content (t=$eventType attachments=${d["attachments"]})")
+                return
+            }
 
             // Determine user openid based on event type
             val author = d["author"]?.jsonObject
