@@ -5,6 +5,7 @@ import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BudgetDao
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
@@ -71,7 +72,7 @@ class SyncManagerTest {
     }
 
     private fun bill(id: Long, deleted: Boolean = false, serverId: Long? = null) = Bill(
-        id = id, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+        id = id, amount = 10.0, billType = BillType.EXPENSE, categoryId = 1,
         categoryName = "三餐", accountId = 1, date = 100, createdAt = 100,
         deleted = deleted, serverId = serverId
     )

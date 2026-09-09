@@ -7,7 +7,9 @@ import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.data.repository.DailyReport
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.Dispatchers
@@ -36,11 +38,13 @@ class BookkeepingViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
     private lateinit var repo: FakeBillRepository
+    private lateinit var accountRepo: FakeAccountRepository
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         repo = FakeBillRepository()
+        accountRepo = FakeAccountRepository()
     }
 
     @After
@@ -49,7 +53,7 @@ class BookkeepingViewModelTest {
     }
 
     private fun TestScope.newVM(): BookkeepingViewModel {
-        val vm = BookkeepingViewModel(repo, syncManager = null)
+        val vm = BookkeepingViewModel(repo, accountRepo, syncManager = null)
         advanceUntilIdle()
         return vm
     }
@@ -130,5 +134,26 @@ class BookkeepingViewModelTest {
         override suspend fun clearLocalData() {}
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
+        override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
+            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+        override suspend fun countUnsynced(): Long = 0
+        override suspend fun getAccountNet(accountId: Long): Double = 0.0
+        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
+    }
+
+    private class FakeAccountRepository : AccountRepository {
+        override fun observeAccounts(): Flow<List<Account>> = flowOf(emptyList())
+        override suspend fun insertAccount(account: Account): Long = 0
+        override suspend fun updateAccount(account: Account) {}
+        override suspend fun updateAccountLocal(account: Account) {}
+        override suspend fun softDeleteAccount(account: Account) {}
+        override suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long) {}
+        override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
+        override suspend fun getAccountByServerId(serverId: Long): Account? = null
+        override suspend fun deleteAccountByServerId(serverId: Long) {}
+        override suspend fun getAccountNet(accountId: Long): Double = 0.0
+        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 }

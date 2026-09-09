@@ -19,6 +19,15 @@ import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
 import com.example.rinklnote.data.network.dto.BindQQRequest
 import com.example.rinklnote.data.network.dto.BudgetDTO
+import com.example.rinklnote.data.network.dto.BudgetSummaryDTO
+import com.example.rinklnote.data.network.dto.DailyReportResponse
+import com.example.rinklnote.data.network.dto.AiGenerateTokenRequest
+import com.example.rinklnote.data.network.dto.AiTokenItem
+import com.example.rinklnote.data.network.dto.AiTokenResponse
+import com.example.rinklnote.data.repository.AccountRepository
+import com.example.rinklnote.data.repository.ChatRepository
+import com.example.rinklnote.navigation.BookingCommand
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.data.network.dto.ChangePasswordRequest
 import com.example.rinklnote.data.network.dto.CreateAccountRequest
 import com.example.rinklnote.data.network.dto.CreateBillRequest
@@ -37,6 +46,7 @@ import com.example.rinklnote.data.network.dto.TranscribeResponse
 import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.data.repository.DailyReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -67,12 +77,14 @@ class AiViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private lateinit var repo: FakeBillRepository
     private lateinit var fake: FakeApiService
+    private lateinit var accountRepo: FakeAccountRepository
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         repo = FakeBillRepository()
         fake = FakeApiService()
+        accountRepo = FakeAccountRepository()
     }
 
     @After
@@ -81,8 +93,12 @@ class AiViewModelTest {
     }
 
     private fun TestScope.newVM(): AiViewModel {
-        val quick = QuickAddViewModel(repo, syncManager = null, api = fake)
-        val vm = AiViewModel(fake, repo, quick)
+        val quick = QuickAddViewModel(repo, accountRepo, syncManager = null, api = fake)
+        val vm = AiViewModel(
+            fake,
+            repo,
+            { cmd -> if (cmd is BookingCommand.ParseAndBook) quick.onEvent(QuickAddEvent.VoiceUtterance(cmd.text)) }
+        )
         advanceUntilIdle()
         return vm
     }
@@ -108,7 +124,7 @@ class AiViewModelTest {
         vm.appendBookingConfirmed("已记账：28元（三餐）")
         advanceUntilIdle()
 
-        val msg = repo.chatMessages.value.last { it.kind == "booking" }
+        val msg = repo.chatMessages.value.last { it.kind.value == "booking" }
         assertEquals("assistant", msg.role)
         assertEquals("已记账：28元（三餐）", msg.content)
     }
@@ -120,7 +136,7 @@ class AiViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, repo.addedBills.size)
-        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind == "text" }
+        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind.value == "text" }
         assertEquals(fake.queryResult.answer, msg.content)
     }
 
@@ -131,7 +147,7 @@ class AiViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, repo.addedBills.size)
-        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind == "text" }
+        val msg = repo.chatMessages.value.last { it.role == "assistant" && it.kind.value == "text" }
         assertEquals(fake.queryResult.answer, msg.content)
     }
 
@@ -162,15 +178,15 @@ class AiViewModelTest {
         val vm = newVM()
         vm.onEnter(true)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "anomaly" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "greeting" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "summary" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "anomaly" })
 
         vm.onEnter(true)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "anomaly" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "greeting" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "summary" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "anomaly" })
     }
 
     @Test
@@ -179,8 +195,8 @@ class AiViewModelTest {
         vm.onEnter(false)
         advanceUntilIdle()
 
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "summary" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "anomaly" })
     }
 
     @Test
@@ -193,10 +209,10 @@ class AiViewModelTest {
         advanceUntilIdle()
 
         // 失败时错误气泡用 kind=text，且 summary 去重位未被占用
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "summary" })
         assertTrue(
             repo.chatMessages.value.any {
-                it.role == "assistant" && it.kind == "text" && it.content.contains("加载总结失败")
+                it.role == "assistant" && it.kind.value == "text" && it.content.contains("加载总结失败")
             }
         )
 
@@ -204,7 +220,7 @@ class AiViewModelTest {
         fake.monthlyError = null
         vm.onEnter(true)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "summary" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "summary" })
     }
 
     @Test
@@ -212,11 +228,11 @@ class AiViewModelTest {
         val vm = newVM()
         vm.onEnter(true, false)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "habit" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "habit" })
 
         vm.onEnter(true, false)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "habit" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "habit" })
     }
 
     @Test
@@ -224,10 +240,10 @@ class AiViewModelTest {
         val vm = newVM()
         vm.onEnter(true, true)
         advanceUntilIdle()
-        assertEquals(1, repo.chatMessages.value.count { it.kind == "greeting" })
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "summary" })
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "habit" })
+        assertEquals(1, repo.chatMessages.value.count { it.kind.value == "greeting" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "summary" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "anomaly" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "habit" })
     }
 
     @Test
@@ -236,7 +252,7 @@ class AiViewModelTest {
         val vm = newVM()
         vm.onEnter(true, false)
         advanceUntilIdle()
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "anomaly" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "anomaly" })
     }
 
     @Test
@@ -245,16 +261,16 @@ class AiViewModelTest {
         val vm = newVM()
         vm.onEnter(true, false)
         advanceUntilIdle()
-        assertEquals(0, repo.chatMessages.value.count { it.kind == "habit" })
+        assertEquals(0, repo.chatMessages.value.count { it.kind.value == "habit" })
     }
 
     /** 仓库 fake：支持聊天 Flow + countSince 去重计数，同时驱动 QuickAdd 记账。 */
-    private class FakeBillRepository : BillRepository {
+    private class FakeBillRepository : BillRepository, ChatRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
-            listOf(Category(1, "三餐", "meals", "EXPENSE"), Category(2, "交通", "transport", "EXPENSE"))
+            listOf(Category(1, "三餐", "meals", BillType.EXPENSE), Category(2, "交通", "transport", BillType.EXPENSE))
         )
         override val incomeCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
-            listOf(Category(11, "工资", "salary", "INCOME"))
+            listOf(Category(11, "工资", "salary", BillType.INCOME))
         )
         override val accounts: MutableStateFlow<List<Account>> = MutableStateFlow(
             listOf(Account(1, "微信", 0.0, "#28C145"))
@@ -277,7 +293,7 @@ class AiViewModelTest {
             return m.id
         }
         override suspend fun countChatMessages(kind: String, since: Long): Long =
-            chatMessages.value.count { it.kind == kind && it.createdAt >= since }.toLong()
+            chatMessages.value.count { it.kind.value == kind && it.createdAt >= since }.toLong()
 
         override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())
         override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> =
@@ -306,6 +322,12 @@ class AiViewModelTest {
         override suspend fun clearLocalData() {}
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
+        override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
+            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+        override suspend fun countUnsynced(): Long = 0
+        override suspend fun getAccountNet(accountId: Long): Double = 0.0
+        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 
     /** ApiService fake：覆写 parseBill + insights 方法，其余桩。 */
@@ -358,6 +380,12 @@ class AiViewModelTest {
         override suspend fun deleteAccount(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
         override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(id = 0, monthStart = 0L, amount = 0.0, createdAt = 0L)
+        override suspend fun getBudgetSummary(periodStart: Long): BudgetSummaryDTO =
+            BudgetSummaryDTO(
+                periodStart = periodStart,
+                categoryBudgets = emptyList(),
+                subCategoryBudgets = emptyList()
+            )
         override suspend fun transcribe(file: MultipartBody.Part): TranscribeResponse = TranscribeResponse()
         override suspend fun getTemplates(): List<TemplateDTO> = emptyList()
         override suspend fun createTemplate(template: TemplateDTO): TemplateDTO =
@@ -368,6 +396,28 @@ class AiViewModelTest {
         override suspend fun updateSuggestConfig(config: Map<String, String>): MessageResponse = MessageResponse("")
         override suspend fun getAiDisabled(): Map<String, Boolean> = mapOf("disabled" to false)
         override suspend fun setAiDisabled(request: AiDisabledRequest): Map<String, Boolean> = mapOf("disabled" to request.disabled)
+        override suspend fun getDailyReport(): DailyReportResponse =
+            DailyReportResponse("", 0.0, 0.0, emptyList(), emptyList(), 0, "")
+        override suspend fun generateAiToken(request: AiGenerateTokenRequest): AiTokenResponse =
+            AiTokenResponse(0, "", "", 0)
+        override suspend fun listAiTokens(): List<AiTokenItem> = emptyList()
+        override suspend fun revokeAiToken(id: Long): MessageResponse = MessageResponse("")
+        override suspend fun revokeAllAiTokens(): MessageResponse = MessageResponse("")
         override suspend fun getHabit(): HabitResponse = HabitResponse(habitContent)
+    }
+
+    private class FakeAccountRepository : AccountRepository {
+        override fun observeAccounts(): Flow<List<Account>> = flowOf(emptyList())
+        override suspend fun insertAccount(account: Account): Long = 0
+        override suspend fun updateAccount(account: Account) {}
+        override suspend fun updateAccountLocal(account: Account) {}
+        override suspend fun softDeleteAccount(account: Account) {}
+        override suspend fun markAccountSynced(localId: Long, serverId: Long, updatedAt: Long) {}
+        override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
+        override suspend fun getAccountByServerId(serverId: Long): Account? = null
+        override suspend fun deleteAccountByServerId(serverId: Long) {}
+        override suspend fun getAccountNet(accountId: Long): Double = 0.0
+        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 }

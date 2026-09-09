@@ -1,4 +1,4 @@
-﻿# 预算功能升级 Implementation Plan（M1 分类预算主线）
+# 预算功能升级 Implementation Plan（M1 分类预算主线）
 
 > **For Claude:** Use `${SUPERPOWERS_SKILLS_ROOT}/skills/collaboration/executing-plans/SKILL.md` to implement this plan task-by-task.
 
@@ -420,3 +420,42 @@ Expected: `active`；`sudo journalctl -u rinklnote -n 20` 确认启动无异常
 - `AppDatabase` version 10 未变（重构只加了 TypeConverters 等），本计划的迁移仍为 **10→11**
 - 本计划 Task 5/6/7 涉及上述文件时以本说明为准；Task 1-4、8 不受影响
 *** End Patch
+
+
+---
+
+## 执行状态快照（2026-09-09 深夜，供后续线程恢复）
+
+### 总进度：Task 1-7 完成（10 commit），Task 8 进行中（服务端已部署；App 已装机待真机验收）
+
+### 分支与提交（worktree: D:\Codes\RinklNote\.claude\worktrees\budget-upgrade，分支 codex/budget-upgrade，BASE=19dd6c1）
+- 6e3f389 feat:budget_schema_category_scope（服务端表加列）
+- 42ff9ba feat:budget_upsert_category_scope（upsert 按维度）
+- 7f76c2e fix:push_scheduler_test_daily_report_param（既有测试编译修复）
+- 054984d feat:budget_summary_endpoint（/api/budgets/summary）
+- ab79c41 fix:budget_summary_partial_unique_indexes_and_edge_tests（部分唯一索引 + 边界测试，含计划文档首次提交）
+- b47d61a feat:app_budget_db_v11_migration（Room 10→11）
+- 3dab757 feat:app_budget_sync_category_scope（DTO/ApiService/SyncManager）
+- f634334 feat:budget_viewmodel_category_scope（分层状态 + deriveMonthBudget + 10 测试）
+- d83a3e4 feat:plan_screen_category_budgets（分层 UI）
+- 35b9ad3 fix:app_budget_review_p1_p2（DAO findByScope / getByMonth 总额行 / 测试位置参数修复）
+- 工作树另有本地未提交：settings.gradle.kts（已是 include(":app") 内容，与 HEAD 一致，M 仅为行尾差异）、.kotlin/（untracked）
+
+### 已验证
+- 服务端 :server:test 78 用例全过；:app:assembleDebug 编译通过（含 KSP Room 校验）
+- 服务器 jmbot 已部署（20:30:39 起 active），迁移验证：UQ_BUDGETS_USER_MONTH 已删、新列/索引就位
+- android-36 平台存在；两个测试依赖（kotlin-reflect-1.9.20 / objenesis-3.3）已联网下载入 D:\Codes\RinklNote\.gradle-home
+- 新版 app-debug.apk（20:37 构建，38.1MB）已 adb install -r 到真机 89a5f9e1（用户旧版 UI 问题源于误装旧包）
+
+### 待办（下次继续）
+1. 跑完 :app:testDebugUnitTest（提权 + --stop 后新 daemon 才能读 SDK；沙箱 daemon 报 C:\.android / Failed to find target android-36，均因读不到 SDK 目录 ACL）。5 个测试文件编译错误已全部修完（AiViewModelTest/Bookkeeping/QuickAdd/SyncManager：BillType 枚举化、构造签名、Fake 补方法、FakeApiService 补 getBudgetSummary/getDailyReport/generateAiToken 等）
+2. 补提交 app/schemas/com.example.rinklnote.data.db.AppDatabase/11.json（已生成未提交）
+3. 真机验收（用户已装新版 APK）：「计划」tab 新 UI（总额卡片/上月结余/分类列表/空态引导）、迁移保数据、设分类+子分类预算、断网记账联网同步后服务端 budgets 含 category_id
+4. 合并 main / push / finishing-a-development-branch（等验收通过）
+5. 主工作树 settings.gradle.kts 已恢复 include(":app")（本地，未提交）；若 AS 打开主工作树需重新 Sync
+
+### 环境注意（每个 gradle 命令）
+- 必须提权运行（沙箱 daemon 读不到 C:\Users\a'su's\AppData\Local\Android\Sdk → Failed to find target android-36）
+- 先 .\gradlew.bat --stop（沙箱内可执行）再提权跑，避免复用坏 daemon
+- $env:JAVA_HOME="D:\Codes\AndroidStudio\jbr"; $env:GRADLE_USER_HOME="D:\Codes\RinklNote\.gradle-home"; $env:ANDROID_HOME="C:\Users\a'su's\AppData\Local\Android\Sdk"; $env:ANDROID_USER_HOME="C:\Users\a'su's\.android"
+- commit message 用下划线；git/scp/ssh/adb 写操作需提权
