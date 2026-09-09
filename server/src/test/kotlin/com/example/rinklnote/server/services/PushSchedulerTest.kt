@@ -53,6 +53,7 @@ class PushSchedulerTest {
             anomalyProvider = { _ -> null },
             habitProvider = { _ -> null },
             clock = { LocalDateTime.of(2026, 8, 31, 20, 0) }, // 月末 ≥20:00
+            dailyReportProvider = { null },
             intervalMs = 30_000, log = log
         )
         runBlocking { sched.tick() }
@@ -71,6 +72,7 @@ class PushSchedulerTest {
             anomalyProvider = { _ -> "⚠️ 今天超支" },
             habitProvider = { _ -> "该记午餐了" },
             clock = { LocalDateTime.of(2026, 8, 31, 20, 0) },
+            dailyReportProvider = { null },
             intervalMs = 30_000, log = log
         )
         runBlocking { sched.tick() }
@@ -88,6 +90,7 @@ class PushSchedulerTest {
             anomalyProvider = { _ -> "⚠️ 今天超支" },
             habitProvider = { _ -> null },
             clock = { LocalDateTime.of(2026, 8, 15, 10, 0) }, // 非月末
+            dailyReportProvider = { null },
             intervalMs = 30_000, log = log
         )
         runBlocking { sched.tick() }
