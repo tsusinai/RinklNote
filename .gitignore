@@ -21,3 +21,6 @@ web/node_modules/
 
 # Git worktrees
 .claude/worktrees/
+
+# Local machine settings (contains secrets)
+.claude/settings.local.json
