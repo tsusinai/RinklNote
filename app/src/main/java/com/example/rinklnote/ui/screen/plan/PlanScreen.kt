@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -30,25 +33,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
+import com.example.rinklnote.ui.viewmodel.BudgetState
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
+import com.example.rinklnote.ui.viewmodel.CategoryBudgetState
+import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
+import kotlin.math.abs
+
+/** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时记录，键盘确认后按维度 SetBudget）。 */
+private sealed interface BudgetEditTarget {
+    data object Total : BudgetEditTarget
+    data class Category(val categoryId: Long) : BudgetEditTarget
+    data class SubCategory(val subCategoryId: Long, val parentCategoryId: Long) : BudgetEditTarget
+}
 
 @Composable
 fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showBudgetKeypad by remember { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<BudgetEditTarget?>(null) }
 
     // 离开「计划」页（横向 pager 滑走/点其他 tab）时收起预算键盘，否则局部 remember 状态
     // 会随 pager 预组合留存，返回时键盘依旧存在（与 QuickAdd 键盘离开记账页被重置一致）。
     LaunchedEffect(isActive) {
-        if (!isActive) showBudgetKeypad = false
+        if (!isActive) editTarget = null
     }
 
     // 单层 Box 根：预算键盘必须以页内 overlay 的形式叠在计划内容之上。
@@ -59,7 +73,7 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
             Text(
                 text = "计划",
@@ -69,36 +83,106 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            BudgetCard(
+            // 顶部：总额预算卡片
+            TotalBudgetCard(
                 state = state,
-                onClick = { showBudgetKeypad = true }
+                onClick = { editTarget = BudgetEditTarget.Total }
             )
+
+            // 上月结余（仅展示，不结转）
+            state.lastMonthSurplus?.let { surplus ->
+                Spacer(modifier = Modifier.height(10.dp))
+                LastMonthSurplusRow(surplus = surplus)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 分类/子分类分层预算列表
+            if (state.categoryBudgets.isEmpty()) {
+                EmptyCategoryGuide()
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(state.categoryBudgets, key = { it.categoryId }) { category ->
+                        CategoryBudgetCard(
+                            category = category,
+                            onClick = { editTarget = BudgetEditTarget.Category(category.categoryId) },
+                            onSubClick = { sub ->
+                                editTarget = BudgetEditTarget.SubCategory(sub.subCategoryId, sub.parentCategoryId)
+                            }
+                        )
+                    }
+                }
+            }
         }
 
         // 全屏键盘 overlay 用上滑进入（与快加键盘一致的 SheetEnter/Exit），而非裸 if 硬切换
         AnimatedVisibility(
-            visible = showBudgetKeypad,
+            visible = editTarget != null,
             enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
             exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
         ) {
-            BudgetKeypadOverlay(
-                initialAmount = state.budget?.amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: "",
-                onConfirm = { amount ->
-                    showBudgetKeypad = false
-                    viewModel.onEvent(BudgetEvent.SetBudget(amount))
-                },
-                onDismiss = { showBudgetKeypad = false }
-            )
+            val target = editTarget
+            if (target != null) {
+                BudgetKeypadOverlay(
+                    title = when (target) {
+                        BudgetEditTarget.Total -> "设置本月预算"
+                        is BudgetEditTarget.Category -> "设置分类预算"
+                        is BudgetEditTarget.SubCategory -> "设置子分类预算"
+                    },
+                    hint = when (target) {
+                        BudgetEditTarget.Total -> "请输入本月预算金额"
+                        is BudgetEditTarget.Category -> "请输入该分类本月预算金额"
+                        is BudgetEditTarget.SubCategory -> "请输入该子分类本月预算金额"
+                    },
+                    initialAmount = editInitialAmount(state, target),
+                    onConfirm = { amount ->
+                        editTarget = null
+                        viewModel.onEvent(
+                            when (target) {
+                                BudgetEditTarget.Total -> BudgetEvent.SetBudget(amount)
+                                is BudgetEditTarget.Category -> BudgetEvent.SetBudget(amount, categoryId = target.categoryId)
+                                is BudgetEditTarget.SubCategory -> BudgetEvent.SetBudget(
+                                    amount,
+                                    categoryId = target.parentCategoryId,
+                                    subCategoryId = target.subCategoryId
+                                )
+                            }
+                        )
+                    },
+                    onDismiss = { editTarget = null }
+                )
+            }
         }
     }
 }
 
+/** 编辑目标当前金额（已有则预填，未设则为空）。 */
+private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): String {
+    val amount = when (target) {
+        BudgetEditTarget.Total -> state.totalBudget?.amount
+        is BudgetEditTarget.Category ->
+            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }?.amount
+        is BudgetEditTarget.SubCategory ->
+            state.categoryBudgets
+                .firstOrNull { it.categoryId == target.parentCategoryId }
+                ?.subBudgets
+                ?.firstOrNull { it.subCategoryId == target.subCategoryId }
+                ?.amount
+    }
+    return amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: ""
+}
+
 @Composable
-private fun BudgetCard(
-    state: com.example.rinklnote.ui.viewmodel.BudgetState,
+private fun TotalBudgetCard(
+    state: BudgetState,
     onClick: () -> Unit
 ) {
-    val budget = state.budget
+    val budget = state.totalBudget
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -131,14 +215,14 @@ private fun BudgetCard(
         if (budget == null) {
             Text("点击设置本月预算", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            val over = state.isOverBudget
+            val over = state.isOverTotal
             val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             val spentText = "¥${String.format("%.2f", state.monthExpense)}"
             val budgetText = "¥${String.format("%.2f", budget.amount)}"
             val percent = if (budget.amount > 0) (state.monthExpense / budget.amount * 100).toInt() else 0
 
             LinearProgressIndicator(
-                progress = { state.progress },
+                progress = { state.totalProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -166,7 +250,7 @@ private fun BudgetCard(
             if (over) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "已超预算 ¥${String.format("%.2f", state.overBudgetBy)}",
+                    text = "已超预算 ¥${String.format("%.2f", state.overTotalBy)}",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.error
@@ -177,7 +261,195 @@ private fun BudgetCard(
 }
 
 @Composable
+private fun LastMonthSurplusRow(surplus: Double) {
+    val sign = if (surplus >= 0) "+" else "-"
+    val color = if (surplus >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "上月结余 $sign¥${String.format("%.2f", abs(surplus))}（仅展示）",
+            fontSize = 13.sp,
+            color = color
+        )
+    }
+}
+
+@Composable
+private fun EmptyCategoryGuide() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(13.dp))
+            .background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "点击分类设置预算",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 32.dp)
+        )
+    }
+}
+
+@Composable
+private fun CategoryBudgetCard(
+    category: CategoryBudgetState,
+    onClick: () -> Unit,
+    onSubClick: (SubCategoryBudgetState) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .rinkShadow(RoundedCornerShape(13.dp))
+            .clip(RoundedCornerShape(13.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onClick() },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = category.categoryName,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                BudgetProgressBar(
+                    expense = category.expense,
+                    amount = category.amount,
+                    progress = category.progress,
+                    over = category.isOverBudget,
+                    overBudgetBy = category.overBudgetBy
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = if (category.amount > 0) currencyText(category.amount) else "未设",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (category.amount > 0) {
+                    if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+
+        category.subBudgets.forEach { sub ->
+            SubCategoryBudgetRow(
+                sub = sub,
+                onClick = { onSubClick(sub) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubCategoryBudgetRow(
+    sub: SubCategoryBudgetState,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = sub.name,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(5.dp))
+        BudgetProgressBar(
+            expense = sub.expense,
+            amount = sub.amount,
+            progress = sub.progress,
+            over = sub.isOverBudget,
+            overBudgetBy = sub.overBudgetBy,
+            barHeight = 5.dp,
+            compact = true
+        )
+    }
+}
+
+/** 行内金额/支出/进度/超支标红（分类与子分类行共用）。 */
+@Composable
+private fun BudgetProgressBar(
+    expense: Double,
+    amount: Double,
+    progress: Float,
+    over: Boolean,
+    overBudgetBy: Double,
+    barHeight: androidx.compose.ui.unit.Dp = 6.dp,
+    compact: Boolean = false
+) {
+    val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    LinearProgressIndicator(
+        progress = { progress },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (compact) 5.dp else barHeight)
+            .clip(RoundedCornerShape(4.dp)),
+        color = progressColor,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    val spentText = "¥${String.format("%.2f", expense)}"
+    if (over) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = "已花 $spentText / 预算 ${currencyText(amount)}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "已超 ¥${String.format("%.2f", overBudgetBy)}",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    } else if (amount > 0) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = "已花 $spentText / 预算 ${currencyText(amount)}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${(expense / amount * 100).toInt()}%",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        Text(
+            text = "已花 $spentText",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun currencyText(value: Double): String =
+    value.toBigDecimal().stripTrailingZeros().toPlainString()
+
+@Composable
 private fun BudgetKeypadOverlay(
+    title: String,
+    hint: String,
     initialAmount: String,
     onConfirm: (Double) -> Unit,
     onDismiss: () -> Unit
@@ -204,7 +476,7 @@ private fun BudgetKeypadOverlay(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("设置预算", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text(title, fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             TextButton(onClick = onDismiss) {
                 Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -212,7 +484,7 @@ private fun BudgetKeypadOverlay(
 
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "请输入本月预算金额",
+            text = hint,
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 20.dp)
