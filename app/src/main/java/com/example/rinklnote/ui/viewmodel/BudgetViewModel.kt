@@ -202,15 +202,6 @@ internal fun deriveMonthBudget(
     )
 }
 
-/** 按 (monthStart, categoryId, subCategoryId) 定位现有预算行（setBudget 复用；纯函数便于测试）。 */
-internal fun findBudgetRow(
-    budgets: List<Budget>,
-    monthStart: Long,
-    categoryId: Long?,
-    subCategoryId: Long?
-): Budget? = budgets.firstOrNull {
-    it.monthStart == monthStart && it.categoryId == categoryId && it.subCategoryId == subCategoryId
-}
 
 /**
  * 预算页 ViewModel：预算列表 + 本月账单双实时流合流，派生分层状态
@@ -228,8 +219,6 @@ class BudgetViewModel(
     /** 子分类参考数据（seed 后基本不变），供子分类预算按名称匹配账单。 */
     private val _subCategories = MutableStateFlow<List<SubCategory>>(emptyList())
 
-    /** 最近一次预算列表快照（主线程读写），供 setBudget 定位现有行。 */
-    private var cachedBudgets: List<Budget> = emptyList()
 
     init {
         val monthStart = getMonthStart()
@@ -246,7 +235,7 @@ class BudgetViewModel(
                 .first()
                 .firstOrNull {
                     it.monthStart == prevStart && it.periodType == "MONTHLY" &&
-                        it.categoryId == null && it.subCategoryId == null
+                        !it.deleted && it.categoryId == null && it.subCategoryId == null
                 }
             _state.update {
                 it.copy(
@@ -276,7 +265,6 @@ class BudgetViewModel(
                 repository.expenseCategories,
                 _subCategories
             ) { budgets, bills, categories, subCategories ->
-                cachedBudgets = budgets
                 deriveMonthBudget(budgets, bills, categories, subCategories, monthStart)
             }.collect { derivation ->
                 _state.update {
@@ -302,7 +290,7 @@ class BudgetViewModel(
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             // 按 (monthStart, categoryId, subCategoryId) 维度定位现有行：有则更新，无则新建。
-            val existing = findBudgetRow(cachedBudgets, monthStart, categoryId, subCategoryId)
+            val existing = budgetRepository.findBudgetByScope(monthStart, categoryId, subCategoryId)
             val updated = existing
                 ?.copy(amount = amount, updatedAt = now, dirty = true)
                 ?: Budget(

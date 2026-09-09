@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 interface BudgetRepository {
     fun observeBudgets(): Flow<List<Budget>>
     suspend fun getBudget(monthStart: Long): Budget?
+    suspend fun findBudgetByScope(monthStart: Long, categoryId: Long?, subCategoryId: Long?): Budget?
     suspend fun upsertBudget(budget: Budget)
     suspend fun getUnsyncedBudgets(): List<Budget>
     suspend fun markBudgetSynced(localId: Long, serverId: Long, updatedAt: Long)

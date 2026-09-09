@@ -13,6 +13,8 @@ internal class BudgetRepositoryImpl(
     override fun observeBudgets(): Flow<List<Budget>> = budgetDao.observeAll()
 
     override suspend fun getBudget(monthStart: Long): Budget? = budgetDao.getByMonth(monthStart)
+    override suspend fun findBudgetByScope(monthStart: Long, categoryId: Long?, subCategoryId: Long?): Budget? =
+        budgetDao.findByScope(monthStart, categoryId, subCategoryId)
 
     override suspend fun upsertBudget(budget: Budget) = budgetDao.upsert(budget)
 

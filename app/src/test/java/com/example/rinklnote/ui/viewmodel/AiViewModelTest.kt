@@ -357,7 +357,7 @@ class AiViewModelTest {
             AccountDTO(0, "", 0.0, "")
         override suspend fun deleteAccount(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
-        override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(0, 0L, 0.0, 0L)
+        override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(id = 0, monthStart = 0L, amount = 0.0, createdAt = 0L)
         override suspend fun transcribe(file: MultipartBody.Part): TranscribeResponse = TranscribeResponse()
         override suspend fun getTemplates(): List<TemplateDTO> = emptyList()
         override suspend fun createTemplate(template: TemplateDTO): TemplateDTO =

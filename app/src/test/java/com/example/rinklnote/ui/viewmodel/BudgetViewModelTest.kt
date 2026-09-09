@@ -33,7 +33,7 @@ import org.junit.Test
 
 /**
  * 预算三层（总额/分类/子分类）派生逻辑（Task 6）。
- * 纯函数部分直接测 deriveMonthBudget / findBudgetRow；
+ * 纯函数部分直接测 deriveMonthBudget；
  * ViewModel 部分用 fake repository 注入固定预算/账单列表验证合流与 SetBudget。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -421,6 +421,11 @@ class BudgetViewModelTest {
         override suspend fun getBudget(monthStart: Long): Budget? = budgets.value.firstOrNull {
             it.monthStart == monthStart && it.categoryId == null && it.subCategoryId == null
         }
+
+        override suspend fun findBudgetByScope(monthStart: Long, categoryId: Long?, subCategoryId: Long?): Budget? =
+            budgets.value.firstOrNull {
+                it.monthStart == monthStart && it.categoryId == categoryId && it.subCategoryId == subCategoryId
+            }
 
         override suspend fun upsertBudget(budget: Budget) {
             upserted += budget

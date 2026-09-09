@@ -14,9 +14,14 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets ORDER BY month_start DESC")
     fun observeAll(): Flow<List<Budget>>
 
-    @Query("SELECT * FROM budgets WHERE month_start = :monthStart AND deleted = 0")
+    @Query("SELECT * FROM budgets WHERE month_start = :monthStart AND deleted = 0 " +
+        "AND category_id IS NULL AND sub_category_id IS NULL")
     suspend fun getByMonth(monthStart: Long): Budget?
 
+
+    @Query("SELECT * FROM budgets WHERE month_start = :monthStart AND deleted = 0 " +
+        "AND category_id IS :categoryId AND sub_category_id IS :subCategoryId")
+    suspend fun findByScope(monthStart: Long, categoryId: Long?, subCategoryId: Long?): Budget?
     @Query("SELECT * FROM budgets WHERE server_id = :serverId")
     suspend fun getByServerId(serverId: Long): Budget?
 
