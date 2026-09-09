@@ -10,6 +10,9 @@ data class BudgetDTO(
     val id: Long,
     val monthStart: Long,
     val amount: Double,
+    val periodType: String = "MONTHLY",
+    val categoryId: Long? = null,
+    val subCategoryId: Long? = null,
     val createdAt: Long,
     val updatedAt: Long? = null,
     val deleted: Boolean = false
@@ -18,7 +21,10 @@ data class BudgetDTO(
 @Serializable
 data class UpsertBudgetRequest(
     val monthStart: Long,
-    val amount: Double
+    val amount: Double,
+    val periodType: String = "MONTHLY",
+    val categoryId: Long? = null,
+    val subCategoryId: Long? = null
 )
 
 class BudgetService {
@@ -29,18 +35,31 @@ class BudgetService {
             .map { it.toDTO() }
     }
 
-    /** Create-or-update for a (user, month) pair. Returns the current row. */
-    fun upsert(userId: Long, monthStart: Long, amount: Double): BudgetDTO {
+    /** Create-or-update for a (user, month, category, sub-category) scope. Returns the current row. */
+    fun upsert(
+        userId: Long,
+        monthStart: Long,
+        amount: Double,
+        categoryId: Long? = null,
+        subCategoryId: Long? = null,
+        periodType: String = "MONTHLY"
+    ): BudgetDTO {
         val now = System.currentTimeMillis()
         return transaction {
             val existing = BudgetsTable.selectAll()
-                .where { (BudgetsTable.userId eq userId) and (BudgetsTable.monthStart eq monthStart) }
+                .where {
+                    (BudgetsTable.userId eq userId) and
+                        (BudgetsTable.monthStart eq monthStart) and
+                        (BudgetsTable.categoryId eq categoryId) and
+                        (BudgetsTable.subCategoryId eq subCategoryId)
+                }
                 .singleOrNull()
 
             if (existing != null) {
                 val rowId = existing[BudgetsTable.id]
                 BudgetsTable.update({ BudgetsTable.id eq rowId }) {
                     it[BudgetsTable.amount] = amount
+                    it[BudgetsTable.periodType] = periodType
                     it[BudgetsTable.deleted] = false
                     it[BudgetsTable.updatedAt] = now
                 }
@@ -49,6 +68,9 @@ class BudgetService {
                 BudgetsTable.insert {
                     it[BudgetsTable.userId] = userId
                     it[BudgetsTable.monthStart] = monthStart
+                    it[BudgetsTable.periodType] = periodType
+                    it[BudgetsTable.categoryId] = categoryId
+                    it[BudgetsTable.subCategoryId] = subCategoryId
                     it[BudgetsTable.amount] = amount
                     it[BudgetsTable.createdAt] = now
                     it[BudgetsTable.updatedAt] = now
@@ -65,6 +87,9 @@ class BudgetService {
         id = this[BudgetsTable.id],
         monthStart = this[BudgetsTable.monthStart],
         amount = this[BudgetsTable.amount],
+        periodType = this[BudgetsTable.periodType],
+        categoryId = this[BudgetsTable.categoryId],
+        subCategoryId = this[BudgetsTable.subCategoryId],
         createdAt = this[BudgetsTable.createdAt],
         updatedAt = this[BudgetsTable.updatedAt],
         deleted = this[BudgetsTable.deleted]

@@ -23,7 +23,16 @@ fun Route.budgetRoutes(budgetService: BudgetService) {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
                     ?: return@put call.respond(HttpStatusCode.Unauthorized)
                 val body = call.receive<UpsertBudgetRequest>()
-                call.respond(budgetService.upsert(userId, body.monthStart, body.amount))
+                call.respond(
+                    budgetService.upsert(
+                        userId,
+                        body.monthStart,
+                        body.amount,
+                        body.categoryId,
+                        body.subCategoryId,
+                        body.periodType
+                    )
+                )
             }
         }
     }
