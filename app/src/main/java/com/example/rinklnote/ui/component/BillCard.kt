@@ -1,5 +1,8 @@
 package com.example.rinklnote.ui.component
 
+import java.util.Locale
+
+
 import android.annotation.SuppressLint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -85,7 +88,7 @@ fun BillCard(
             val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
             val sign = if (totalAmount >= 0) "+" else "-"
             Text(
-                text = String.format("%s¥%.2f", sign, kotlin.math.abs(totalAmount)),
+                text = String.format(Locale.US, "%s¥%.2f", sign, kotlin.math.abs(totalAmount)),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (totalAmount >= 0) incomeGreen else MaterialTheme.colorScheme.tertiary
@@ -107,7 +110,7 @@ fun BillCard(
                     BillItem(
                         categoryName = bill.subCategoryName ?: bill.categoryName,
                         amount = bill.amount,
-                        billType = bill.billType,
+                        billType = bill.billType.value,
                         remark = bill.remark,
                         onClick = {
                             // 点已展开的行收起；点未展开的行进入编辑
@@ -194,7 +197,7 @@ private fun BillItem(
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = String.format("%s¥%.2f", if (isExpense) "-" else "+", amount),
+            text = String.format(Locale.US, "%s¥%.2f", if (isExpense) "-" else "+", amount),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = if (isExpense) MaterialTheme.colorScheme.tertiary else incomeGreen

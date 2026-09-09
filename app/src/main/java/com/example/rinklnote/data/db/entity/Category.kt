@@ -1,8 +1,9 @@
-package com.example.rinklnote.data.db.entity
+﻿package com.example.rinklnote.data.db.entity
 
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.example.rinklnote.domain.BillType
 
 @Entity(
     tableName = "categories",
@@ -13,5 +14,5 @@ data class Category(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     @androidx.room.ColumnInfo(name = "icon_name") val iconName: String,
-    @androidx.room.ColumnInfo(name = "bill_type") val billType: String = "EXPENSE"
+    @androidx.room.ColumnInfo(name = "bill_type") val billType: BillType = BillType.EXPENSE
 )

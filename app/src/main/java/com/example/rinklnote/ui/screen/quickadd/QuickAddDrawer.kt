@@ -1,5 +1,8 @@
 package com.example.rinklnote.ui.screen.quickadd
 
+import java.util.Locale
+
+
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -64,6 +67,7 @@ import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.BackgroundLight
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
@@ -553,7 +557,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (hidden) "***" else String.format("%.2f", account.balance), fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (hidden) "***" else String.format(Locale.US, "%.2f", account.balance), fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
@@ -571,7 +575,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
 
 @Composable
 private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
-    val isExpense = state.billType == "EXPENSE"
+    val isExpense = state.billType == BillType.EXPENSE
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally

@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.data.local.SettingsManager
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
@@ -162,7 +163,7 @@ fun BookkeepingScreen(
                     BillCard(
                         date = date,
                         dayOfWeek = date.toDayOfWeek(),
-                        totalAmount = bills.sumOf { if (it.billType == "EXPENSE") -it.amount else it.amount },
+                        totalAmount = bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amount else it.amount },
                         bills = bills,
                         revealedBillId = revealedBillId,
                         menuBill = menuBill,
@@ -432,7 +433,7 @@ private fun computeMonthHeatmap(bills: List<Bill>, offset: Int): MonthHeatmap {
     val lastDay = firstDay.plusMonths(1).minusDays(1)
     val dailyExpense = HashMap<Int, Float>()
     bills.forEach { bill ->
-        if (bill.billType == "EXPENSE") {
+        if (bill.billType == BillType.EXPENSE) {
             val d = Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate()
             if (!d.isBefore(firstDay) && !d.isAfter(lastDay)) {
                 dailyExpense.merge(d.dayOfMonth, bill.amount.toFloat(), Float::plus)

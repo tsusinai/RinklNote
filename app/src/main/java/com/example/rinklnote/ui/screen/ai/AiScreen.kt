@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChatMessage
+import com.example.rinklnote.domain.MessageKind
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.util.bookkeepingZone
@@ -207,16 +208,16 @@ fun AiScreen(
 private fun ChatBubble(message: ChatMessage) {
     val isUser = message.role == "user"
     val kindLabel: String? = when (message.kind) {
-        "summary" -> "月结"
-        "anomaly" -> "异常"
-        "habit" -> "习惯"
-        "booking" -> "记账"
+        MessageKind.SUMMARY -> "月结"
+        MessageKind.ANOMALY -> "异常"
+        MessageKind.HABIT -> "习惯"
+        MessageKind.BOOKING -> "记账"
         else -> null
     }
     val dotColor: Color? = when (message.kind) {
-        "summary", "booking" -> MaterialTheme.colorScheme.primary
-        "anomaly" -> MaterialTheme.colorScheme.error
-        "habit" -> MaterialTheme.colorScheme.tertiary
+        MessageKind.SUMMARY, MessageKind.BOOKING -> MaterialTheme.colorScheme.primary
+        MessageKind.ANOMALY -> MaterialTheme.colorScheme.error
+        MessageKind.HABIT -> MaterialTheme.colorScheme.tertiary
         else -> null
     }
     Row(

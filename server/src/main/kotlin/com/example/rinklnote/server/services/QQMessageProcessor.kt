@@ -6,6 +6,7 @@ import com.example.rinklnote.server.tables.WebhookEventTable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.insert
@@ -34,10 +35,6 @@ object QQMessageProcessor {
         insightService: InsightService
     ) {
         try {
-            // PROBE(voice): QQ 语音消息 content 为空/缺失，会在下面被静默丢弃。
-            // 先打印原始 payload，确认 attachments 的真实字段（content_type / url / file_info / size）
-            // 与音频文件头格式，再决定解码方案。格式确认后可移除。
-            logger.info("QQ raw event: t=$eventType d=$d")
             // Handle content as string or array
             val rawContent = when (val c = d["content"]) {
                 is JsonPrimitive -> c.content.trim()
@@ -53,13 +50,24 @@ object QQMessageProcessor {
                 }
             }
             // Strip group mention markup like <@!123456>
-            val content = rawContent.replace(Regex("""<@!\d+>"""), "").replace(Regex("""<@\d+>"""), "").trim()
-            val msgId = d["id"]?.jsonPrimitive?.content ?: return
+            var content = rawContent.replace(Regex("""<@!\d+>"""), "").replace(Regex("""<@\d+>"""), "").trim()
 
+            // QQ 语音消息的 content 为空，语音由 attachments 携带：
+            // - asr_refer_text：QQ 平台自带语音转写文本（首选）
+            // - voice_wav_url / url：原始音频（AMR/WAV），后续如需可退回 Whisper 转写
             if (content.isBlank()) {
-                logger.info("QQ event dropped: blank content (t=$eventType attachments=${d["attachments"]})")
-                return
+                val voiceText = d["attachments"]?.jsonArray
+                    ?.firstOrNull { it.jsonObject["content_type"]?.jsonPrimitive?.content == "voice" }
+                    ?.jsonObject?.get("asr_refer_text")?.jsonPrimitive?.content
+                    ?.trim()
+                if (voiceText.isNullOrBlank()) {
+                    logger.info("QQ event dropped: blank content, no voice transcript (t=$eventType)")
+                    return
+                }
+                logger.info("QQ voice message transcribed by platform: $voiceText")
+                content = voiceText
             }
+            val msgId = d["id"]?.jsonPrimitive?.content ?: return
 
             // Determine user openid based on event type
             val author = d["author"]?.jsonObject

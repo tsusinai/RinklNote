@@ -146,19 +146,20 @@ fun AppNavigation(app: RinklNoteApp) {
     val tabWidth = screenWidth / tabs.size
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
-        factory = BookkeepingViewModel.Factory(app.repository, app.syncManager, app.apiService)
+        factory = BookkeepingViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService)
     )
     val quickAddVM: QuickAddViewModel = viewModel(
-        factory = QuickAddViewModel.Factory(app.repository, app.syncManager, app.apiService)
+        factory = QuickAddViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService)
     )
     val assetsVM: AssetsViewModel = viewModel(
-        factory = AssetsViewModel.Factory(app.repository, app.syncManager)
+        factory = AssetsViewModel.Factory(app.accountRepository, app.syncManager)
     )
     val budgetVM: BudgetViewModel = viewModel(
-        factory = BudgetViewModel.Factory(app.repository, app.syncManager)
+        factory = BudgetViewModel.Factory(app.repository, app.budgetRepository, app.syncManager)
     )
+    val bookingOrchestrator = remember { BookingOrchestrator() }
     val aiVM: AiViewModel = viewModel(
-        factory = AiViewModel.Factory(app.apiService, app.repository, quickAddVM)
+        factory = AiViewModel.Factory(app.apiService, app.chatRepository, { cmd -> if (cmd is BookingCommand.ParseAndBook) bookingOrchestrator.requestBooking(cmd.text) })
     )
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
@@ -421,7 +422,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 ) {
                     NumericKeypad(
                         amount = quickAddState.amount,
-                        billType = quickAddState.billType,
+                        billType = quickAddState.billType.value,
                         remark = quickAddState.remark,
                         onDigit = { quickAddVM.onEvent(QuickAddEvent.Digit(it)) },
                         onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },

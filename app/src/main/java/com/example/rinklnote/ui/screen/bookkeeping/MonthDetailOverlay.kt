@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.domain.MonthDetailData
 import com.example.rinklnote.ui.component.MonthChartPager
 import com.example.rinklnote.ui.theme.Blue80
@@ -325,7 +326,7 @@ private fun CategoryHeader(categoryName: String, subtotal: Double) {
 
 @Composable
 private fun DetailRow(bill: Bill) {
-    val isExpense = bill.billType == "EXPENSE"
+    val isExpense = bill.billType == BillType.EXPENSE
     val localDate = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
     val dateLabel = "${localDate.monthValue}月${localDate.dayOfMonth}日"
     Row(

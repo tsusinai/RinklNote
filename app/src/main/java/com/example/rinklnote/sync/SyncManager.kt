@@ -8,6 +8,8 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
+import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.domain.Source
 import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.BillDTO
@@ -93,7 +95,7 @@ class SyncManager(
                     if (local != null && local.dirty) continue
                     merged += Bill(
                         amount = dto.amount,
-                        billType = dto.billType,
+                        billType = BillType.fromValue(dto.billType),
                         categoryId = dto.categoryId,
                         categoryName = dto.categoryName,
                         subCategoryName = dto.subCategoryName,
@@ -104,7 +106,7 @@ class SyncManager(
                         remark = dto.remark,
                         date = dto.date,
                         createdAt = dto.createdAt,
-                        source = dto.source,
+                        source = Source.fromValue(dto.source),
                         serverId = dto.id,
                         updatedAt = dto.updatedAt,
                         baseUpdatedAt = dto.updatedAt,
@@ -390,7 +392,7 @@ class SyncManager(
 
 private fun Bill.toRequest() = CreateBillRequest(
     amount = amount,
-    billType = billType,
+    billType = billType.value,
     categoryId = categoryId,
     categoryName = categoryName,
     subCategoryName = subCategoryName,

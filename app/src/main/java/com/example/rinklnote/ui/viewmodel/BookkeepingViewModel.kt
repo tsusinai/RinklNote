@@ -8,7 +8,9 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.domain.MonthDetailData
 import com.example.rinklnote.domain.buildMonthDetail
 import com.example.rinklnote.sync.SyncManager
@@ -72,7 +74,7 @@ data class BookkeepingState(
     val monthDetail: MonthDetailData = MonthDetailData(emptyMap(), emptyList(), emptyList(), 1f)
 ) {
     val categories: List<Category>
-        get() = if (editingBill?.billType == "INCOME") incomeCategories else expenseCategories
+        get() = if (editingBill?.billType == BillType.INCOME) incomeCategories else expenseCategories
 }
 
 sealed interface BookkeepingEvent {
@@ -89,6 +91,7 @@ sealed interface BookkeepingEvent {
 
 class BookkeepingViewModel(
     private val repository: BillRepository,
+    private val accountRepository: AccountRepository,
     private val syncManager: SyncManager? = null,
     private val api: ApiService? = null
 ) : ViewModel() {
@@ -119,7 +122,7 @@ class BookkeepingViewModel(
             }
         }
         viewModelScope.launch {
-            repository.accounts.collect { accts ->
+            accountRepository.observeAccounts().collect { accts ->
                 _state.update { it.copy(accounts = accts) }
             }
         }
@@ -255,12 +258,13 @@ class BookkeepingViewModel(
 
     class Factory(
         private val repository: BillRepository,
+        private val accountRepository: AccountRepository,
         private val syncManager: SyncManager? = null,
         private val api: ApiService? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return BookkeepingViewModel(repository, syncManager, api) as T
+            return BookkeepingViewModel(repository, accountRepository, syncManager, api) as T
         }
     }
 }

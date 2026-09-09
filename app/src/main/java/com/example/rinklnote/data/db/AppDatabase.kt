@@ -1,9 +1,10 @@
-package com.example.rinklnote.data.db
+﻿package com.example.rinklnote.data.db
 
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.rinklnote.data.db.dao.AccountDao
@@ -25,6 +26,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
     version = 10,
     exportSchema = true
 )
+@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun billDao(): BillDao
     abstract fun categoryDao(): CategoryDao
@@ -68,9 +70,6 @@ abstract class AppDatabase : RoomDatabase() {
         }
         private val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // DDL must match the Room entity exactly (id NOT NULL + named unique index).
-                // The old inline `server_id UNIQUE` produced an autoindex and a non-NOT-NULL
-                // PK, so Room's schema validation crashed on any upgrade that ran this.
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS bill_templates (
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -101,7 +100,6 @@ abstract class AppDatabase : RoomDatabase() {
                         dirty INTEGER NOT NULL
                     )
                 """.trimIndent())
-                // Named index matches Room's expected schema (avoids autoindex-name mismatch)
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_budgets_server_id ON budgets(server_id)")
             }
         }

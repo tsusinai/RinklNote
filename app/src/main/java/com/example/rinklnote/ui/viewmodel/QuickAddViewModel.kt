@@ -6,17 +6,20 @@ import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.PendingQuickAdd
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
-import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.data.db.entity.BillTemplate
+import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.ParseRequest
+import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -30,7 +33,7 @@ import kotlinx.coroutines.launch
 @androidx.compose.runtime.Immutable
 data class QuickAddState(
     val amount: String = "",
-    val billType: String = "EXPENSE",
+    val billType: BillType = BillType.EXPENSE,
     val selectedCategory: Category? = null,
     val expenseCategories: List<Category> = emptyList(),
     val incomeCategories: List<Category> = emptyList(),
@@ -50,7 +53,7 @@ data class QuickAddState(
     data class SuggestionData(val label: String, val categoryName: String, val amount: Double)
 
     val categories: List<Category>
-        get() = if (billType == "EXPENSE") expenseCategories else incomeCategories
+        get() = if (billType == BillType.EXPENSE) expenseCategories else incomeCategories
 }
 
 sealed interface QuickAddEvent {
@@ -88,6 +91,7 @@ sealed interface QuickAddEffect {
 
 class QuickAddViewModel(
     private val repository: BillRepository,
+    private val accountRepository: AccountRepository,
     private val syncManager: SyncManager? = null,
     private val api: ApiService? = null
 ) : ViewModel() {
@@ -125,7 +129,7 @@ class QuickAddViewModel(
             }
         }
         viewModelScope.launch {
-            repository.accounts.collect { accounts ->
+            accountRepository.observeAccounts().collect { accounts ->
                 _state.update {
                     it.copy(accounts = accounts, selectedAccount = defaultAccount(accounts))
                 }
@@ -187,9 +191,9 @@ class QuickAddViewModel(
 
     private fun toggleType() {
         _state.update { current ->
-            val newType = if (current.billType == "EXPENSE") "INCOME" else "EXPENSE"
+            val newType = if (current.billType == BillType.EXPENSE) "INCOME" else "EXPENSE"
             current.copy(
-                billType = newType,
+                billType = BillType.fromValue(newType),
                 selectedCategory = null,
                 selectedSubCategory = null,
                 showSubCategories = false,
@@ -218,7 +222,7 @@ class QuickAddViewModel(
      */
     fun preselectCategory(categoryId: Long) {
         subCategoryLoadJob?.cancel()
-        _state.update { it.copy(amount = "", billType = "EXPENSE") }
+        _state.update { it.copy(amount = "", billType = BillType.EXPENSE) }
         val existing = _state.value.expenseCategories.firstOrNull { it.id == categoryId }
         if (existing != null) selectCategory(existing) else pendingPreselectId = categoryId
     }
@@ -239,7 +243,7 @@ class QuickAddViewModel(
         val p = pendingPrefill ?: return
         val s = _state.value
         val type = p.billType ?: p.categoryName?.let { n ->
-            (s.expenseCategories + s.incomeCategories).firstOrNull { it.name == n }?.billType
+            (s.expenseCategories + s.incomeCategories).firstOrNull { it.name == n }?.billType?.value
         } ?: "EXPENSE"
         val expectedCats = if (type == "INCOME") s.incomeCategories else s.expenseCategories
         val allCats = s.expenseCategories + s.incomeCategories
@@ -254,7 +258,7 @@ class QuickAddViewModel(
         _state.update {
             it.copy(
                 amount = p.amount ?: "",
-                billType = type,
+                billType = BillType.fromValue(type),
                 remark = p.remark ?: "",
                 selectedCategory = target ?: expectedCats.firstOrNull(),
                 selectedSubCategory = null,
@@ -515,18 +519,17 @@ class QuickAddViewModel(
         }
     }
 
-    private var confirming = false
+    private val confirming = AtomicBoolean(false)
 
     fun finalConfirm() {
-        if (confirming) return
-        confirming = true
+        if (!confirming.compareAndSet(false, true)) return
         val s = _state.value
         val amount = s.amount.toDoubleOrNull()
         val category = s.selectedCategory
         val account = s.selectedAccount
         if (amount == null || category == null || account == null) {
             // Not a valid submission — release the guard so the user can retry.
-            confirming = false
+            confirming.set(false)
             _effects.trySend(QuickAddEffect.FinalConfirmFailed("请完整填写金额、分类和账户"))
             return
         }
@@ -559,37 +562,45 @@ class QuickAddViewModel(
             } finally {
                 // 无论成败都释放守卫：否则 addBill 抛异常时 confirming 常驻 true，
                 // 键盘「确认」此后永久无响应（「点不动」的根因之一）。
-                confirming = false
+                confirming.set(false)
             }
         }
     }
 
     fun resetConfirming() {
-        confirming = false
+        confirming.set(false)
     }
 
     fun reset() {
         // 重置后恢复默认选中（支出首个分类），否则下次开抽屉无预选导致「确认」要重挑分类。
         // 仅支出 collector 会补默认，income 不会（收入默认留空），故此处用支出首个兜底。
         _state.update { s ->
-            QuickAddState(
-                accounts = s.accounts,
-                expenseCategories = s.expenseCategories,
-                incomeCategories = s.incomeCategories,
+            s.copy(
+                amount = "",
+                billType = BillType.EXPENSE,
+                selectedCategory = s.expenseCategories.firstOrNull(),
                 selectedAccount = defaultAccount(s.accounts),
-                selectedCategory = s.expenseCategories.firstOrNull()
+                remark = "",
+                showSubCategories = false,
+                expandedParentId = null,
+                subCategories = emptyList(),
+                nlpInput = "",
+                isParsing = false,
+                suggestion = null,
+                suggestionDismissed = false
             )
         }
     }
 
     class Factory(
         private val repository: BillRepository,
+        private val accountRepository: AccountRepository,
         private val syncManager: SyncManager? = null,
         private val api: ApiService? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return QuickAddViewModel(repository, syncManager, api) as T
+            return QuickAddViewModel(repository, accountRepository, syncManager, api) as T
         }
     }
 }

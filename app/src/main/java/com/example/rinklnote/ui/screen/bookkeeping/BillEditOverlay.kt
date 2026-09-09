@@ -51,6 +51,7 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RemarkInputSheet
 
@@ -86,10 +87,10 @@ fun BillEditOverlay(
 ) {
     BackHandler { onCancel() }
 
-    val initialCategories = if (bill.billType == "EXPENSE") expenseCategories else incomeCategories
+    val initialCategories = if (bill.billType == BillType.EXPENSE) expenseCategories else incomeCategories
 
     var amount by remember(bill.id) { mutableStateOf(bill.amount.toBigDecimal().stripTrailingZeros().toPlainString()) }
-    var billType by remember(bill.id) { mutableStateOf(bill.billType) }
+    var billType by remember(bill.id) { mutableStateOf(bill.billType.value) }
     var selectedCategory by remember(bill.id) {
         mutableStateOf(initialCategories.firstOrNull { it.id == bill.categoryId } ?: initialCategories.firstOrNull())
     }
@@ -120,7 +121,7 @@ fun BillEditOverlay(
         }
     }
 
-    val visibleCategories = if (billType == "EXPENSE") expenseCategories else incomeCategories
+    val visibleCategories = if (billType == BillType.EXPENSE.value) expenseCategories else incomeCategories
 
     fun updateType(newType: String) {
         billType = newType
@@ -143,7 +144,7 @@ fun BillEditOverlay(
         onConfirm(
             bill.copy(
                 amount = amountVal,
-                billType = billType,
+                billType = BillType.fromValue(billType),
                 categoryId = cat.id,
                 categoryName = cat.name,
                 subCategoryName = selectedSubCategory?.name,
@@ -217,7 +218,7 @@ fun BillEditOverlay(
                     },
                     onClear = { amount = "" },
                     onBackspace = { amount = amount.dropLast(1) },
-                    onToggleType = { updateType(if (billType == "EXPENSE") "INCOME" else "EXPENSE") },
+                    onToggleType = { updateType(if (billType == BillType.EXPENSE.value) "INCOME" else "EXPENSE") },
                     onRemarkClick = { showRemark = true },
                     onConfirm = ::confirmEdit
                 )

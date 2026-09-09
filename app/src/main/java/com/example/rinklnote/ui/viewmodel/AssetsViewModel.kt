@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Account
-import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.sync.SyncManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +32,7 @@ sealed interface AssetsEvent {
 /** 资产页 ViewModel：账户清单取自 repository 缓存的 accounts（StateFlow，非 Room 实时流），
  *  每次增/改名/改余额/删除都先本地落库置 dirty，再尽力推送到服务端（pushAccount）。 */
 class AssetsViewModel(
-    private val repository: BillRepository,
+    private val accountRepository: AccountRepository,
     private val syncManager: SyncManager? = null
 ) : ViewModel() {
 
@@ -41,7 +41,7 @@ class AssetsViewModel(
 
     init {
         viewModelScope.launch {
-            repository.accounts.collect { accounts ->
+            accountRepository.observeAccounts().collect { accounts ->
                 _state.update { it.copy(accounts = accounts) }
             }
         }
@@ -59,7 +59,7 @@ class AssetsViewModel(
     }
 
     /** 供对账对话框加载该账户的账单收支合计（非删除账单）。 */
-    suspend fun getAccountNet(accountId: Long): Double = repository.getAccountNet(accountId)
+    suspend fun getAccountNet(accountId: Long): Double = accountRepository.getAccountNet(accountId)
 
     private fun addAccount(event: AssetsEvent.AddAccount) {
         viewModelScope.launch {
@@ -72,7 +72,7 @@ class AssetsViewModel(
                 deleted = false,
                 dirty = true
             )
-            val id = repository.insertAccount(account)
+            val id = accountRepository.insertAccount(account)
             // Push once the real auto-generated id is known so SyncManager can
             // stamp the server id — otherwise it stays unsynced forever.
             syncManager?.let { launch { it.pushAccount(account.copy(id = id)) } }
@@ -86,7 +86,7 @@ class AssetsViewModel(
                 updatedAt = System.currentTimeMillis(),
                 dirty = true
             )
-            repository.updateAccountLocal(updated)
+            accountRepository.updateAccountLocal(updated)
             syncManager?.let { launch { it.pushAccount(updated) } }
         }
     }
@@ -98,7 +98,7 @@ class AssetsViewModel(
                 updatedAt = System.currentTimeMillis(),
                 dirty = true
             )
-            repository.updateAccountLocal(updated)
+            accountRepository.updateAccountLocal(updated)
             syncManager?.let { launch { it.pushAccount(updated) } }
         }
     }
@@ -106,7 +106,7 @@ class AssetsViewModel(
     private fun deleteAccount(event: AssetsEvent.DeleteAccount) {
         viewModelScope.launch {
             // 本地先标记逻辑删除，再把「删除墓碑」推送服务端做同样软删（跨端一致）。
-            repository.softDeleteAccount(event.account)
+            accountRepository.softDeleteAccount(event.account)
             val tombstone = event.account.copy(
                 deleted = true,
                 dirty = true,
@@ -118,26 +118,26 @@ class AssetsViewModel(
 
     private fun reconcileAccount(event: AssetsEvent.ReconcileAccount) {
         viewModelScope.launch {
-            val updated = repository.reconcileAccount(event.account, event.openingOffset)
+            val updated = accountRepository.reconcileAccount(event.account, event.openingOffset)
             syncManager?.let { launch { it.pushAccount(updated) } }
         }
     }
 
     private fun reconcileAll() {
         viewModelScope.launch {
-            repository.reconcileAllAccounts().forEach { updated ->
+            accountRepository.reconcileAllAccounts().forEach { updated ->
                 syncManager?.let { launch { it.pushAccount(updated) } }
             }
         }
     }
 
     class Factory(
-        private val repository: BillRepository,
+        private val accountRepository: AccountRepository,
         private val syncManager: SyncManager? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AssetsViewModel(repository, syncManager) as T
+            return AssetsViewModel(accountRepository, syncManager) as T
         }
     }
 }

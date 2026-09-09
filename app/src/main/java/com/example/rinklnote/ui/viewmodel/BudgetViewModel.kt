@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.data.repository.BudgetRepository
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
@@ -49,6 +51,7 @@ sealed interface BudgetEvent {
  *  共同喂给 BudgetState 派生「进度/是否超支/剩余天数」。设置预算同样本地落库后尽力推送服务端。 */
 class BudgetViewModel(
     private val repository: BillRepository,
+    private val budgetRepository: BudgetRepository,
     private val syncManager: SyncManager? = null
 ) : ViewModel() {
 
@@ -61,7 +64,7 @@ class BudgetViewModel(
 
         // Reactive budget for the current month
         viewModelScope.launch {
-            repository.observeBudgets().collect { budgets ->
+            budgetRepository.observeBudgets().collect { budgets ->
                 val current = budgets.firstOrNull { it.monthStart == monthStart }
                 _state.update { it.copy(budget = current, isLoading = false) }
             }
@@ -70,7 +73,7 @@ class BudgetViewModel(
         // Reactive monthly expense — updates as bills are added/edited/deleted
         viewModelScope.launch {
             repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
-                val expense = bills.filter { it.billType == "EXPENSE" }.sumOf { it.amount }
+                val expense = bills.filter { it.billType == BillType.EXPENSE }.sumOf { it.amount }
                 _state.update { it.copy(monthExpense = expense) }
             }
         }
@@ -88,18 +91,19 @@ class BudgetViewModel(
             val now = System.currentTimeMillis()
             val updated = _state.value.budget?.copy(amount = amount, updatedAt = now, dirty = true)
                 ?: Budget(monthStart = monthStart, amount = amount, updatedAt = now, dirty = true)
-            repository.upsertBudget(updated)
+            budgetRepository.upsertBudget(updated)
             syncManager?.let { launch { it.pushBudget(updated) } }
         }
     }
 
     class Factory(
         private val repository: BillRepository,
+        private val budgetRepository: BudgetRepository,
         private val syncManager: SyncManager? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return BudgetViewModel(repository, syncManager) as T
+            return BudgetViewModel(repository, budgetRepository, syncManager) as T
         }
     }
 }

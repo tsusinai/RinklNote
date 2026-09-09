@@ -1,4 +1,4 @@
-﻿package com.example.rinklnote.widget
+package com.example.rinklnote.widget
 
 import android.content.Context
 import android.content.Intent
@@ -42,6 +42,7 @@ import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.bookkeepingZone
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.Dispatchers
@@ -59,8 +60,10 @@ class RinklNoteAppWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = (context.applicationContext as RinklNoteApp).repository
-        val data = withContext(Dispatchers.IO) { loadWidgetData(repo) }
+        val app = context.applicationContext as RinklNoteApp
+        val repo = app.repository
+        val budgetRepo = app.budgetRepository
+        val data = withContext(Dispatchers.IO) { loadWidgetData(repo, budgetRepo) }
 
         provideContent {
             GlanceTheme {
@@ -114,7 +117,7 @@ private data class WidgetData(
 private var lastRefLoadTime = 0L
 
 @OptIn(androidx.glance.ExperimentalGlanceApi::class)
-private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.BillRepository): WidgetData {
+private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.BillRepository, budgetRepo: com.example.rinklnote.data.repository.BudgetRepository): WidgetData {
     val zone = bookkeepingZone()
     val today = LocalDate.now(zone)
     val todayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -134,11 +137,11 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
     val todayExpense = repo.getTotalExpense(todayStart, todayEnd)
     val todayIncome = repo.getTotalIncome(todayStart, todayEnd)
     val monthExpense = repo.getTotalExpense(monthStart, nextMonthStart)
-    val budget = repo.getBudget(monthStart)?.amount
+    val budget = budgetRepo.getBudget(monthStart)?.amount
 
     val bills = repo.observeBillsByMonth(monthStart, nextMonthStart).first()
     val ranking = bills
-        .filter { it.billType == "EXPENSE" }
+        .filter { it.billType == BillType.EXPENSE }
         .groupBy { it.categoryId }
         .mapNotNull { (catId, list) ->
             val cat = catIdToCat[catId] ?: return@mapNotNull null

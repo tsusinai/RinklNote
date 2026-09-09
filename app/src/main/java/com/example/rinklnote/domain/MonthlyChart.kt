@@ -1,6 +1,7 @@
 package com.example.rinklnote.domain
 
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
 
@@ -34,10 +35,10 @@ data class MonthDetailData(
 
 /** 由当月账单（仓库已过滤为「当月」窗口）聚合出图表数据。 */
 fun buildMonthDetail(bills: List<Bill>, daysInMonth: Int): MonthDetailData {
-    val dayAmounts = bills.filter { it.billType == "EXPENSE" }
+    val dayAmounts = bills.filter { it.billType == BillType.EXPENSE }
         .groupBy { Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth }
         .mapValues { it.value.sumOf { b -> b.amount } }
-    val pieSlices = buildPieSlices(bills.filter { it.billType == "EXPENSE" })
+    val pieSlices = buildPieSlices(bills.filter { it.billType == BillType.EXPENSE })
     val daySeries = (1..daysInMonth).map { day -> dayAmounts[day]?.toFloat() ?: 0f }
     val maxSeries = daySeries.maxOrNull()?.coerceAtLeast(1f) ?: 1f
     return MonthDetailData(dayAmounts, pieSlices, daySeries, maxSeries)
