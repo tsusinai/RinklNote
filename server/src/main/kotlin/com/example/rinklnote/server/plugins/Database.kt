@@ -61,6 +61,10 @@ private fun Transaction.runMigrations() {
         "CREATE INDEX IF NOT EXISTS idx_templates_user ON bill_templates(user_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_user_type_day ON push_log(user_id, type, day_key)",
         "CREATE INDEX IF NOT EXISTS idx_ai_tokens_user ON ai_api_tokens(user_id)",
+        // v13 补充：各层预算的唯一性约束（部分唯一索引，Postgres/H2 均支持）。
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_total_month ON budgets(user_id, month_start) WHERE category_id IS NULL AND sub_category_id IS NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_category_month ON budgets(user_id, month_start, category_id) WHERE category_id IS NOT NULL AND sub_category_id IS NULL",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_subcategory_month ON budgets(user_id, month_start, category_id, sub_category_id) WHERE sub_category_id IS NOT NULL",
     )
     indexes.forEach { sql ->
         try {

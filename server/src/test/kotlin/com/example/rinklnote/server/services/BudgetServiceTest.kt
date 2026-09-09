@@ -251,4 +251,44 @@ class BudgetServiceTest {
         val s = service.summary(1L, start)
         assertNull(s.lastMonthSurplus)
     }
+
+    @Test
+    fun `summary normalizes mid month periodStart to first day`() {
+        val start = monthStart("2026-09")
+        val midMonth = start + 10 * 86_400_000
+
+        val s = service.summary(1L, midMonth)
+
+        assertEquals(start, s.periodStart)
+    }
+
+    @Test
+    fun `summary excludes previous month expenses`() {
+        val start = monthStart("2026-09")
+        val prevStart = monthStart("2026-08")
+        val mealId = insertCategory("三餐")
+        val accountId = insertAccount(1L)
+
+        service.upsert(1L, monthStart = start, amount = 1000.0)
+        insertExpense(1L, 600.0, date = prevStart + 86_400_000, categoryId = mealId, accountId = accountId)
+
+        val s = service.summary(1L, start)
+
+        assertEquals(0.0, s.totalExpense, 0.0001)
+        assertTrue(s.categoryBudgets.isEmpty())
+        assertTrue(s.subCategoryBudgets.isEmpty())
+    }
+
+    @Test
+    fun `summary empty state returns nulls and zeros`() {
+        val start = monthStart("2026-09")
+
+        val s = service.summary(1L, start)
+
+        assertNull(s.totalBudget)
+        assertEquals(0.0, s.totalExpense, 0.0001)
+        assertTrue(s.categoryBudgets.isEmpty())
+        assertTrue(s.subCategoryBudgets.isEmpty())
+        assertNull(s.lastMonthSurplus)
+    }
 }
