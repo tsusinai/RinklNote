@@ -110,6 +110,9 @@ data class BudgetDTO(
     val id: Long,
     val monthStart: Long,
     val amount: Double,
+    val periodType: String = "MONTHLY",
+    val categoryId: Long? = null,
+    val subCategoryId: Long? = null,
     val createdAt: Long,
     val updatedAt: Long? = null,
     val deleted: Boolean = false
@@ -118,7 +121,37 @@ data class BudgetDTO(
 @Serializable
 data class UpsertBudgetRequest(
     val monthStart: Long,
-    val amount: Double
+    val amount: Double,
+    val periodType: String = "MONTHLY",
+    val categoryId: Long? = null,
+    val subCategoryId: Long? = null
+)
+
+@Serializable
+data class BudgetSummaryDTO(
+    val periodStart: Long,
+    val totalBudget: BudgetDTO? = null,
+    val totalExpense: Double = 0.0,
+    val categoryBudgets: List<CategoryBudgetDTO>,
+    val subCategoryBudgets: List<SubCategoryBudgetDTO>,
+    val lastMonthSurplus: Double? = null
+)
+
+@Serializable
+data class CategoryBudgetDTO(
+    val categoryId: Long,
+    val categoryName: String,
+    val amount: Double,
+    val expense: Double
+)
+
+@Serializable
+data class SubCategoryBudgetDTO(
+    val subCategoryId: Long,
+    val name: String,
+    val parentCategoryId: Long,
+    val amount: Double,
+    val expense: Double
 )
 
 @Serializable

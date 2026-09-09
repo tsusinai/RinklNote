@@ -230,7 +230,15 @@ class SyncManager(
         val dao = budgetDao ?: return@withLock
         try {
             if (!budget.deleted) {
-                val dto = api.upsertBudget(UpsertBudgetRequest(budget.monthStart, budget.amount))
+                val dto = api.upsertBudget(
+                    UpsertBudgetRequest(
+                        monthStart = budget.monthStart,
+                        amount = budget.amount,
+                        periodType = budget.periodType,
+                        categoryId = budget.categoryId,
+                        subCategoryId = budget.subCategoryId
+                    )
+                )
                 dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
             }
         } catch (_: Exception) {
@@ -246,7 +254,15 @@ class SyncManager(
         dao.getUnsynced().forEach { budget ->
             try {
                 if (!budget.deleted) {
-                    val dto = api.upsertBudget(UpsertBudgetRequest(budget.monthStart, budget.amount))
+                    val dto = api.upsertBudget(
+                        UpsertBudgetRequest(
+                            monthStart = budget.monthStart,
+                            amount = budget.amount,
+                            periodType = budget.periodType,
+                            categoryId = budget.categoryId,
+                            subCategoryId = budget.subCategoryId
+                        )
+                    )
                     dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
                 }
             } catch (_: Exception) {}
@@ -263,6 +279,9 @@ class SyncManager(
                             serverId = dto.id,
                             monthStart = dto.monthStart,
                             amount = dto.amount,
+                            periodType = dto.periodType,
+                            categoryId = dto.categoryId,
+                            subCategoryId = dto.subCategoryId,
                             updatedAt = serverTime,
                             deleted = dto.deleted,
                             dirty = false
@@ -275,6 +294,9 @@ class SyncManager(
                             local.copy(
                                 amount = dto.amount,
                                 monthStart = dto.monthStart,
+                                periodType = dto.periodType,
+                                categoryId = dto.categoryId,
+                                subCategoryId = dto.subCategoryId,
                                 updatedAt = serverTime,
                                 deleted = dto.deleted,
                                 dirty = false

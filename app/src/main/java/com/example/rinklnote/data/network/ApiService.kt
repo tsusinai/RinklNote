@@ -69,6 +69,9 @@ interface ApiService {
     @PUT("api/budgets")
     suspend fun upsertBudget(@Body request: UpsertBudgetRequest): BudgetDTO
 
+    @GET("api/budgets/summary")
+    suspend fun getBudgetSummary(@Query("periodStart") periodStart: Long): BudgetSummaryDTO
+
     @POST("api/bills/parse")
     suspend fun parseBill(@Body request: ParseRequest): ParseResponse
 
