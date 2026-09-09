@@ -14,6 +14,9 @@ data class Budget(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "server_id") val serverId: Long? = null,
     @ColumnInfo(name = "month_start") val monthStart: Long, // epoch of first day of month
+    @ColumnInfo(name = "period_type", defaultValue = "MONTHLY") val periodType: String = "MONTHLY",
+    @ColumnInfo(name = "category_id") val categoryId: Long? = null,
+    @ColumnInfo(name = "sub_category_id") val subCategoryId: Long? = null,
     val amount: Double,
     @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
     val deleted: Boolean = false,
