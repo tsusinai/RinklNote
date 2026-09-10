@@ -285,8 +285,7 @@ private fun TotalBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
-            .background(MaterialTheme.colorScheme.surface)
+            .hazeEffect(hazeState, HazeMaterials.regular())
             .clickable { onClick() }
             .padding(16.dp)
     ) {
@@ -413,8 +412,7 @@ private fun CategoryBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(13.dp))
             .clip(RoundedCornerShape(13.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
-            .background(MaterialTheme.colorScheme.surface)
+            .hazeEffect(hazeState, HazeMaterials.regular())
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(

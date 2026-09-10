@@ -351,8 +351,7 @@ private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean, hazeState:
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
-            .background(MaterialTheme.colorScheme.primary)
+            .hazeEffect(hazeState, HazeMaterials.regular())
             .padding(20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -362,23 +361,23 @@ private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean, hazeState:
                 text = "总资产",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onPrimary
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = if (hidden) "****" else String.format("%.2f", total),
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         Icon(
             painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
-            contentDescription = if (hidden) "显示余额" else "隐藏余额",
-            modifier = Modifier
-                .size(22.dp)
-                .clickable { BalancePrivacy.toggle() },
-            tint = MaterialTheme.colorScheme.onPrimary
+                contentDescription = if (hidden) "显示余额" else "隐藏余额",
+                modifier = Modifier
+                    .size(22.dp)
+                    .clickable { BalancePrivacy.toggle() },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -415,12 +414,11 @@ private fun AccountCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .rinkShadow(RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
-                .hazeEffect(hazeState, HazeMaterials.thin())
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable { currentOnClick() }
-                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .hazeEffect(hazeState, HazeMaterials.regular())
+            .clickable { currentOnClick() }
+            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
