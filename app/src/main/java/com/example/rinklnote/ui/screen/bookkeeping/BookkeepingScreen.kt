@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import android.content.res.Resources
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
@@ -11,14 +12,17 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,18 +45,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.domain.BillType
-import com.example.rinklnote.data.local.SettingsManager
 import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
@@ -64,21 +71,20 @@ import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAiClick: () -> Unit,
-    settingsManager: SettingsManager,
+    backgroundUri: String?,
+    hazeState: HazeState,
     viewModel: BookkeepingViewModel
 ) {
     val horizonalPadding = 10.dp
 
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // 用户自选背景图（毛玻璃背后）：无则用主题背景色。
-    val backgroundUri by settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
 
     val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {
@@ -100,6 +106,21 @@ fun BookkeepingScreen(
     var deleteTarget by remember { mutableStateOf<Bill?>(null) }
     var showMonthDetail by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    // 顶栏是浮层：配图背景时把列表首项垫到它下面（不留整块空白）。
+    // 高度 = 状态栏避让 + 图标行（30dp 图标 + 上下各 8dp），与 TopBar 的布局保持一致。
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    // 列表滚动后内容会滑到顶栏下方，白色图标需要一层渐隐暗底兜住可读性。
+    val listScrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    // 配图背景：顶栏始终压在照片上，暗底常驻；时段横幅在列表里，滚走后才渐显。
+    val topBarScrimAlpha by animateFloatAsState(
+        targetValue = if (backgroundUri != null || listScrolled) 1f else 0f,
+        label = "topBarScrim"
+    )
+
     // Cache grouped bills to avoid recomputation on every recomposition
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
     val heatmap = remember(state.bills, state.selectedMonthOffset) {
@@ -107,30 +128,23 @@ fun BookkeepingScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 定制背景 + 毛玻璃源：整页铺一张（用户选的）图库照片或主题背景色，供各卡片 hazeEffect 采样。
-        val hazeState = remember { HazeState() }
-        BackgroundLayer(backgroundUri = backgroundUri, hazeState = hazeState)
+        // 毛玻璃源：有自选照片时由 nav 层整窗铺满（含底部栏），此处不再叠一层；
+        // 无照片时本页自己铺主题渐变，供各卡片 hazeEffect 采样。
+        if (backgroundUri == null) {
+            DefaultBackgroundLayer(hazeState = hazeState)
+        }
 
         PullToRefreshBox(
             isRefreshing = state.isRefreshing,
             onRefresh = { viewModel.onEvent(BookkeepingEvent.PullRefresh) },
             modifier = Modifier.fillMaxSize()
         ) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            item(key = "topbar") {
-                TopBar(
-                    monthLabel = monthLabel,
-                    headerBg = headerBg,
-                    showDayBanner = backgroundUri == null,
-                    offset = state.selectedMonthOffset,
-                    onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
-                    onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
-                    onBackToNow = { viewModel.selectMonth(0) },
-                    onOpenDrawer = onOpenDrawer,
-                    onFinanceClick = onFinanceClick,
-                    onMoreClick = onMoreClick,
-                    onAiClick = onAiClick
-                )
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            // 时段横幅留在列表里随时间滚走（与顶栏解耦）；配图背景时只垫出顶栏高度，取消上方空白。
+            if (backgroundUri == null) {
+                item(key = "day-banner") { DayBanner(headerBg = headerBg) }
+            } else {
+                item(key = "top-bar-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
             }
 
             item(key = "spacer-0") { Spacer(modifier = Modifier.height(horizonalPadding)) }
@@ -186,6 +200,20 @@ fun BookkeepingScreen(
         }
         }
 
+        // 顶栏固定在页面顶部：不随 LazyColumn 滚动，压在照片/横幅/列表内容之上。
+        TopBar(
+            monthLabel = monthLabel,
+            scrimAlpha = topBarScrimAlpha,
+            offset = state.selectedMonthOffset,
+            onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
+            onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
+            onBackToNow = { viewModel.selectMonth(0) },
+            onOpenDrawer = onOpenDrawer,
+            onFinanceClick = onFinanceClick,
+            onMoreClick = onMoreClick,
+            onAiClick = onAiClick
+        )
+
         // FAB
         Box(
             modifier = Modifier
@@ -194,7 +222,7 @@ fun BookkeepingScreen(
                 .rinkShadow(CircleShape)
                 .size(51.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
+                .hazeEffect(hazeState, HazeMaterials.thin())
                 .clickable { onOpenDrawer() },
             contentAlignment = Alignment.Center
         ) {
@@ -257,43 +285,42 @@ fun BookkeepingScreen(
     }
 }
 
-/** 记账页整页背景：作为毛玻璃的 blur 源。有用户自选照片则铺照片，否则用主题背景色。 */
+/** 记账页默认背景：柔和的主色→背景渐变，作为毛玻璃的 blur 源。 */
 @Composable
-private fun BackgroundLayer(backgroundUri: String?, hazeState: HazeState) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (backgroundUri != null) {
-            AsyncImage(
-                model = backgroundUri,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(hazeState),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            // 默认背景：柔和的主色→背景渐变。纯色会让玻璃无从“模糊”，看起来像没改过的白卡。
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.background
-                            )
-                        )
+private fun DefaultBackgroundLayer(hazeState: HazeState) {
+    // 纯色会让玻璃无从“模糊”，看起来像没改过的白卡，故用渐变。
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primaryContainer,
+                        MaterialTheme.colorScheme.background
                     )
-                    .hazeSource(hazeState)
+                )
             )
-        }
-    }
+            .hazeSource(hazeState)
+    )
+}
+
+/** 时段横幅：按时段换图的整块头图，作为列表首项随时间滚走，不再包住顶栏。 */
+@Composable
+private fun DayBanner(headerBg: Int) {
+    Image(
+        painter = painterResource(headerBg),
+        contentDescription = null,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp),
+        contentScale = ContentScale.Crop
+    )
 }
 
 @Composable
 private fun TopBar(
     monthLabel: String,
-    headerBg: Int,
-    showDayBanner: Boolean,
+    scrimAlpha: Float,
     offset: Int,
     onPrev: () -> Unit,
     onNext: () -> Unit,
@@ -301,31 +328,19 @@ private fun TopBar(
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
-    onAiClick: () -> Unit
+    onAiClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(150.dp)
-    ) {
-        if (showDayBanner) {
-            // 未选照片：时段横幅铺满标题栏（含状态栏后方）
-            Image(
-                painter = painterResource(headerBg),
-                contentDescription = null,
-                modifier = Modifier.matchParentSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            // 选了照片（或默认渐变）：顶部浅色渐隐遮罩，保证白字/白图标清晰，不遮挡照片主体
+    Box(modifier = modifier.fillMaxWidth()) {
+        // 顶部渐隐遮罩：白色图标下的内容（照片/滚动上来的账单）被它压暗，保证可读性。
+        if (scrimAlpha > 0f) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
+                    .matchParentSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.30f),
+                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
                                 Color.Transparent
                             )
                         )
@@ -335,7 +350,7 @@ private fun TopBar(
         // 内容层：状态栏避让 + 内容内边距，悬浮于照片/渐变/横幅之上
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.TopCenter

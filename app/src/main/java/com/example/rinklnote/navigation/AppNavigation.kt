@@ -69,6 +69,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.network.RetrofitClient
+import com.example.rinklnote.ui.component.AppBackground
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.component.VoiceInputBar
@@ -90,6 +91,10 @@ import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.delay
 
 
@@ -108,6 +113,20 @@ private val tabs= listOf<Tabs>(
 // NavHost routes for the 4 bottom tabs, index-aligned with `tabs` (计划/记账/资产/我的).
 // 记账(index 1) 是 start destination；AI 不在 tab 列表里，单独有 route。
 private val tabRoutes = listOf("plan", "bookkeeping", "assets", "profile")
+
+/** 过渡方向用的页面序号：tab 按 计划0/记账1/资产2/我的3；AI 是记账页里的子页，排在最右。 */
+internal fun routeIndex(route: String?): Int {
+    val index = tabRoutes.indexOfFirst { it == route }
+    return if (index >= 0) index else tabRoutes.size
+}
+
+/**
+ * +1 = 目标页在右侧（前进，新页从右滑入）；-1 = 目标页在左侧（后退，新页从左滑入）。
+ * 必须按 tab 顺序判定，不能按 push/pop：`popUpTo(start)` 下「计划→记账」「我的→资产」
+ * 这类切换会走 pop 分支，动画方向会和手指滑动方向相反。
+ */
+internal fun transitionDirection(initialRoute: String?, targetRoute: String?): Int =
+    if (routeIndex(targetRoute) >= routeIndex(initialRoute)) 1 else -1
 
 private enum class VoiceTarget { QUICK_ADD, AI }
 
@@ -166,6 +185,9 @@ fun AppNavigation(app: RinklNoteApp) {
     )
     val authState by authVM.state.collectAsStateWithLifecycle()
     val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
+    // 用户自选背景图：铺在整个 nav 层之下（含底部 tab 栏），并作为全局毛玻璃采样源。
+    val appBackgroundUri by app.settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
+    val hazeState = remember { HazeState() }
     // 主屏小组件点分类 / 深链 rinklnote://add → 待预填参数（MainActivity 从 Intent 装入）。
     val pendingQuickAdd by app.pendingQuickAdd.collectAsStateWithLifecycle()
 
@@ -313,6 +335,9 @@ fun AppNavigation(app: RinklNoteApp) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 自定义背景铺满整窗：底部 tab 栏、状态栏、导航栏都在同一张图上，避免底部露出纯色条。
+        AppBackground(backgroundUri = appBackgroundUri, hazeState = hazeState)
+
         Column(modifier = Modifier.fillMaxSize()) {
             // Page content — 5 个 flat destination 由 NavHost 切换。
             // 水平滑动过渡保留原 pager 的左右平移手感；NavHost 无预组合，
@@ -323,10 +348,23 @@ fun AppNavigation(app: RinklNoteApp) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
-                exitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() },
-                popEnterTransition = { slideInHorizontally(initialOffsetX = { -it }) + fadeIn() },
-                popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) + fadeOut() }
+                // 前进/后退一律按 tab 顺序给方向，push 与 pop 用同一套，保证滑动方向与页面顺序一致。
+                enterTransition = {
+                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                    slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                },
+                exitTransition = {
+                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                    slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                },
+                popEnterTransition = {
+                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                    slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                },
+                popExitTransition = {
+                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                    slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                }
             ) {
                 composable("plan") {
                     PlanScreen(viewModel = budgetVM, isActive = currentRoute == "plan")
@@ -337,7 +375,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         onFinanceClick = { navigateTo("assets") },
                         onMoreClick = { navigateTo("profile") },
                         onAiClick = { navigateTo("ai") },
-                        settingsManager = app.settingsManager,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
                         viewModel = bookkeepingVM
                     )
 
@@ -372,6 +411,8 @@ fun AppNavigation(app: RinklNoteApp) {
                 CustomBottomBar(
                     currentIndex = currentTabIndex,
                     tabWidth = tabWidth,
+                    // 只有铺了自选背景才玻璃化：没有背景图时毛玻璃无从采样，会露出灰调兜底色。
+                    hazeState = hazeState.takeIf { appBackgroundUri != null },
                     onTabClick = onTabClick
                 )
             }
@@ -636,10 +677,12 @@ private fun QqBotGuideDialog(
 //    }
 //}
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun CustomBottomBar(
     currentIndex: Int ,
     tabWidth: Dp,
+    hazeState: HazeState?,
     onTabClick: (Int) -> Unit
 ) {
     val indicatorOffset by animateDpAsState(
@@ -648,6 +691,13 @@ private fun CustomBottomBar(
         label = "indicator"
     )
 
+    val barSurface = if (hazeState != null) {
+        // 毛玻璃：采样 nav 层的自定义背景，底栏不再是一块挡住壁纸的实心白。
+        Modifier.hazeEffect(hazeState, HazeMaterials.regular())
+    } else {
+        Modifier.background(MaterialTheme.colorScheme.surface)
+    }
+
     Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp, start = 10.dp, end = 10.dp)) {
         Box(
             modifier = Modifier
@@ -655,7 +705,7 @@ private fun CustomBottomBar(
                 .height(50.dp)
                 .rinkShadow(RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surface)
+                .then(barSurface)
         ) {
             Row(modifier = Modifier.fillMaxSize()) {
                 tabs.forEachIndexed { index, label ->
