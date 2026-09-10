@@ -67,6 +67,22 @@ private sealed interface BudgetEditTarget {
     data class SubCategory(val subCategoryId: Long, val parentCategoryId: Long) : BudgetEditTarget
 }
 
+/**
+ * 计划/预算页（Plan）—— 月度预算管理。
+ *
+ * 风格深度对齐首页（Bookkeeping）：
+ * - `Box` 根 + 渐变背景作毛玻璃（haze）blur 源；自选照片时由 nav 层整窗铺满。
+ * - 悬浮顶栏（floating top bar）：极简，仅居中「计划」标题（tab 内页无返回键，左右留空）+ scrim 渐隐。
+ * - 卡片 `rinkShadow` + `hazeEffect(HazeMaterials.thin())` 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
+ * - 预算键盘 overlay 用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致），而非裸 `if` 硬切换。
+ *
+ * 业务不变量：ViewModel 的 `State`/`Event` 不动；[BudgetEditTarget] 密封类型表达三级编辑目标（总额/分类/子分类）。
+ *
+ * @param viewModel 预算页 ViewModel
+ * @param isActive 当前 tab 是否激活；离开时收起预算键盘（避免 pager 预组合留存）
+ * @param backgroundUri nav 层透传的自选背景照片 URI；`null` 时本页自铺渐变
+ * @param hazeState nav 层透传的毛玻璃状态
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun PlanScreen(
@@ -249,6 +265,13 @@ private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): Str
     return amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: ""
 }
 
+/**
+ * 本月总额预算卡（Total Budget Card）：白底 + 毛玻璃。
+ *
+ * - 未设预算：显示「设置」入口；点击进键盘。
+ * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算/百分比 + 剩余天数；
+ *   超预算时进度条转 error 色并显示超额金额。
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun TotalBudgetCard(
@@ -335,6 +358,7 @@ private fun TotalBudgetCard(
     }
 }
 
+/** 上月结余行（Last Month Surplus）：仅展示，不结转；正数 primary 色，负数 error 色。 */
 @Composable
 private fun LastMonthSurplusRow(surplus: Double) {
     val sign = if (surplus >= 0) "+" else "-"
@@ -348,6 +372,7 @@ private fun LastMonthSurplusRow(surplus: Double) {
     }
 }
 
+/** 无分类预算时的空态引导（empty state guide）：提示「点击分类设置预算」。 */
 @Composable
 private fun EmptyCategoryGuide() {
     Box(
@@ -366,6 +391,15 @@ private fun EmptyCategoryGuide() {
     }
 }
 
+/**
+ * 一级分类预算卡（Category Budget Card）：白底 + 毛玻璃，内含分类行 + 子分类行列表。
+ *
+ * - 分类行：分类名 + 进度条 + 预算额/未设；点击进分类预算键盘。
+ * - 子分类行：缩进 + 半透明底色（非毛玻璃），点击进子分类预算键盘。
+ *
+ * @param onClick 点分类行 → 编辑分类预算
+ * @param onSubClick 点子分类行 → 编辑子分类预算
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun CategoryBudgetCard(
@@ -429,6 +463,11 @@ private fun CategoryBudgetCard(
     }
 }
 
+/**
+ * 子分类预算行（Sub-category Budget Row）：缩进 + 半透明底色，名称 + 进度条 + 已花/预算。
+ *
+ * 不加 `hazeEffect`：嵌在已毛玻璃的 [CategoryBudgetCard] 内，再加一层会让视觉「玻璃套玻璃」怪异。
+ */
 @Composable
 private fun SubCategoryBudgetRow(
     sub: SubCategoryBudgetState,
@@ -521,9 +560,20 @@ private fun BudgetProgressBar(
     }
 }
 
+/** Double → 去尾零的纯数字字符串（无货币符号），如 `12.50` → `"12.5"`。 */
 private fun currencyText(value: Double): String =
     value.toBigDecimal().stripTrailingZeros().toPlainString()
 
+/**
+ * 预算键盘全屏 overlay（Budget Keypad Overlay）：上滑进入，编辑三级预算目标。
+ *
+ * - 标题/提示文案按 [BudgetEditTarget] 维度切换（总额/分类/子分类）。
+ * - 复用 [NumericKeypad]（与快加键盘同款），隐藏类型切换与备注入口（预算无类型/备注）。
+ * - 确认按维度派发 [BudgetEvent.SetBudget]；返回键（[BackHandler]）= 取消。
+ *
+ * @param initialAmount 已有预算预填，未设则为空串
+ * @param onConfirm `(amount)` 回调
+ */
 @Composable
 private fun BudgetKeypadOverlay(
     title: String,

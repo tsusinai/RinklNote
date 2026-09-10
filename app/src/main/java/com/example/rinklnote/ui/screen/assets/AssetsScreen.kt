@@ -73,19 +73,38 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 
+/** 账户名 → 图标 drawable 资源映射（微信/支付宝有专属图标，其余用默认图标）。 */
 private fun accountIconRes(name: String): Int = when (name) {
     "微信" -> R.drawable.ic_wechat
     "支付宝" -> R.drawable.ic_alipay
     else -> R.drawable.ic_default_account
 }
 
+/** 新建账户时可选的预设色板（hex），含微信绿/支付宝蓝/橙/紫/红/灰 6 色。 */
 private val ACCOUNT_COLORS = listOf("#28C145", "#06B4FD", "#F97D1D", "#8B5CF6", "#EF4444", "#64748B")
 
+/** 将 hex 字符串（如 `"#28C145"`）解析为 [Color]；解析失败回退浅灰底色 `0xFFE5E7EB`。 */
 private fun hexColor(hex: String): Color {
     val value = hex.removePrefix("#").toLongOrNull(16) ?: return Color(0xFFE5E7EB)
     return Color(0xFF000000L or value)
 }
 
+/**
+ * 资产页（Assets）—— 账户与总资产管理。
+ *
+ * 风格深度对齐首页（Bookkeeping）：
+ * - `Box` 根 + 渐变背景作毛玻璃（haze）blur 源；自选照片时由 nav 层整窗铺满。
+ * - 悬浮顶栏（floating top bar）：左「对账」+ 居中「资产管理」+ 右「新建」入口；配图背景或列表滚动后 scrim 渐显压暗标题下层，保证白色文字可读性。
+ * - 卡片 `rinkShadow` + `hazeEffect(HazeMaterials.thin())` 毛玻璃 + 圆角。
+ * - FAB（floating action button）替代「+ 新建账户」卡：与首页加账单 FAB 同构（`rinkShadow` + 毛玻璃 + 51dp）。
+ * - 余额编辑用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致）；其余弹窗用 `AlertDialog`。
+ *
+ * 业务不变量：ViewModel 的 `State`/`Event` 不动；余额隐藏由 [BalancePrivacy] 全局态管理，本页只读取 + 切换，不持久化。
+ *
+ * @param viewModel 资产页 ViewModel
+ * @param backgroundUri nav 层透传的自选背景照片 URI；`null` 时本页自铺渐变
+ * @param hazeState nav 层透传的毛玻璃状态，背景与卡片共用同一 blur 源
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun AssetsScreen(
@@ -317,6 +336,12 @@ private fun AssetsTopBar(
     }
 }
 
+/**
+ * 总资产卡（Total Assets）：主色背景 + 毛玻璃，左「总资产/金额」右「显隐切换」图标。
+ *
+ * - 金额由 [BalancePrivacy.hidden] 控制显隐：隐藏时显示 `****`，图标为「显示」态。
+ * - 点击图标切换全局显隐态（不持久化，仅会话内）。
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean, hazeState: HazeState) {
@@ -358,6 +383,17 @@ private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean, hazeState:
     }
 }
 
+/**
+ * 单账户卡（Account Card）：白底 + 毛玻璃，左图标 + 账户名 + 右金额 + 「⋮」菜单。
+ *
+ * - 菜单项：对账（所有账户）、重命名 / 删除（仅真实钱包；「无账户」桶 [Account.isBucket] 不可重命名/删除）。
+ * - 用 [rememberUpdatedState] 持最新回调引用，避免父级重组时产生 stale lambda 或整卡不必要重组。
+ *
+ * @param onClick 点卡片 → 编辑余额
+ * @param onRename 重命名
+ * @param onDelete 删除
+ * @param onReconcile 对账（余额重算为账单收支合计）
+ */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun AccountCard(
@@ -433,6 +469,14 @@ private fun AccountCard(
     }
 }
 
+/**
+ * 新建账户弹窗（Add Account Dialog）：账户名 + 余额 + 预设色板 6 选 1。
+ *
+ * 约束：「无账户」([ACCOUNT_BUCKET_NAME]) 为保留名，禁止用户创建同名账户（确定键禁用）。
+ *
+ * @param onConfirm `(name, colorHex, balance)` 三元回调
+ * @param onDismiss 取消
+ */
 @Composable
 private fun AddAccountDialog(
     onConfirm: (String, String, Double) -> Unit,
@@ -495,6 +539,11 @@ private fun AddAccountDialog(
     )
 }
 
+/**
+ * 重命名账户弹窗（Rename Account Dialog）：单字段账户名。
+ *
+ * 约束：禁止重命名为保留名「无账户」([ACCOUNT_BUCKET_NAME])；空名禁用。
+ */
 @Composable
 private fun RenameAccountDialog(
     account: Account,
@@ -531,7 +580,16 @@ private fun RenameAccountDialog(
     )
 }
 
-/** 单账户对账：显示 当前余额 / 账单收支合计 / 期初偏移(可填) / 重算后结果，确认后覆盖。 */
+/**
+ * 单账户对账弹窗（Reconcile Dialog）：显示 当前余额 / 账单收支合计 / 期初偏移(可填) / 重算后结果，确认后覆盖。
+ *
+ * - 账单收支合计（net）由 [loadNet] 挂起查询，`produceState` 异步加载。
+ * - 重算后余额 = 期初偏移 + 账单合计；确认后覆盖当前余额并同步云端。
+ *
+ * @param account 待对账账户
+ * @param onConfirm `(offset)` 回调，传入用户填的期初偏移
+ * @param loadNet 挂起函数，按账户 id 返回账单收支合计
+ */
 @Composable
 private fun ReconcileDialog(
     account: Account,
@@ -577,6 +635,7 @@ private fun ReconcileDialog(
     )
 }
 
+/** 对账弹窗内的标签-值预览行（label-value preview row），左右两栏对齐展示。 */
 @Composable
 private fun PreviewRow(label: String, value: String) {
     Row(
@@ -588,7 +647,12 @@ private fun PreviewRow(label: String, value: String) {
     }
 }
 
-/** 全部对账：列出每个账户的 当前余额 → 账单合计，确认后统一重算（期初偏移 0）。 */
+/**
+ * 全部对账弹窗（Reconcile All）：列出每个账户的 当前余额 → 账单合计，确认后统一重算（期初偏移 0）。
+ *
+ * - 每账户的 net 由 [loadNet] 异步查询（`produceState` 批量关联成 Map）。
+ * - 与单账户对账不同：不支持单独填期初偏移，统一按「账单合计」覆盖。
+ */
 @Composable
 private fun ReconcileAllDialog(
     accounts: List<Account>,
