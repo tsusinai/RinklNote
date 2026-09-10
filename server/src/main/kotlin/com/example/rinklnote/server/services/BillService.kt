@@ -472,7 +472,10 @@ class BillService {
     data class MonthStats(
         val totalExpense: Double,
         val totalIncome: Double,
-        val topExpenseCategories: List<Pair<String, Double>>
+        val topExpenseCategories: List<Pair<String, Double>>,
+        // 日报需要总笔数与收入分类；收入侧此前是空实现，见 InsightService.dailyReport。
+        val topIncomeCategories: List<Pair<String, Double>> = emptyList(),
+        val billCount: Long = 0
     )
 
     /**
@@ -511,9 +514,38 @@ class BillService {
             .limit(5)
             .map { it[BillsTable.categoryName] to Money.cents(it[BillsTable.amount.sum()] ?: 0.0) }
 
+        val topIncomeCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amount.sum())
+            .where {
+                (BillsTable.userId eq userId) and
+                    (BillsTable.deleted eq false) and
+                    (BillsTable.billType eq "INCOME") and
+                    (BillsTable.date greaterEq monthStart) and
+                    (BillsTable.date less nextMonthStart)
+            }
+            .groupBy(BillsTable.categoryName)
+            .orderBy(BillsTable.amount.sum() to SortOrder.DESC)
+            .limit(5)
+            .map { it[BillsTable.categoryName] to Money.cents(it[BillsTable.amount.sum()] ?: 0.0) }
+        // 用 Query.count() 而不是手工 select(id.count())：后者要构造两次等价表达式，
+        // 依赖 Exposed 表达式相等语义才能从结果行取值；count() 直接走聚合计数，无此隐患。
+        val billCount = BillsTable.selectAll()
+            .where {
+                (BillsTable.userId eq userId) and
+                    (BillsTable.deleted eq false) and
+                    (BillsTable.date greaterEq monthStart) and
+                    (BillsTable.date less nextMonthStart)
+            }
+            .count()
+
         // Round SQL SUM results to cents: summing double-precision columns drifts,
         // and downstream exact comparisons (e.g. Web budget over/under) would misfire.
-        MonthStats(Money.cents(totalExpense), Money.cents(totalIncome), topCategories)
+        MonthStats(
+            Money.cents(totalExpense),
+            Money.cents(totalIncome),
+            topCategories,
+            topIncomeCategories,
+            billCount
+        )
     }
 
     fun getCategories(): List<CategoryDTO> = transaction {

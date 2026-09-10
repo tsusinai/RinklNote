@@ -103,6 +103,29 @@ class UserServiceTest {
     }
 
     @Test
+    fun `setDailyReport roundtrip with defaults disabled at 9 00`() {
+        val (id, _) = service.register("13800000009", "pass123456")
+        // 默认：关、9:00
+        val fresh = service.findById(id)!!
+        assertFalse(fresh.dailyReportEnabled)
+        assertEquals(9, fresh.dailyReportHour)
+        assertEquals(0, fresh.dailyReportMinute)
+
+        service.setDailyReport(id, true, 21, 30)
+        val updated = service.findById(id)!!
+        assertTrue(updated.dailyReportEnabled)
+        assertEquals(21, updated.dailyReportHour)
+        assertEquals(30, updated.dailyReportMinute)
+
+        // 关闭保留时刻
+        service.setDailyReport(id, false, 21, 30)
+        val off = service.findById(id)!!
+        assertFalse(off.dailyReportEnabled)
+        assertEquals(21, off.dailyReportHour)
+        assertEquals(30, off.dailyReportMinute)
+    }
+
+    @Test
     fun `findAllBoundQq returns only users with qqOpenid and carries aiDisabled`() {
         // 用户1 有 openid；用户2 只绑 qqNumber、无 openid → 不应出现
         val (id1, _) = service.register("13800000007", "pass123456")

@@ -30,6 +30,13 @@ interface ApiService {
     @PUT("api/auth/ai")
     suspend fun setAiDisabled(@Body request: AiDisabledRequest): Map<String, Boolean>
 
+    // 日报推送设置（QQ 端）。注意与 getDailyReport()（拉日报内容）区分。
+    @GET("api/auth/daily-report-setting")
+    suspend fun getDailyReportSetting(): DailyReportSettingDto
+
+    @PUT("api/auth/daily-report-setting")
+    suspend fun setDailyReportSetting(@Body request: DailyReportSettingDto): DailyReportSettingDto
+
     @GET("api/bills/sync")
     suspend fun syncBills(
         @Query("after") after: Long? = null,

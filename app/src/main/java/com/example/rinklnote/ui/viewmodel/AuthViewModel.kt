@@ -8,6 +8,7 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.BindQQRequest
 import com.example.rinklnote.data.network.dto.ChangePasswordRequest
+import com.example.rinklnote.data.network.dto.DailyReportSettingDto
 import com.example.rinklnote.data.network.dto.LoginRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,8 @@ sealed interface AuthEvent {
     data object UnbindQQ : AuthEvent
     data object Logout : AuthEvent
     data class SetAiDisabled(val disabled: Boolean) : AuthEvent
+    /** QQ 端日报推送设置同步到服务端（本地 DataStore 由 ProfileScreen 自己写）。 */
+    data class SetDailyReportQq(val enabled: Boolean, val hour: Int, val minute: Int) : AuthEvent
     data object ClearError : AuthEvent
     data object ClearSuccess : AuthEvent
 }
@@ -88,6 +91,7 @@ class AuthViewModel(
             is AuthEvent.ChangePassword -> changePassword()
             is AuthEvent.UnbindQQ -> unbindQQ()
             is AuthEvent.SetAiDisabled -> setAiDisabled(event.disabled)
+            is AuthEvent.SetDailyReportQq -> setDailyReportQq(event.enabled, event.hour, event.minute)
             is AuthEvent.Logout -> logout()
         }
     }
@@ -224,6 +228,16 @@ class AuthViewModel(
                 _state.update { it.copy(aiDisabled = disabled) }
             } catch (e: Exception) {
                 _state.update { it.copy(error = "设置失败: ${e.message}") }
+            }
+        }
+    }
+
+    private fun setDailyReportQq(enabled: Boolean, hour: Int, minute: Int) {
+        viewModelScope.launch {
+            try {
+                api.setDailyReportSetting(DailyReportSettingDto(enabled, hour, minute))
+            } catch (e: Exception) {
+                _state.update { it.copy(error = "日报设置同步失败: ${e.message}") }
             }
         }
     }

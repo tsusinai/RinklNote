@@ -1,8 +1,11 @@
 package com.example.rinklnote.ui.screen.profile
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -101,6 +104,51 @@ fun ProfileScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // R4：Android 13+ 通知是运行时权限，开「日报通知」时当场申请。
+    // 拒绝则开关保持关闭（state 未写），引导去系统设置。
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            coroutineScope.launch {
+                settingsManager.setDailyReportEnabled(true)
+                DailyReportReceiver.schedule(context, dailyReportHour, dailyReportMinute)
+            }
+        } else {
+            Toast.makeText(context, "通知权限被拒绝，请在系统设置中开启通知后再试", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val onDailyReportEnabledChange: (Boolean) -> Unit = { turnOn ->
+        if (turnOn) {
+            val needPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            if (needPermission) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                coroutineScope.launch {
+                    settingsManager.setDailyReportEnabled(true)
+                    DailyReportReceiver.schedule(context, dailyReportHour, dailyReportMinute)
+                }
+            }
+        } else {
+            coroutineScope.launch {
+                settingsManager.setDailyReportEnabled(false)
+                DailyReportReceiver.cancel(context)
+            }
+        }
+    }
+
+    // QQ 日报：本地开关 + 同步到服务端（/api/auth/daily-report-setting，服务端据此定时推送）。
+    val onDailyReportQqBotChange: (Boolean) -> Unit = { on ->
+        coroutineScope.launch { settingsManager.setDailyReportQqBot(on) }
+        if (state.isLoggedIn) {
+            authViewModel.onEvent(AuthEvent.SetDailyReportQq(on, dailyReportHour, dailyReportMinute))
+        } else {
+            Toast.makeText(context, "登录后 QQ 日报推送才会生效", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // 图库选背景：把结果拷到应用内部存储（自建文件路径，跨重启稳定），再写回设置。
     val pickBackgroundLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -185,6 +233,17 @@ fun ProfileScreen(
                         }
                     }
                 }
+            )
+        }
+        item(key = "dailyReport") {
+            DailyReportCard(
+                enabled = dailyReportEnabled,
+                hour = dailyReportHour,
+                minute = dailyReportMinute,
+                qqBot = dailyReportQqBot,
+                onEnabledChange = onDailyReportEnabledChange,
+                onTimeClick = { showTimePicker = true },
+                onQqBotChange = onDailyReportQqBotChange
             )
         }
         item(key = "account") {
@@ -290,6 +349,20 @@ fun ProfileScreen(
         )
     }
 
+    if (showTimePicker) {
+        TimePickerDialog(
+            hour = dailyReportHour,
+            minute = dailyReportMinute,
+            onConfirm = { h, m ->
+                showTimePicker = false
+                coroutineScope.launch {
+                    settingsManager.setDailyReportTime(h, m)
+                    if (dailyReportEnabled) DailyReportReceiver.schedule(context, h, m)
+                }
+            },
+            onDismiss = { showTimePicker = false }
+        )
+    }
     if (showAiToken) {
         AiTokenDialog(
             viewModel = aiTokenViewModel,
@@ -479,6 +552,39 @@ private fun SyncCard(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
             )
         }
+    }
+}
+
+/** «日报通知» 组：本地通知开关 + 通知时间 + QQ 日报推送（接回此前从未被调用的 setDailyReport*）。 */
+@Composable
+private fun DailyReportCard(
+    enabled: Boolean,
+    hour: Int,
+    minute: Int,
+    qqBot: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    onTimeClick: () -> Unit,
+    onQqBotChange: (Boolean) -> Unit
+) {
+    GroupCard(title = "日报通知") {
+        SettingsRow(
+            icon = R.drawable.ic_notification,
+            label = "每日日报通知",
+            trailing = { Switch(checked = enabled, onCheckedChange = onEnabledChange) }
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_notification,
+            label = "通知时间",
+            value = "%02d:%02d".format(hour, minute),
+            onClick = onTimeClick
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+        SettingsRow(
+            icon = R.drawable.ic_link,
+            label = "QQ 日报推送",
+            trailing = { Switch(checked = qqBot, onCheckedChange = onQqBotChange) }
+        )
     }
 }
 

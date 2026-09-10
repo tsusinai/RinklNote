@@ -21,6 +21,7 @@ import com.example.rinklnote.data.network.dto.BindQQRequest
 import com.example.rinklnote.data.network.dto.BudgetDTO
 import com.example.rinklnote.data.network.dto.BudgetSummaryDTO
 import com.example.rinklnote.data.network.dto.DailyReportResponse
+import com.example.rinklnote.data.network.dto.DailyReportSettingDto
 import com.example.rinklnote.data.network.dto.AiGenerateTokenRequest
 import com.example.rinklnote.data.network.dto.AiTokenItem
 import com.example.rinklnote.data.network.dto.AiTokenResponse
@@ -398,6 +399,10 @@ class AiViewModelTest {
         override suspend fun setAiDisabled(request: AiDisabledRequest): Map<String, Boolean> = mapOf("disabled" to request.disabled)
         override suspend fun getDailyReport(): DailyReportResponse =
             DailyReportResponse("", 0.0, 0.0, emptyList(), emptyList(), 0, "")
+        override suspend fun getDailyReportSetting(): DailyReportSettingDto =
+            DailyReportSettingDto(enabled = false, hour = 9, minute = 0)
+        override suspend fun setDailyReportSetting(request: DailyReportSettingDto): DailyReportSettingDto =
+            DailyReportSettingDto(request.enabled, request.hour, request.minute)
         override suspend fun generateAiToken(request: AiGenerateTokenRequest): AiTokenResponse =
             AiTokenResponse(0, "", "", 0)
         override suspend fun listAiTokens(): List<AiTokenItem> = emptyList()

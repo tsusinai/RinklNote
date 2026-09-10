@@ -24,3 +24,6 @@ web/node_modules/
 
 # Local machine settings (contains secrets)
 .claude/settings.local.json
+
+# Local AI agent working data (memory, temp probes) — 与 .claude / .superpowers 同类
+.workbuddy/

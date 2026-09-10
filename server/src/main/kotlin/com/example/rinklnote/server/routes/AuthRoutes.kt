@@ -34,7 +34,10 @@ data class MeResponse(
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,
-    val aiDisabled: Boolean = false
+    val aiDisabled: Boolean = false,
+    val dailyReportEnabled: Boolean = false,
+    val dailyReportHour: Int = 9,
+    val dailyReportMinute: Int = 0
 )
 
 @Serializable
@@ -42,6 +45,9 @@ data class ChangePasswordRequest(val oldPassword: String, val newPassword: Strin
 
 @Serializable
 data class AiSettingRequest(val disabled: Boolean)
+
+@Serializable
+data class DailyReportSettingRequest(val enabled: Boolean, val hour: Int, val minute: Int)
 
 @Serializable
 data class QqLoginRequest(val code: String)
@@ -154,7 +160,10 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
                         qqNumber = user.qqNumber,
                         qqOpenid = user.qqOpenid,
                         createdAt = user.createdAt,
-                        aiDisabled = user.aiDisabled
+                        aiDisabled = user.aiDisabled,
+                        dailyReportEnabled = user.dailyReportEnabled,
+                        dailyReportHour = user.dailyReportHour,
+                        dailyReportMinute = user.dailyReportMinute
                     )
                 )
             }
@@ -204,6 +213,35 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
                 val body = call.receive<AiSettingRequest>()
                 userService.setAiDisabled(userId, body.disabled)
                 call.respond(mapOf("disabled" to body.disabled))
+            }
+
+            // 日报推送设置（QQ 端）。命名 daily-report-setting，与 api/insights/daily-report（拉日报内容）区分。
+            get("/daily-report-setting") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+                val user = userService.findById(userId)
+                    ?: return@get call.respond(HttpStatusCode.NotFound, MessageResponse("用户不存在"))
+                call.respond(
+                    DailyReportSettingRequest(
+                        enabled = user.dailyReportEnabled,
+                        hour = user.dailyReportHour,
+                        minute = user.dailyReportMinute
+                    )
+                )
+            }
+
+            put("/daily-report-setting") {
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asLong()
+                    ?: return@put call.respond(HttpStatusCode.Unauthorized)
+                val body = call.receive<DailyReportSettingRequest>()
+                if (body.hour !in 0..23 || body.minute !in 0..59) {
+                    call.respond(HttpStatusCode.BadRequest, MessageResponse("时间不合法（hour 0-23, minute 0-59）"))
+                    return@put
+                }
+                userService.setDailyReport(userId, body.enabled, body.hour, body.minute)
+                call.respond(body)
             }
         }
     }

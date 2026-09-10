@@ -15,7 +15,10 @@ data class UserInfo(
     val qqNumber: String?,
     val qqOpenid: String?,
     val createdAt: String? = null,
-    val aiDisabled: Boolean = false
+    val aiDisabled: Boolean = false,
+    val dailyReportEnabled: Boolean = false,
+    val dailyReportHour: Int = 9,
+    val dailyReportMinute: Int = 0
 )
 
 class UserService(
@@ -105,6 +108,17 @@ class UserService(
         transaction { UsersTable.update({ UsersTable.id eq userId }) { it[aiDisabled] = disabled } }
     }
 
+    /** 日报推送设置：enabled 是日报子开关（总闸仍是 ai_disabled），hour/minute 为 Asia/Shanghai 时刻。 */
+    fun setDailyReport(userId: Long, enabled: Boolean, hour: Int, minute: Int) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[dailyReportEnabled] = enabled
+                it[dailyReportHour] = hour
+                it[dailyReportMinute] = minute
+            }
+        }
+    }
+
     fun isAiDisabled(userId: Long): Boolean = transaction {
         UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()?.get(UsersTable.aiDisabled) ?: false
     }
@@ -115,7 +129,10 @@ class UserService(
         qqNumber = this[UsersTable.qqNumber],
         qqOpenid = this[UsersTable.qqOpenid],
         createdAt = this[UsersTable.createdAt],
-        aiDisabled = this[UsersTable.aiDisabled]
+        aiDisabled = this[UsersTable.aiDisabled],
+        dailyReportEnabled = this[UsersTable.dailyReportEnabled],
+        dailyReportHour = this[UsersTable.dailyReportHour],
+        dailyReportMinute = this[UsersTable.dailyReportMinute]
     )
 
     fun bindByQqOpenid(userId: Long, openid: String): Boolean {

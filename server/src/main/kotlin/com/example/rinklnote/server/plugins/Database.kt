@@ -81,6 +81,14 @@ private fun Transaction.runMigrations() {
         try { exec(sql) } catch (_: Exception) {}
     }
 
+    // v14 迁移：users 日报推送三列（子开关 + 时刻）。createMissingTablesAndColumns 通常会自动补列，
+    // 这里按幂等 ALTER 兜底，防 Exposed 对既有表漏检（PostgreSQL/H2 均支持 ADD COLUMN IF NOT EXISTS）。
+    listOf("ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_report_enabled BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_report_hour INT DEFAULT 9",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_report_minute INT DEFAULT 0").forEach { sql ->
+        try { exec(sql) } catch (_: Exception) {}
+    }
+
     // v12 迁移：清理 accounts 上残留的「仅 name（不含 user_id）」唯一约束/索引，确保 (user_id, name) 复合唯一。
     // createMissingTablesAndColumns 只会加表/加列：既不会 drop 旧唯一约束，也不会给既有表补新的唯一索引。
     // 当唯一约束从「name 全局唯一」改成「(user_id, name)」时，旧 schema 留下的唯一约束（H2 自动命名，

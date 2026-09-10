@@ -173,6 +173,23 @@ class InsightServiceTest {
     }
 
     @Test
+    fun `dailyReport summary contains real amounts categories and bill count`() {
+        val day = startOfDay(2026, 8, 31)
+        insertBill(1L, 28.0, "三餐", day)
+        insertBill(1L, 18.5, "交通", day)
+        insertBill(1L, 3000.0, "工资", day, billType = "INCOME")
+
+        val r = runBlocking { insight.dailyReport(1L, day, day + 86_400_000L) }
+
+        assertTrue("应含支出合计 46.50", r.summary.contains("46.50"))
+        assertTrue("应含分类 三餐", r.summary.contains("三餐"))
+        assertTrue("应含分类 交通", r.summary.contains("交通"))
+        assertTrue("应含收入 3000.00", r.summary.contains("3000.00"))
+        assertTrue("应含笔数 3 笔", r.summary.contains("3 笔"))
+        assertEquals(3, r.billCount)
+    }
+
+    @Test
     fun `habitForApp returns null content when no habit`() {
         val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
         val r = runBlocking { insight.habitForApp(1L, now) }

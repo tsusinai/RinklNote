@@ -21,8 +21,15 @@ data class MeResponse(
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,
-    val aiDisabled: Boolean = false
+    val aiDisabled: Boolean = false,
+    val dailyReportEnabled: Boolean = false,
+    val dailyReportHour: Int = 9,
+    val dailyReportMinute: Int = 0
 )
+
+/** 日报推送设置（QQ 端），对应 /api/auth/daily-report-setting。 */
+@Serializable
+data class DailyReportSettingDto(val enabled: Boolean, val hour: Int, val minute: Int)
 
 @Serializable
 data class ChangePasswordRequest(val oldPassword: String, val newPassword: String)

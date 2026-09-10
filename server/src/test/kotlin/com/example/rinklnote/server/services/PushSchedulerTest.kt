@@ -28,7 +28,14 @@ class PushSchedulerTest {
         }
     }
 
-    private fun insertUser(id: Long, openid: String?, aiDisabled: Boolean = false) {
+    private fun insertUser(
+        id: Long,
+        openid: String?,
+        aiDisabled: Boolean = false,
+        dailyReportEnabled: Boolean = false,
+        dailyReportHour: Int = 9,
+        dailyReportMinute: Int = 0
+    ) {
         transaction {
             UsersTable.insert {
                 it[UsersTable.id] = id
@@ -38,13 +45,16 @@ class PushSchedulerTest {
                 it[UsersTable.qqNumber] = openid
                 it[UsersTable.qqOpenid] = openid
                 it[UsersTable.aiDisabled] = aiDisabled
+                it[UsersTable.dailyReportEnabled] = dailyReportEnabled
+                it[UsersTable.dailyReportHour] = dailyReportHour
+                it[UsersTable.dailyReportMinute] = dailyReportMinute
             }
         }
     }
 
     @Test
     fun `monthly pushes once per month then dedup`() {
-        insertUser(1, "openid-1", aiDisabled = false)
+        insertUser(1, "openid-1", aiDisabled = false, dailyReportEnabled = true)
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
@@ -80,8 +90,27 @@ class PushSchedulerTest {
     }
 
     @Test
+    fun `daily report is pushed even when habit provider returns null`() {
+        insertUser(1, "openid-1", aiDisabled = false, dailyReportEnabled = true)
+        val sent = mutableListOf<String>()
+        val sched = PushScheduler(
+            userService,
+            send = { _, content, _ -> sent.add(content); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },   // 常态：今天没有习惯提醒
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(1, sent.size)
+        assertEquals("✅ 今日账单总结", sent[0])
+    }
+
+    @Test
     fun `non-last-day skips monthly but anomaly pushes when provider non-null`() {
-        insertUser(1, "openid-1", aiDisabled = false)
+        insertUser(1, "openid-1", aiDisabled = false, dailyReportEnabled = true)
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
@@ -96,5 +125,45 @@ class PushSchedulerTest {
         runBlocking { sched.tick() }
         assertEquals(1, sent.size)
         assertEquals("⚠️ 今天超支", sent[0])
+    }
+
+    @Test
+    fun `daily report respects user time window`() {
+        // 用户设 21:30：21:29 不到点不推；21:31 到点推（>= 语义，当天首推）
+        insertUser(1, "openid-1", aiDisabled = false, dailyReportEnabled = true, dailyReportHour = 21, dailyReportMinute = 30)
+        val sent = mutableListOf<String>()
+        fun schedAt(hour: Int, minute: Int) = PushScheduler(
+            userService,
+            send = { _, content, _ -> sent.add(content); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, hour, minute) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { schedAt(21, 29).tick() }
+        assertEquals("21:29 尚未到点，不应推送", 0, sent.size)
+        runBlocking { schedAt(21, 31).tick() }
+        assertEquals("21:31 到点后应推送", 1, sent.size)
+    }
+
+    @Test
+    fun `daily report disabled user never pushed even past default due time`() {
+        // 默认 dailyReportEnabled=false：即便过了默认 9:00 也绝不推（开关在用户手里）
+        insertUser(1, "openid-1", aiDisabled = false)
+        val sent = mutableListOf<String>()
+        val sched = PushScheduler(
+            userService,
+            send = { _, content, _ -> sent.add(content); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(0, sent.size)
     }
 }
