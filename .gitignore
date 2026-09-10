@@ -27,3 +27,19 @@ web/node_modules/
 
 # Local AI agent working data (memory, temp probes) — 与 .claude / .superpowers 同类
 .workbuddy/
+
+# Local machine scratch / debug artifacts
+.gradle-home/
+.kotlin/
+*.tar.gz
+line104.txt
+lines.txt
+lines_around_207.txt
+daily_report_method.txt
+update_ps.py
+docs/*.sql
+
+# IDE 本地状态（被 AGENTS/CLAUDE 改动触发 IDE 重生成）
+/.idea/compiler.xml
+/.idea/gradle.xml
+/.idea/misc.xml
