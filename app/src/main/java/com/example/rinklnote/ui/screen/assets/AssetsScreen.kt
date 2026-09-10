@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.assets
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -11,15 +12,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -44,8 +49,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,10 +63,15 @@ import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
+import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 
 private fun accountIconRes(name: String): Int = when (name) {
     "微信" -> R.drawable.ic_wechat
@@ -74,8 +86,13 @@ private fun hexColor(hex: String): Color {
     return Color(0xFF000000L or value)
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-fun AssetsScreen(viewModel: AssetsViewModel) {
+fun AssetsScreen(
+    viewModel: AssetsViewModel,
+    backgroundUri: String?,
+    hazeState: HazeState
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
 
@@ -86,140 +103,230 @@ fun AssetsScreen(viewModel: AssetsViewModel) {
     var reconcilingAccount by remember { mutableStateOf<Account?>(null) }
     var reconcilingAll by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "资产管理",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
-            )
-            // 全部对账：将每个账户余额重算为各自账单收支合计（期初偏移 0）。
-            if (state.accounts.isNotEmpty()) {
-                TextButton(onClick = { reconcilingAll = true }) { Text("全部对账") }
-            }
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    // 顶栏悬浮：列表首项垫到它下面（不留整块空白）。高度 = 状态栏避让 + 图标行（30dp + 上下各 8dp）。
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    // 列表滚动后内容滑到顶栏下方，白色文字需要渐隐暗底兜住可读性。
+    val listScrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    // 配图背景或滚动后顶栏 scrim 渐显；无照片且未滚动时 scrim 透明（标题直接压在渐变背景上）。
+    val topBarScrimAlpha by animateFloatAsState(
+        targetValue = if (backgroundUri != null || listScrolled) 1f else 0f,
+        label = "assetsTopBarScrim"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 毛玻璃源：有自选照片时由 nav 层整窗铺满；无照片时本页铺主题渐变供各卡片 hazeEffect 采样。
+        if (backgroundUri == null) {
+            DefaultHazeBackground(hazeState = hazeState)
         }
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+            // 顶栏是浮层：配图背景时把列表首项垫到它下面（不留整块空白）。
+            item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
+            item(key = "spacer-0") { Spacer(modifier = Modifier.height(10.dp)) }
+
             item(key = "total") {
-                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden)
+                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden, hazeState = hazeState)
             }
             items(state.accounts, key = { it.id }) { account ->
                 AccountCard(
                     account = account,
                     hidden = balanceHidden,
+                    hazeState = hazeState,
                     onClick = { editingAccount = account },
                     onRename = { renamingAccount = account },
                     onDelete = { deletingAccount = account },
                     onReconcile = { reconcilingAccount = account }
                 )
             }
-            item(key = "add") {
-                AddAccountCard(onClick = { addingAccount = true })
+            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(120.dp)) }
+        }
+
+        // 顶栏固定在页面顶部，压在背景/列表内容之上（对齐首页 TopBar）。
+        AssetsTopBar(
+            scrimAlpha = topBarScrimAlpha,
+            canReconcileAll = state.accounts.isNotEmpty(),
+            onReconcileAll = { reconcilingAll = true },
+            onAddAccount = { addingAccount = true }
+        )
+
+        // FAB：新建账户（与首页加账单 FAB 同款：rinkShadow + 毛玻璃 + 51dp）。
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 48.dp)
+                .rinkShadow(CircleShape)
+                .size(51.dp)
+                .clip(CircleShape)
+                .hazeEffect(hazeState, HazeMaterials.thin())
+                .clickable { addingAccount = true },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_add_bill),
+                contentDescription = "新建账户",
+                tint = Color.Unspecified
+            )
+        }
+
+        // 全屏编辑余额用上滑进入（与快加键盘一致的 SheetEnter/Exit）
+        AnimatedVisibility(
+            visible = editingAccount != null,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
+        ) {
+            editingAccount?.let { account ->
+                BalanceEditDialog(
+                    account = account,
+                    onConfirm = { updated ->
+                        editingAccount = null
+                        viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balance))
+                    },
+                    onDismiss = { editingAccount = null }
+                )
             }
         }
-    }
 
-    // 全屏编辑余额用上滑进入（与快加键盘一致的 SheetEnter/Exit）
-    AnimatedVisibility(
-        visible = editingAccount != null,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
-        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
-    ) {
-        editingAccount?.let { account ->
-            BalanceEditDialog(
-                account = account,
-                onConfirm = { updated ->
-                    editingAccount = null
-                    viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balance))
+        if (addingAccount) {
+            AddAccountDialog(
+                onConfirm = { name, color, balance ->
+                    addingAccount = false
+                    viewModel.onEvent(AssetsEvent.AddAccount(name, color, balance))
                 },
-                onDismiss = { editingAccount = null }
+                onDismiss = { addingAccount = false }
+            )
+        }
+
+        renamingAccount?.let { account ->
+            RenameAccountDialog(
+                account = account,
+                onConfirm = { name ->
+                    renamingAccount = null
+                    viewModel.onEvent(AssetsEvent.RenameAccount(account, name))
+                },
+                onDismiss = { renamingAccount = null }
+            )
+        }
+
+        deletingAccount?.let { account ->
+            AlertDialog(
+                onDismissRequest = { deletingAccount = null },
+                title = { Text("删除账户") },
+                text = { Text("确定删除「${account.name}」？该账户的历史账单记录会保留，仅用于新记账时不再选择该账户。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deletingAccount = null
+                        viewModel.onEvent(AssetsEvent.DeleteAccount(account))
+                    }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deletingAccount = null }) { Text("取消") }
+                }
+            )
+        }
+
+        reconcilingAccount?.let { account ->
+            ReconcileDialog(
+                account = account,
+                onConfirm = { offset ->
+                    reconcilingAccount = null
+                    viewModel.onEvent(AssetsEvent.ReconcileAccount(account, offset))
+                },
+                onDismiss = { reconcilingAccount = null },
+                loadNet = viewModel::getAccountNet
+            )
+        }
+
+        if (reconcilingAll) {
+            ReconcileAllDialog(
+                accounts = state.accounts,
+                onConfirm = {
+                    reconcilingAll = false
+                    viewModel.onEvent(AssetsEvent.ReconcileAll)
+                },
+                onDismiss = { reconcilingAll = false },
+                loadNet = viewModel::getAccountNet
             )
         }
     }
+}
 
-    if (addingAccount) {
-        AddAccountDialog(
-            onConfirm = { name, color, balance ->
-                addingAccount = false
-                viewModel.onEvent(AssetsEvent.AddAccount(name, color, balance))
-            },
-            onDismiss = { addingAccount = false }
-        )
-    }
-
-    renamingAccount?.let { account ->
-        RenameAccountDialog(
-            account = account,
-            onConfirm = { name ->
-                renamingAccount = null
-                viewModel.onEvent(AssetsEvent.RenameAccount(account, name))
-            },
-            onDismiss = { renamingAccount = null }
-        )
-    }
-
-    deletingAccount?.let { account ->
-        AlertDialog(
-            onDismissRequest = { deletingAccount = null },
-            title = { Text("删除账户") },
-            text = { Text("确定删除「${account.name}」？该账户的历史账单记录会保留，仅用于新记账时不再选择该账户。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    deletingAccount = null
-                    viewModel.onEvent(AssetsEvent.DeleteAccount(account))
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingAccount = null }) { Text("取消") }
-            }
-        )
-    }
-
-    reconcilingAccount?.let { account ->
-        ReconcileDialog(
-            account = account,
-            onConfirm = { offset ->
-                reconcilingAccount = null
-                viewModel.onEvent(AssetsEvent.ReconcileAccount(account, offset))
-            },
-            onDismiss = { reconcilingAccount = null },
-            loadNet = viewModel::getAccountNet
-        )
-    }
-
-    if (reconcilingAll) {
-        ReconcileAllDialog(
-            accounts = state.accounts,
-            onConfirm = {
-                reconcilingAll = false
-                viewModel.onEvent(AssetsEvent.ReconcileAll)
-            },
-            onDismiss = { reconcilingAll = false },
-            loadNet = viewModel::getAccountNet
-        )
+/** 资产页悬浮顶栏：左侧「对账」（全部对账）+ 居中「资产管理」标题 + 右侧「新建」入口。 */
+@Composable
+private fun AssetsTopBar(
+    scrimAlpha: Float,
+    canReconcileAll: Boolean,
+    onReconcileAll: () -> Unit,
+    onAddAccount: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        // 顶部渐隐遮罩：白色标题下的内容（照片/滚动上来的账户卡）被它压暗，保证可读性。
+        if (scrimAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
+        // 内容层：状态栏避让 + 内边距，悬浮于背景/列表之上（与首页 TopBar 同构）。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // 左侧：全部对账（账户为空时不可点）。
+            Text(
+                text = "对账",
+                fontSize = 15.sp,
+                color = Color.White.copy(alpha = if (canReconcileAll) 1f else 0.4f),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .clickable(enabled = canReconcileAll) { onReconcileAll() }
+            )
+            // 居中：标题。
+            Text(
+                text = "资产管理",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.align(Alignment.Center)
+            )
+            // 右侧：新建账户入口。
+            Icon(
+                painter = painterResource(R.drawable.ic_add_bill),
+                contentDescription = "新建账户",
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .size(30.dp)
+                    .clickable { onAddAccount() },
+                tint = Color.White
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean) {
+private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean, hazeState: HazeState) {
     val total = remember(accounts) { accounts.sumOf { it.balance } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .background(MaterialTheme.colorScheme.primary)
             .padding(20.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -251,17 +358,19 @@ private fun TotalAssetsCard(accounts: List<Account>, hidden: Boolean) {
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun AccountCard(
     account: Account,
     hidden: Boolean,
+    hazeState: HazeState,
     onClick: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onReconcile: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    // 保持最新回调引用：父级重组时避免 stale lambda 或整卡不必要的重组
+    // 保持最新回调引用：父级重组时避免 stale lambda 或整卡不必要的重组。
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnRename by rememberUpdatedState(onRename)
     val currentOnDelete by rememberUpdatedState(onDelete)
@@ -272,6 +381,7 @@ private fun AccountCard(
                 .fillMaxWidth()
                 .rinkShadow(RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
+                .hazeEffect(hazeState, HazeMaterials.thin())
                 .background(MaterialTheme.colorScheme.surface)
                 .clickable { currentOnClick() }
                 .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
@@ -320,25 +430,6 @@ private fun AccountCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun AddAccountCard(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "+ 新建账户",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 

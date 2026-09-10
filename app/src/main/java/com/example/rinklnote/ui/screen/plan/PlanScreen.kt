@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.screen.plan
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -11,14 +12,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,10 +38,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.Motion
@@ -45,6 +54,10 @@ import com.example.rinklnote.ui.viewmodel.BudgetState
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.CategoryBudgetState
 import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlin.math.abs
 
 /** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时记录，键盘确认后按维度 SetBudget）。 */
@@ -54,8 +67,14 @@ private sealed interface BudgetEditTarget {
     data class SubCategory(val subCategoryId: Long, val parentCategoryId: Long) : BudgetEditTarget
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
-fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
+fun PlanScreen(
+    viewModel: BudgetViewModel,
+    isActive: Boolean = true,
+    backgroundUri: String?,
+    hazeState: HazeState
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var editTarget by remember { mutableStateOf<BudgetEditTarget?>(null) }
 
@@ -65,27 +84,39 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
         if (!isActive) editTarget = null
     }
 
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    val listScrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    val topBarScrimAlpha by animateFloatAsState(
+        targetValue = if (backgroundUri != null || listScrolled) 1f else 0f,
+        label = "planTopBarScrim"
+    )
+
     // 单层 Box 根：预算键盘必须以页内 overlay 的形式叠在计划内容之上。
     // 之前在 PlanScreen 里把主 Column 和键盘作为两个平级子项直接交给 pager，
     // 键盘虽进入组合但未真正盖住卡片（点击落在平级卡片上、键盘不可见）。
     Box(modifier = Modifier.fillMaxSize()) {
+        // 毛玻璃源：有自选照片时由 nav 层整窗铺满；无照片时本页铺主题渐变供各卡片采样。
+        if (backgroundUri == null) {
+            DefaultHazeBackground(hazeState = hazeState)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .padding(horizontal = 16.dp)
         ) {
-            Text(
-                text = "计划",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            // 顶栏是浮层：首项垫到它下面（不留整块空白）。
+            Spacer(modifier = Modifier.height(topBarHeight))
 
             // 顶部：总额预算卡片
             TotalBudgetCard(
                 state = state,
+                hazeState = hazeState,
                 onClick = { editTarget = BudgetEditTarget.Total }
             )
 
@@ -102,6 +133,7 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
                 EmptyCategoryGuide()
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -110,6 +142,7 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
                     items(state.categoryBudgets, key = { it.categoryId }) { category ->
                         CategoryBudgetCard(
                             category = category,
+                            hazeState = hazeState,
                             onClick = { editTarget = BudgetEditTarget.Category(category.categoryId) },
                             onSubClick = { sub ->
                                 editTarget = BudgetEditTarget.SubCategory(sub.subCategoryId, sub.parentCategoryId)
@@ -119,6 +152,9 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
                 }
             }
         }
+
+        // 悬浮顶栏：居中「计划」标题 + scrim（对齐首页 TopBar，但预算页无额外操作，左右留空）。
+        PlanTopBar(scrimAlpha = topBarScrimAlpha)
 
         // 全屏键盘 overlay 用上滑进入（与快加键盘一致的 SheetEnter/Exit），而非裸 if 硬切换
         AnimatedVisibility(
@@ -161,6 +197,42 @@ fun PlanScreen(viewModel: BudgetViewModel, isActive: Boolean = true) {
     }
 }
 
+/** 预算页悬浮顶栏：极简，仅居中「计划」标题 + 渐隐 scrim（tab 内页无返回键，左右留空）。 */
+@Composable
+private fun PlanTopBar(scrimAlpha: Float, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        // 顶部渐隐遮罩：白色标题下的内容被它压暗，保证可读性。
+        if (scrimAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "计划",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+    }
+}
+
 /** 编辑目标当前金额（已有则预填，未设则为空）。 */
 private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): String {
     val amount = when (target) {
@@ -177,9 +249,11 @@ private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): Str
     return amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: ""
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun TotalBudgetCard(
     state: BudgetState,
+    hazeState: HazeState,
     onClick: () -> Unit
 ) {
     val budget = state.totalBudget
@@ -188,6 +262,7 @@ private fun TotalBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(16.dp)
@@ -291,9 +366,11 @@ private fun EmptyCategoryGuide() {
     }
 }
 
+@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun CategoryBudgetCard(
     category: CategoryBudgetState,
+    hazeState: HazeState,
     onClick: () -> Unit,
     onSubClick: (SubCategoryBudgetState) -> Unit
 ) {
@@ -302,6 +379,7 @@ private fun CategoryBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(13.dp))
             .clip(RoundedCornerShape(13.dp))
+            .hazeEffect(hazeState, HazeMaterials.thin())
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

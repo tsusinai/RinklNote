@@ -60,6 +60,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import com.example.rinklnote.ui.component.BillCard
+import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.theme.Motion
@@ -131,7 +132,7 @@ fun BookkeepingScreen(
         // 毛玻璃源：有自选照片时由 nav 层整窗铺满（含底部栏），此处不再叠一层；
         // 无照片时本页自己铺主题渐变，供各卡片 hazeEffect 采样。
         if (backgroundUri == null) {
-            DefaultBackgroundLayer(hazeState = hazeState)
+            DefaultHazeBackground(hazeState = hazeState)
         }
 
         PullToRefreshBox(
@@ -285,24 +286,6 @@ fun BookkeepingScreen(
     }
 }
 
-/** 记账页默认背景：柔和的主色→背景渐变，作为毛玻璃的 blur 源。 */
-@Composable
-private fun DefaultBackgroundLayer(hazeState: HazeState) {
-    // 纯色会让玻璃无从“模糊”，看起来像没改过的白卡，故用渐变。
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
-            .hazeSource(hazeState)
-    )
-}
 
 /** 时段横幅：按时段换图的整块头图，作为列表首项随时间滚走，不再包住顶栏。 */
 @Composable

@@ -367,7 +367,12 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
             ) {
                 composable("plan") {
-                    PlanScreen(viewModel = budgetVM, isActive = currentRoute == "plan")
+                    PlanScreen(
+                        viewModel = budgetVM,
+                        isActive = currentRoute == "plan",
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState
+                    )
                 }
                 composable("bookkeeping") {
                     BookkeepingScreen(
@@ -381,7 +386,13 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
 
                 }
-                composable("assets") { AssetsScreen(viewModel = assetsVM) }
+                composable("assets") {
+                    AssetsScreen(
+                        viewModel = assetsVM,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState
+                    )
+                }
                 composable("profile") {
                     ProfileScreen(
                         authViewModel = authVM,
