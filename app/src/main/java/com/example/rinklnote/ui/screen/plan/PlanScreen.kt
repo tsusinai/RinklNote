@@ -49,6 +49,7 @@ import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetState
@@ -131,8 +132,6 @@ fun PlanScreen(
             // 顶部：总额预算卡片
             TotalBudgetCard(
                 state = state,
-                hazeState = hazeState,
-                backgroundUri = backgroundUri,
                 onClick = { editTarget = BudgetEditTarget.Total }
             )
 
@@ -158,8 +157,6 @@ fun PlanScreen(
                     items(state.categoryBudgets, key = { it.categoryId }) { category ->
                         CategoryBudgetCard(
                             category = category,
-                            hazeState = hazeState,
-                            backgroundUri = backgroundUri,
                             onClick = { editTarget = BudgetEditTarget.Category(category.categoryId) },
                             onSubClick = { sub ->
                                 editTarget = BudgetEditTarget.SubCategory(sub.subCategoryId, sub.parentCategoryId)
@@ -221,11 +218,11 @@ fun PlanScreen(
 /** 预算页悬浮顶栏：极简，仅居中「计划」标题 + 渐隐 scrim（tab 内页无返回键，左右留空）。 */
 @Composable
 private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: Boolean, modifier: Modifier = Modifier) {
-    // 文字色三态：有背景→白；无背景+顶部→深色（onSurface）；无背景+滚动→浅灰（onSurfaceVariant）
+    // 文字色三态：有背景→白；无背景→自定义主题「顶栏标题色」（默认=字体色），滚动后略淡
     val textColor = when {
         hasBackground -> Color.White
-        !listScrolled -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        !listScrolled -> LocalRinklColors.current.topBarTitleColor
+        else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
     Box(modifier = modifier.fillMaxWidth()) {
         // 顶部渐隐遮罩：白色标题下的内容被它压暗，保证可读性。
@@ -283,12 +280,9 @@ private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): Str
  * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算/百分比 + 剩余天数；
  *   超预算时进度条转 error 色并显示超额金额。
  */
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun TotalBudgetCard(
     state: BudgetState,
-    hazeState: HazeState,
-    backgroundUri: String?,
     onClick: () -> Unit
 ) {
     val budget = state.totalBudget
@@ -296,7 +290,7 @@ private fun TotalBudgetCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .clickable { onClick() }
             .padding(16.dp)
     ) {
@@ -410,12 +404,9 @@ private fun EmptyCategoryGuide() {
  * @param onClick 点分类行 → 编辑分类预算
  * @param onSubClick 点子分类行 → 编辑子分类预算
  */
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 private fun CategoryBudgetCard(
     category: CategoryBudgetState,
-    hazeState: HazeState,
-    backgroundUri: String?,
     onClick: () -> Unit,
     onSubClick: (SubCategoryBudgetState) -> Unit
 ) {
@@ -424,7 +415,7 @@ private fun CategoryBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(13.dp))
             .clip(RoundedCornerShape(13.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(13.dp)))
+            .then(applyCardGlass(RoundedCornerShape(13.dp)))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(

@@ -74,6 +74,7 @@ import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
@@ -204,9 +205,7 @@ fun BookkeepingScreen(
                     totalIncome = state.totalIncome,
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     aiSummary = if (isCurrentMonth) state.aiSummary else null,
-                    aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false,
-                    hazeState = hazeState,
-                    backgroundUri = backgroundUri
+                    aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false
                 )
             }
 
@@ -215,7 +214,6 @@ fun BookkeepingScreen(
             item(key = "chart") {
                 HeatmapBox(
                     heatmap = heatmap,
-                    hazeState = hazeState,
                     onDetailClick = onMonthDetailClick
                 )
             }
@@ -233,8 +231,6 @@ fun BookkeepingScreen(
                         totalAmount = totalAmount,
                         bills = bills,
                         dragHost = dragHost,
-                        hazeState = hazeState,
-                        backgroundUri = backgroundUri,
                         onEdit = { bill ->
                             viewModel.onEvent(BookkeepingEvent.EditBill(bill))
                             onEditBill(bill)
@@ -329,7 +325,7 @@ fun BookkeepingScreen(
                         billType = dragged.billType.value,
                         remark = dragged.remark,
                         modifier = Modifier
-                            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(12.dp)))
+                            .then(applyCardGlass(RoundedCornerShape(12.dp)))
                             .padding(horizontal = 16.dp)
                     )
                 }
@@ -339,6 +335,16 @@ fun BookkeepingScreen(
 }
 
 
+/**
+ * 时段头图高度（无自选背景时，记账页顶部那张按时段换的横幅）。
+ *
+ * 取 190dp 的由来：源图是 1920×1081（morning，16:9）与 1920×1280（其余，3:2），
+ * `ContentScale.Crop` 会按屏宽裁上下——屏宽 360dp 时 190dp ≈ 1.89:1，
+ * 已接近 16:9 原图比例，基本只裁掉 3:2 那些图的一小圈；
+ * 150dp（≈2.4:1）裁得偏狠，图意常被切掉（2026-09-11 用户两次上调：150 → 170 → 190）。
+ */
+private val DayBannerHeight = 190.dp
+
 /** 时段横幅：按时段换图的整块头图，作为列表首项随时间滚走，不再包住顶栏。 */
 @Composable
 private fun DayBanner(headerBg: Int) {
@@ -347,7 +353,7 @@ private fun DayBanner(headerBg: Int) {
         contentDescription = null,
         modifier = Modifier
             .fillMaxWidth()
-            .height(150.dp),
+            .height(DayBannerHeight),
         contentScale = ContentScale.Crop
     )
 }
@@ -368,11 +374,11 @@ private fun TopBar(
     onAiClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 文字色三态：有背景→白（靠 scrim/照片衬托）；无背景+顶部→深色（onSurface）压在纯白上；无背景+滚动→浅灰（onSurfaceVariant）
+    // 文字色三态：有背景→白（靠 scrim/照片衬托）；无背景→自定义主题「顶栏标题色」（默认=字体色），滚动后略淡
     val textColor = when {
         hasBackground -> Color.White
-        !listScrolled -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        !listScrolled -> LocalRinklColors.current.topBarTitleColor
+        else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
     val iconColor = textColor
     Box(modifier = modifier.fillMaxWidth()) {

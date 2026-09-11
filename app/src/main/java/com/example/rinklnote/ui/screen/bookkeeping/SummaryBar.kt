@@ -30,21 +30,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import com.example.rinklnote.ui.component.applyCardGlass
 
 @SuppressLint("DefaultLocale")
-@OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun SummaryBar(
     currentMonth: Int = java.time.LocalDate.now().monthValue,
     totalExpense: Double,
     totalIncome: Double,
     aiSummary: String? = null,
-    aiSummaryLoading: Boolean = false,
-    hazeState: HazeState,
-    backgroundUri: String? = null
+    aiSummaryLoading: Boolean = false
 ) {
     // 展开/收起状态：默认收起，点击卡片切换。仅有总结内容时才可交互。
     var expanded by remember { mutableStateOf(false) }
@@ -69,7 +64,7 @@ fun SummaryBar(
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
             .clip(RoundedCornerShape(size = 15.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .then(clickModifier)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

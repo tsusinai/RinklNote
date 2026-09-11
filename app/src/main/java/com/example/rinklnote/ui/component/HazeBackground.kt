@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -40,39 +41,31 @@ val RinklCardFrostedStyle: HazeStyle = HazeStyle(
 )
 
 /**
- * 全局卡片「透窗」样式（Clear Glass）—— 完全透明，无 tint、无 blur。
+ * 卡片边框的统一规则（2026-09-11 最终版，用户拍板）。
  *
- * 用途：普通卡片（账单卡 BillCard、热力图 HeatmapBox、账户卡 AccountCard、
- * 我的页各 GroupCard、分类预算卡 CategoryBudgetCard）在**有自选背景**时用它，
- * 让背景照片透过卡片**清晰可见**（不模糊），只靠卡片圆角 + `rinkShadow` 阴影作边界。
+ * 全 App 除底部导航（毛玻璃）与加账单/新建账户 FAB 外，所有卡片都走这里——
+ * 卡片自身完全透明、**不挂 `hazeEffect`**，只靠一道 1dp 边框勾出边界，
+ * 自选背景照片直接透过卡片可见。
  *
- * 实现：不调用 `hazeEffect`，等于卡片位置完全无任何蒙层（最高透明度）。
- * 视觉上像透过一块无玻璃的「窗框」看照片。
+ * 边框色**只有一个来源**：[LocalRinklColors] 的「边框色」槽（「自定义主题」页第 5 项）。
+ * - 纯白底与自选照片底用**同一个色**，不再按「有无照片」分两套令牌 —— 早前那套
+ *   只要漏传一处 `backgroundUri` 就会出现同页框线深浅不一致（2026-09-11 踩过三次），
+ *   用户最终选择「统一跟随主题的边框色」。
+ * - 边框色可设为**透明**（alpha = 0）：等于用户显式选择「不描边」，此时连 1dp 都不挂。
+ *   **「不要边框」只此一个开关**，不要再引入 `backgroundUri == null` 之类的隐式条件。
  *
- * 无自选背景时这些卡片应回退到 [RinklCardFrostedStyle]（背景是浅色渐变 + 光斑，
- * 完全透明会让文字对比度不足）。调用方按 `backgroundUri != null` 选择。
- */
-
-/**
- * 卡片的「统一透明框」修饰：全 App 除底部导航（毛玻璃）和加账单/新建账户 FAB 外，
- * 所有卡片统一走这里——完全透明、只靠边框勾勒边界。
+ * **全 App 只有这一个边框来源**：任何组件不要再自己写 `border(...)` 定边框色。
  *
- * - 有自选背景 → **白色描边**（`border(1.dp, 白 0.55)`），背景照片透过卡片清晰可见
- * - 无背景（纯白页）→ **很浅灰边**（`border(1.dp, 黑 0.08)`），透明框在纯白底上以线条呈现
- *
- * 调用方式：`Modifier.clip(shape).then(applyCardGlass(hazeState, backgroundUri, shape))`。
+ * 调用方式：`Modifier.clip(shape).then(applyCardGlass(shape))`。
  *
  * @param shape 卡片圆角（与调用方 `clip` 用同一 shape，保证边框贴合圆角）
  */
 @Composable
-fun applyCardGlass(hazeState: HazeState, backgroundUri: String?, shape: Shape): Modifier {
-    return if (backgroundUri != null) {
-        // 透明框：白色描边（照片背景上纯透明无边框会糊成一团）。
-        Modifier.border(width = 1.dp, color = Color.White.copy(alpha = 0.55f), shape = shape)
-    } else {
-        // 透明框：很浅灰边（纯白背景上以线条勾勒卡片轮廓）。
-        Modifier.border(width = 1.dp, color = Color.Black.copy(alpha = 0.08f), shape = shape)
-    }
+fun applyCardGlass(shape: Shape): Modifier {
+    val border = LocalRinklColors.current.borderColor
+    // 透明 = 用户选了「不描边」：直接不挂 border，别画一条看不见的 1dp 线。
+    if (border.alpha == 0f) return Modifier
+    return Modifier.border(width = 1.dp, color = border, shape = shape)
 }
 
 /**

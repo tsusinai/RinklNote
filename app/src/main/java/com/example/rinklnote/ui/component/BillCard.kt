@@ -6,7 +6,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,11 +47,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.screen.bookkeeping.BillDragHost
-import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.util.toDateString
-import dev.chrisbanes.haze.HazeState
 
 /**
  * 一天一张卡：日期头 + 该日所有账单。
@@ -69,8 +65,6 @@ fun BillCard(
     dragHost: BillDragHost,
     onEdit: (Bill) -> Unit,
     onDragFinished: () -> Unit,
-    hazeState: HazeState,
-    backgroundUri: String? = null,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -88,7 +82,7 @@ fun BillCard(
             .padding(horizontal = 14.dp)
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
@@ -118,7 +112,7 @@ fun BillCard(
         }
 
         Spacer(modifier = Modifier.height(6.dp))
-        Canvas(modifier = Modifier.fillMaxWidth()) { drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),) }
+        RinklDivider(endInset = 6.dp)
 
         bills.forEachIndexed { slot, bill ->
             val isDragged = isSourceDay && bill.id == draggedId

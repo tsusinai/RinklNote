@@ -11,6 +11,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.navigation.AppNavigation
 import com.example.rinklnote.ui.theme.RinklNoteTheme
+import com.example.rinklnote.ui.theme.RinklThemeSlot
+import com.example.rinklnote.ui.theme.rinklColorsOf
 import com.example.rinklnote.widget.RinklNoteAppWidgetReceiver.Companion.EXTRA_CATEGORY_ID
 import com.example.rinklnote.widget.RinklNoteAppWidgetReceiver.Companion.EXTRA_OPEN_QUICK_ADD
 
@@ -27,7 +29,18 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            RinklNoteTheme(darkTheme = darkTheme) {
+            // 「自定义主题」的用户覆盖：5 个颜色槽读自 DataStore，未自定义的槽回落默认色。
+            val customColors by app.settingsManager.customThemeColors
+                .collectAsStateWithLifecycle(initialValue = emptyMap())
+            val rinklColors = rinklColorsOf(
+                dark = darkTheme,
+                themeColor = customColors[RinklThemeSlot.PRIMARY],
+                fontColor = customColors[RinklThemeSlot.FONT],
+                topBarTitleColor = customColors[RinklThemeSlot.TOP_BAR],
+                iconButtonColor = customColors[RinklThemeSlot.ICON],
+                borderColor = customColors[RinklThemeSlot.BORDER]
+            )
+            RinklNoteTheme(darkTheme = darkTheme, rinklColors = rinklColors) {
                 AppNavigation(app = app)
             }
         }

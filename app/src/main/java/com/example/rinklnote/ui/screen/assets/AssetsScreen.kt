@@ -70,6 +70,7 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
@@ -162,14 +163,12 @@ fun AssetsScreen(
             item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
 
             item(key = "total") {
-                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden, hazeState = hazeState, backgroundUri = backgroundUri)
+                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden)
             }
             items(state.accounts, key = { it.id }) { account ->
                 AccountCard(
                     account = account,
                     hidden = balanceHidden,
-                    hazeState = hazeState,
-                    backgroundUri = backgroundUri,
                     onClick = { editingAccount = account },
                     onMenu = { menuForAccount = account }
                 )
@@ -320,11 +319,11 @@ private fun AssetsTopBar(
     onAddAccount: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // 文字色三态：有背景→白；无背景+顶部→深色（onSurface）；无背景+滚动→浅灰（onSurfaceVariant）
+    // 文字色三态：有背景→白；无背景→自定义主题「顶栏标题色」（默认=字体色），滚动后略淡
     val textColor = when {
         hasBackground -> Color.White
-        !listScrolled -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        !listScrolled -> LocalRinklColors.current.topBarTitleColor
+        else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
     Box(modifier = modifier.fillMaxWidth()) {
         // 顶部渐隐遮罩：白色标题下的内容（照片/滚动上来的账户卡）被它压暗，保证可读性。
@@ -396,16 +395,14 @@ private fun AssetsTopBar(
 @Composable
 private fun TotalAssetsCard(
     accounts: List<Account>,
-    hidden: Boolean,
-    hazeState: HazeState,
-    backgroundUri: String?
+    hidden: Boolean
 ) {
     val total = remember(accounts) { accounts.sumOf { it.balance } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(16.dp)))
+            .then(applyCardGlass(RoundedCornerShape(16.dp)))
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -450,8 +447,6 @@ private fun TotalAssetsCard(
 private fun AccountCard(
     account: Account,
     hidden: Boolean,
-    hazeState: HazeState,
-    backgroundUri: String?,
     onClick: () -> Unit,
     onMenu: () -> Unit
 ) {
@@ -462,7 +457,7 @@ private fun AccountCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
-            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(12.dp)))
+            .then(applyCardGlass(RoundedCornerShape(12.dp)))
             .clickable { currentOnClick() }
             .padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
