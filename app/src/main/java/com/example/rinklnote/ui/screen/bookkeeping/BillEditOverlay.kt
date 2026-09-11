@@ -54,6 +54,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RemarkInputSheet
+import com.example.rinklnote.ui.theme.LocalRinklColors
 
 private fun categoryIconRes(name: String): Int = when (name) {
     "三餐" -> R.drawable.ic_category_meals
@@ -391,7 +392,7 @@ private fun SelectDot(isSelected: Boolean) {
             .clip(CircleShape)
             .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
             .then(
-                if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
                 else Modifier
             )
     )

@@ -52,6 +52,7 @@ import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.domain.MessageKind
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
 import java.time.LocalDate
@@ -153,7 +154,7 @@ fun AiScreen(
                     .border(
                         width = 1.dp,
                         color = if (aiFocused) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.outline,
+                                else LocalRinklColors.current.borderColor,
                         shape = RoundedCornerShape(24.dp)
                     )
                     .clip(RoundedCornerShape(24.dp))
