@@ -85,8 +85,10 @@ import com.example.rinklnote.ui.screen.login.LoginPage
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
+import com.example.rinklnote.ui.screen.profile.CustomThemeScreen
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
@@ -450,6 +452,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onLoginClick = { showLogin = true },
                         onBindQQClick = { showBindQQ = true },
                         onQqBotGuideClick = { showQqBotGuide = true },
+                        onCustomThemeClick = { navController.navigate("custom-theme") },
                         onCropBackground = { uri ->
                             // 图库选完 → 取景框裁剪路由（content:// 仅会话内可读，须当场裁剪落盘）
                             navController.navigate("background-crop/" + Uri.encode(uri.toString()))
@@ -463,6 +466,15 @@ fun AppNavigation(app: RinklNoteApp) {
                         viewModel = aiVM,
                         isLoggedIn = authState.isLoggedIn,
                         onVoiceInput = { startVoice(VoiceTarget.AI) }
+                    )
+                }
+                // 自定义主题：非 tab 路由 → 底栏自动隐藏、内容区占满全屏。
+                composable("custom-theme") {
+                    CustomThemeScreen(
+                        settingsManager = app.settingsManager,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 // 背景取景框裁剪：图库选图后的中间路由，非 tab 路由 → 底栏自动隐藏、内容区占满全屏。
@@ -505,6 +517,9 @@ fun AppNavigation(app: RinklNoteApp) {
         QuickAddDrawer(
             isVisible = showDrawer,
             viewModel = quickAddVM,
+            // 有自选背景才给毛玻璃采样源：无背景时抽屉保持纯白实心（同 CustomBottomBar 的开关逻辑）。
+            backgroundUri = appBackgroundUri,
+            hazeState = hazeState.takeIf { appBackgroundUri != null },
             onDismiss = {
                 showDrawer = false
                 voiceActive = false
@@ -782,6 +797,9 @@ private fun CustomBottomBar(
         Modifier.background(MaterialTheme.colorScheme.surface)
     }
 
+    // 图标/按钮色：自定义主题第 4 项；未自定义时跟随字体色（深色模式自动反白）。
+    val iconTint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurface
+
     Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp, start = 10.dp, end = 10.dp)) {
         Box(
             modifier = Modifier
@@ -803,13 +821,14 @@ private fun CustomBottomBar(
                         Icon(
                             painter = painterResource(label.iconId),
                             contentDescription = label.string,
+                            tint = iconTint,
                             modifier = Modifier.size(17.dp)
                         )
                         Text(
                             text = label.string,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = iconTint
                         )
                     }
                 }

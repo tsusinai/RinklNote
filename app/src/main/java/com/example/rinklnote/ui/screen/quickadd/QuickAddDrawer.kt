@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,7 +66,13 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.ui.component.RinklCardFrostedStyle
+import com.example.rinklnote.ui.component.RinklDivider
+import com.example.rinklnote.ui.component.applyCardGlass
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeEffect
 import com.example.rinklnote.ui.theme.AxisLabelGray
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.IncomeGreen
@@ -91,9 +98,20 @@ fun QuickAddDrawer(
     onBillAdded: () -> Unit,
     onVoiceInput: () -> Unit = {},
     onAmountTap: () -> Unit = {},
+    // 有自选背景时面板切毛玻璃所需的两件套；nav 层按「有背景」条件传入（同 CustomBottomBar）。
+    backgroundUri: String? = null,
+    hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
     BackHandler(enabled = isVisible) { onDismiss() }
+
+    // 面板材质：有自选背景 → 底部导航同款白雾毛玻璃（采样 AppBackground 的照片）；
+    // 无背景 → 纯白实心（毛玻璃无从采样，会露灰调兜底色）。
+    val panelSurface = if (hazeState != null) {
+        Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
+    } else {
+        Modifier.background(Color.White)
+    }
 
     AnimatedVisibility(
         visible = isVisible,
@@ -123,7 +141,7 @@ fun QuickAddDrawer(
                     .width(200.dp)
                     .rinkShadow()
                     .clip(RoundedCornerShape(topStart = 15.dp, bottomStart = 15.dp))
-                    .background(Color.White)
+                    .then(panelSurface)
                     .clickable(enabled = false) {} // consume click
                     .pointerInput(Unit) {
                         var dragOffset = 0f
@@ -190,7 +208,7 @@ private fun DrawerContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("快捷记账", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("快捷记账", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Icon(
                     painter = painterResource(R.drawable.ic_register),
                     contentDescription = "登记",
@@ -301,7 +319,7 @@ private fun TemplatesSection(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(12.dp)
     ) {
         Row(
@@ -309,7 +327,7 @@ private fun TemplatesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("快捷模板", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text("快捷模板", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Text("一键记账", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -349,7 +367,7 @@ private fun CategorySection(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(12.dp)
     ) {
         Row(
@@ -362,9 +380,7 @@ private fun CategorySection(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
-        Canvas(modifier = Modifier.fillMaxWidth()) {
-            drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),)
-        }
+        RinklDivider(endInset = 6.dp)
         Spacer(modifier = Modifier.height(4.dp))
 
         // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
@@ -437,7 +453,7 @@ private fun CategoryRow(
                 .clip(CircleShape)
                 .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 .then(
-                    if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
                     else Modifier
                 )
         )
@@ -480,7 +496,7 @@ private fun SubCategoryPopup(
                         .clip(CircleShape)
                         .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                         .then(
-                            if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                            if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
                             else Modifier
                         )
                 )
@@ -501,7 +517,7 @@ private fun AccountSection(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(12.dp)
     ) {
         Row(
@@ -520,9 +536,7 @@ private fun AccountSection(
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Canvas(modifier = Modifier.fillMaxWidth()) {
-            drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),)
-        }
+        RinklDivider(endInset = 6.dp)
         Spacer(modifier = Modifier.height(4.dp))
         accounts.forEach { account ->
             AccountRow(
@@ -557,7 +571,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (hidden) "***" else String.format(Locale.US, "%.2f", account.balance), fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (hidden) "***" else String.format(Locale.US, "%.2f", account.balance), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
@@ -565,7 +579,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
                     .clip(CircleShape)
                     .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                     .then(
-                        if (!isSelected) Modifier.border(1.5.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                        if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
                         else Modifier
                     )
             )
@@ -587,15 +601,20 @@ private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
                 .height(36.dp)
                 .rinkShadow(RoundedCornerShape(15.dp))
                 .clip(RoundedCornerShape(15.dp))
-                .background(MaterialTheme.colorScheme.surface)
+                .then(applyCardGlass(RoundedCornerShape(15.dp)))
                 .clickable { onAmountTap() },
             contentAlignment = Alignment.Center
         ) {
+            // 固定宽度 + 居中：金额位数增减时文本占位不变，数字不会横向跳动。
+            // 140dp 在 20sp Bold 下约容纳 9 位（"123456.78"），超出会被截断——
+            // 快捷记账金额上限远低于此，够用。
             Text(
                 text = state.amount.ifEmpty { "0.00" },
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+                textAlign = TextAlign.Center,
+                color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen,
+                modifier = Modifier.width(140.dp)
             )
         }
 
