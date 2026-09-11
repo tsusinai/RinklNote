@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -75,10 +76,11 @@ fun BillCard(
     val dragging = dragHost.dragging
     val isSourceDay = dragging?.date == date
     val draggedId = dragging?.billId ?: -1L
-    // 该日去掉被拖行后的剩余行（保持展示序）
-    val others = bills.filter { it.id != draggedId }
-    val gap = if (isSourceDay) dragHost.insertionIndex?.coerceIn(0, others.size) else null
-    val rowHeightDp = with(density) { (dragging?.rowHeightPx ?: 0f).toDp() }
+    val gap = if (isSourceDay) dragHost.insertionIndex?.coerceIn(0, bills.size - 1) else null
+    val rowHeightPx = dragging?.rowHeightPx ?: 0f
+    // 被拖行在日账单流中的原始槽位：拖动中必须保持组合（销毁会中断 pointerInput 手势流），
+    // 仅折叠高度 + 视觉隐藏，由页面层 ghost 代替显示。
+    val sourceIndex = if (isSourceDay) bills.indexOfFirst { it.id == draggedId } else -1
 
     Column(
         modifier = modifier
@@ -117,11 +119,18 @@ fun BillCard(
         Spacer(modifier = Modifier.height(6.dp))
         Canvas(modifier = Modifier.fillMaxWidth()) { drawLine(color = AxisLabelGray, start = Offset(x=0.dp.toPx(),y = 0.dp.toPx()),  end = Offset(size.width - 6.dp.toPx(), 0f),) }
 
-        others.forEachIndexed { index, bill ->
-            // 插入位在该行下方 → 该行整体下移一行，制造"让位"空隙
-            val shifted = gap != null && gap > index
+        bills.forEachIndexed { slot, bill ->
+            val isDragged = isSourceDay && bill.id == draggedId
+            // 视觉序：去掉被拖行后的序号
+            val vi = if (sourceIndex >= 0 && slot > sourceIndex) slot - 1 else slot
+            // 被拖行高度折叠为 0（卡片自适应收缩、列表自动补齐空位），插入位之下的行整体下移一行让出空隙
+            val shift = when {
+                gap == null || isDragged -> 0
+                vi >= gap -> 1
+                else -> 0
+            }
             val offsetY by animateDpAsState(
-                targetValue = if (shifted) rowHeightDp else 0.dp,
+                targetValue = with(density) { (shift * rowHeightPx).toDp() },
                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                 label = "rowShift"
             )
@@ -129,25 +138,27 @@ fun BillCard(
                 DraggableBillRow(
                     bill = bill,
                     date = date,
+                    isDragged = isDragged,
                     dragHost = dragHost,
                     onEdit = onEdit,
                     onDragFinished = onDragFinished,
-                    modifier = Modifier.offset(y = offsetY)
+                    modifier = Modifier
+                        .then(if (isDragged) Modifier.height(0.dp) else Modifier)
+                        .offset(y = offsetY)
+                        .graphicsLayer { alpha = if (isDragged) 0f else 1f }
                 )
             }
-        }
-        // 拖动源日：底部垫出一行高度，与各行下移共同构成补位/让位空间
-        if (isSourceDay) {
-            Spacer(modifier = Modifier.height(rowHeightDp))
         }
     }
 }
 
-/** 单行账单：单击编辑；长按启动拖动（重震动由页面层状态边沿触发），拖动中把位移上报给 dragHost。 */
+/** 单行账单：单击编辑；长按启动拖动（重震动由页面层状态边沿触发），拖动中把位移上报给 dragHost。
+ *  拖动中该行保持组合但视觉隐藏（isDragged），点击也被禁用，手势流由本行持续上报。 */
 @Composable
 private fun DraggableBillRow(
     bill: Bill,
     date: Long,
+    isDragged: Boolean,
     dragHost: BillDragHost,
     onEdit: (Bill) -> Unit,
     onDragFinished: () -> Unit,
@@ -161,7 +172,7 @@ private fun DraggableBillRow(
                 rowBounds = coords.boundsInRoot()
                 dragHost.registerRow(bill.id, date, coords.boundsInRoot())
             }
-            .clickable { onEdit(bill) }
+            .clickable(enabled = !isDragged) { onEdit(bill) }
             .pointerInput(bill.id) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->

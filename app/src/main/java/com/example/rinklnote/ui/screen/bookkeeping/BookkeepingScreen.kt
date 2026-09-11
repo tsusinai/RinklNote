@@ -73,6 +73,7 @@ import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
+import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
@@ -269,9 +270,9 @@ fun BookkeepingScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
                 .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                 .rinkShadow(CircleShape)
                 .size(51.dp)
+                .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                 .clip(CircleShape)
                 .hazeEffect(hazeState, HazeMaterials.thin())
                 .clickable(enabled = !isDragging) { onOpenDrawer() },
@@ -311,12 +312,11 @@ fun BookkeepingScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
                         .absoluteOffset(y = with(density) { ghostTop.toDp() })
                         .graphicsLayer {
                             scaleX = 1.05f
                             scaleY = 1.05f
-                            shadowElevation = 20f
-                            shape = RoundedCornerShape(12.dp)
                         }
                         .zIndex(10f)
                 ) {
@@ -326,7 +326,7 @@ fun BookkeepingScreen(
                         billType = dragged.billType.value,
                         remark = dragged.remark,
                         modifier = Modifier
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(12.dp)))
                             .padding(horizontal = 16.dp)
                     )
                 }
