@@ -1,16 +1,18 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 
 /** 单条正在拖动的账单（坐标均为 root 坐标系）。 */
 data class BillDragInfo(
@@ -81,10 +83,11 @@ class BillDragHost {
             .filter { it.key != d.billId && rowDates[it.key] == d.date }
             .map { it.value }
         insertionIndex = rows.count { it.center.y < d.centerY }
-        // 删除区命中：ghost 中心落在删除区（横向略放宽）内
+        // 删除区命中：只看纵向重叠（ghost 与 FAB 都居中对齐，横向必然重叠），
+        // 命中带 = FAB 高度上下各放宽一半，手指不必精确压在圆圈中心。
         val zone = deleteZone
-        isOverDelete = zone != null && zone.inflate(zone.width * 0.25f)
-            .contains(Offset(rowBounds[d.billId]?.center?.x ?: zone.center.x, d.centerY))
+        val slack = (zone?.height ?: 0f) * 0.5f
+        isOverDelete = zone != null && d.centerY >= zone.top - slack && d.centerY <= zone.bottom + slack
     }
 
     fun endDrag() {
@@ -94,15 +97,38 @@ class BillDragHost {
     }
 }
 
-/** 震动助手：拖起/删除确认用重震动，插入位变化/进入删除区用轻震动。 */
-class BillDragHaptics(private val feedback: HapticFeedback) {
-    fun heavy() = feedback.performHapticFeedback(HapticFeedbackType.LongPress)
-    fun light() = feedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+/** 震动助手：直接驱动系统 Vibrator（可控时长与振幅），比 Compose 预设的 HapticFeedbackType 强得多。 */
+class BillDragHaptics(context: Context) {
+    private val vibrator: Vibrator? = run {
+        val app = context.applicationContext
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
+
+    /** 拖起 / 落入删除区：一记干脆的重震（最大振幅）。 */
+    fun heavy() = play(longArrayOf(0, 50), intArrayOf(0, 255))
+
+    /** 删除落定：两段重震，与「命中」区分开。 */
+    fun confirm() = play(longArrayOf(0, 40, 70, 80), intArrayOf(0, 255, 0, 255))
+
+    /** 插入位变化：短促轻震。 */
+    fun light() = play(longArrayOf(0, 18), intArrayOf(0, 190))
+
+    private fun play(timings: LongArray, amplitudes: IntArray) {
+        val v = vibrator ?: return
+        if (!v.hasVibrator()) return
+        v.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+    }
 }
 
 @Composable
 fun rememberBillDragHost(): Pair<BillDragHost, BillDragHaptics> {
     val host = remember { BillDragHost() }
-    val haptics = BillDragHaptics(LocalHapticFeedback.current)
+    val context = LocalContext.current
+    val haptics = remember(context) { BillDragHaptics(context) }
     return host to haptics
 }

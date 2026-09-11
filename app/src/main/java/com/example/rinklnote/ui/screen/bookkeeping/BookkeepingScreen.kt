@@ -144,7 +144,7 @@ fun BookkeepingScreen(
         if (d != null) {
             val dragged = state.bills.firstOrNull { it.id == d.billId }
             if (dragHost.isOverDelete) {
-                dragHaptics.heavy()
+                dragHaptics.confirm()
                 dragged?.let { viewModel.onEvent(BookkeepingEvent.DeleteBill(it)) }
             } else if (dragged != null) {
                 val dayBills = groupedBills[d.date].orEmpty()
@@ -158,7 +158,10 @@ fun BookkeepingScreen(
         }
     }
 
-    // 震动边沿：进入删除区（重）、插入位变化（轻）
+    // 震动边沿：拖起（重）、进入删除区（重）、插入位变化（轻）
+    LaunchedEffect(dragHost.dragging?.billId) {
+        if (dragHost.dragging != null) dragHaptics.heavy()
+    }
     LaunchedEffect(dragHost.isOverDelete) {
         if (dragHost.isOverDelete) dragHaptics.heavy()
     }

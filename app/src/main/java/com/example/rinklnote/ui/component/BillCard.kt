@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -165,6 +166,11 @@ private fun DraggableBillRow(
     modifier: Modifier = Modifier
 ) {
     var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    // 兜底：行在拖动中被移出组合（列表重排/滚动回收）时，手势流不会回调 onDragCancel，
+    // 会让 dragHost.dragging 永久残留（FAB 卡在删除态且不可点）。这里强制收尾。
+    DisposableEffect(bill.id) {
+        onDispose { if (dragHost.dragging?.billId == bill.id) onDragFinished() }
+    }
     Box(
         modifier = modifier
             .fillMaxWidth()
