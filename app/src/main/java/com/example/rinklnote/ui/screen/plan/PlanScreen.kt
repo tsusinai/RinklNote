@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.RinklCardFrostedStyle
+import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
@@ -57,7 +59,6 @@ import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlin.math.abs
 
 /** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时记录，键盘确认后按维度 SetBudget）。 */
@@ -73,7 +74,7 @@ private sealed interface BudgetEditTarget {
  * 风格深度对齐首页（Bookkeeping）：
  * - `Box` 根 + 渐变背景作毛玻璃（haze）blur 源；自选照片时由 nav 层整窗铺满。
  * - 悬浮顶栏（floating top bar）：极简，仅居中「计划」标题（tab 内页无返回键，左右留空）+ scrim 渐隐。
- * - 卡片 `rinkShadow` + `hazeEffect(HazeMaterials.thin())` 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
+ * - 卡片 `rinkShadow` + `hazeEffect(RinklCardFrostedStyle)` 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
  * - 预算键盘 overlay 用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致），而非裸 `if` 硬切换。
  *
  * 业务不变量：ViewModel 的 `State`/`Event` 不动；[BudgetEditTarget] 密封类型表达三级编辑目标（总额/分类/子分类）。
@@ -133,6 +134,7 @@ fun PlanScreen(
             TotalBudgetCard(
                 state = state,
                 hazeState = hazeState,
+                backgroundUri = backgroundUri,
                 onClick = { editTarget = BudgetEditTarget.Total }
             )
 
@@ -159,6 +161,7 @@ fun PlanScreen(
                         CategoryBudgetCard(
                             category = category,
                             hazeState = hazeState,
+                            backgroundUri = backgroundUri,
                             onClick = { editTarget = BudgetEditTarget.Category(category.categoryId) },
                             onSubClick = { sub ->
                                 editTarget = BudgetEditTarget.SubCategory(sub.subCategoryId, sub.parentCategoryId)
@@ -170,7 +173,11 @@ fun PlanScreen(
         }
 
         // 悬浮顶栏：居中「计划」标题 + scrim（对齐首页 TopBar，但预算页无额外操作，左右留空）。
-        PlanTopBar(scrimAlpha = topBarScrimAlpha)
+        PlanTopBar(
+            scrimAlpha = topBarScrimAlpha,
+            hasBackground = backgroundUri != null,
+            listScrolled = listScrolled
+        )
 
         // 全屏键盘 overlay 用上滑进入（与快加键盘一致的 SheetEnter/Exit），而非裸 if 硬切换
         AnimatedVisibility(
@@ -215,7 +222,13 @@ fun PlanScreen(
 
 /** 预算页悬浮顶栏：极简，仅居中「计划」标题 + 渐隐 scrim（tab 内页无返回键，左右留空）。 */
 @Composable
-private fun PlanTopBar(scrimAlpha: Float, modifier: Modifier = Modifier) {
+private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: Boolean, modifier: Modifier = Modifier) {
+    // 文字色三态：有背景→白；无背景+顶部→深色（onSurface）；无背景+滚动→浅灰（onSurfaceVariant）
+    val textColor = when {
+        hasBackground -> Color.White
+        !listScrolled -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Box(modifier = modifier.fillMaxWidth()) {
         // 顶部渐隐遮罩：白色标题下的内容被它压暗，保证可读性。
         if (scrimAlpha > 0f) {
@@ -242,7 +255,7 @@ private fun PlanTopBar(scrimAlpha: Float, modifier: Modifier = Modifier) {
                 text = "计划",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = textColor,
                 modifier = Modifier.align(Alignment.Center)
             )
         }
@@ -277,15 +290,23 @@ private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): Str
 private fun TotalBudgetCard(
     state: BudgetState,
     hazeState: HazeState,
+    backgroundUri: String?,
     onClick: () -> Unit
 ) {
     val budget = state.totalBudget
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.regular())
+            .then(
+                if (backgroundUri != null) {
+                    // 有自选背景：白雾毛玻璃
+                    Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
+                } else {
+                    // 无自选背景：白色实心卡片（首个组件）
+                    Modifier.background(MaterialTheme.colorScheme.surface)
+                }
+            )
             .clickable { onClick() }
             .padding(16.dp)
     ) {
@@ -404,6 +425,7 @@ private fun EmptyCategoryGuide() {
 private fun CategoryBudgetCard(
     category: CategoryBudgetState,
     hazeState: HazeState,
+    backgroundUri: String?,
     onClick: () -> Unit,
     onSubClick: (SubCategoryBudgetState) -> Unit
 ) {
@@ -412,7 +434,7 @@ private fun CategoryBudgetCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(13.dp))
             .clip(RoundedCornerShape(13.dp))
-            .hazeEffect(hazeState, HazeMaterials.regular())
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(13.dp)))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(

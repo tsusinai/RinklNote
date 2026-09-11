@@ -75,7 +75,9 @@ import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
+import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
+import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.login.LoginPage
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
@@ -96,6 +98,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 
 data class Tabs(
@@ -380,11 +383,49 @@ fun AppNavigation(app: RinklNoteApp) {
                         onFinanceClick = { navigateTo("assets") },
                         onMoreClick = { navigateTo("profile") },
                         onAiClick = { navigateTo("ai") },
+                        onMonthDetailClick = { navController.navigate("month-detail") },
+                        onEditBill = { navController.navigate("bill-edit") },
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         viewModel = bookkeepingVM
                     )
 
+                }
+                composable("bill-edit") {
+                    val state by bookkeepingVM.state.collectAsStateWithLifecycle()
+                    state.editingBill?.let { bill ->
+                        BillEditOverlay(
+                            bill = bill,
+                            expenseCategories = state.expenseCategories,
+                            incomeCategories = state.incomeCategories,
+                            accounts = state.accounts,
+                            onCancel = {
+                                bookkeepingVM.onEvent(BookkeepingEvent.CancelEdit)
+                                navController.popBackStack()
+                            },
+                            onConfirm = { newBill ->
+                                bookkeepingVM.onEvent(BookkeepingEvent.ConfirmEdit(newBill))
+                                navController.popBackStack()
+                            },
+                            onLoadSubCategories = bookkeepingVM::subCategories
+                        )
+                    }
+                }
+                composable("month-detail") {
+                    val state by bookkeepingVM.state.collectAsStateWithLifecycle()
+                    val monthLabel = remember(state.selectedMonthOffset) {
+                        val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
+                        "${d.year}年${d.monthValue}月"
+                    }
+                    MonthDetailOverlay(
+                        monthLabel = monthLabel,
+                        bills = state.bills,
+                        month = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
+                        expenseTotal = state.totalExpense,
+                        incomeTotal = state.totalIncome,
+                        monthDetail = state.monthDetail,
+                        onBack = { navController.popBackStack() }
+                    )
                 }
                 composable("assets") {
                     AssetsScreen(
@@ -403,7 +444,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         aiTokenViewModel = aiTokenVM,
                         onLoginClick = { showLogin = true },
                         onBindQQClick = { showBindQQ = true },
-                        onQqBotGuideClick = { showQqBotGuide = true }
+                        onQqBotGuideClick = { showQqBotGuide = true },
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState
                     )
                 }
                 composable("ai") {
@@ -703,8 +746,9 @@ private fun CustomBottomBar(
     )
 
     val barSurface = if (hazeState != null) {
-        // 毛玻璃：采样 nav 层的自定义背景，底栏不再是一块挡住壁纸的实心白。
-        Modifier.hazeEffect(hazeState, HazeMaterials.regular())
+        // 毛玻璃（重点区）：采样 nav 层的自定义背景，底栏不再是一块挡住壁纸的实心白。
+        // 统一用 RinklCardFrostedStyle 白雾玻璃，与首页首支总览/总资产/本月预算一致。
+        Modifier.hazeEffect(hazeState, com.example.rinklnote.ui.component.RinklCardFrostedStyle)
     } else {
         Modifier.background(MaterialTheme.colorScheme.surface)
     }
@@ -714,7 +758,6 @@ private fun CustomBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
-                .rinkShadow(RoundedCornerShape(18.dp))
                 .clip(RoundedCornerShape(20.dp))
                 .then(barSurface)
         ) {

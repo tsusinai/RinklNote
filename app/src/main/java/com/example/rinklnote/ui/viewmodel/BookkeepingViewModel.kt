@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -148,15 +149,17 @@ class BookkeepingViewModel(
             val nextMonthStart = getNextMonthStart(offset)
             val daysInMonth = Instant.ofEpochMilli(monthStart)
                 .atZone(bookkeepingZone()).toLocalDate().lengthOfMonth()
-            repository.observeBillsByMonth(monthStart, nextMonthStart).collect { bills ->
-                _state.update {
-                    it.copy(
-                        bills = bills,
-                        isLoading = false,
-                        monthDetail = buildMonthDetail(bills, daysInMonth)
-                    )
+            repository.observeBillsByMonth(monthStart, nextMonthStart)
+                .distinctUntilChanged()
+                .collect { bills ->
+                    _state.update {
+                        it.copy(
+                            bills = bills,
+                            isLoading = false,
+                            monthDetail = buildMonthDetail(bills, daysInMonth)
+                        )
+                    }
                 }
-            }
         }
     }
 

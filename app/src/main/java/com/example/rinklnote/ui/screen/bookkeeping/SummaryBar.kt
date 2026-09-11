@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,7 +34,7 @@ import com.example.rinklnote.ui.theme.IncomeGreen
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
+import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalHazeMaterialsApi::class)
@@ -45,7 +45,8 @@ fun SummaryBar(
     totalIncome: Double,
     aiSummary: String? = null,
     aiSummaryLoading: Boolean = false,
-    hazeState: HazeState
+    hazeState: HazeState,
+    backgroundUri: String? = null
 ) {
     // 展开/收起状态：默认收起，点击卡片切换。仅有总结内容时才可交互。
     var expanded by remember { mutableStateOf(false) }
@@ -69,9 +70,16 @@ fun SummaryBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
-            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
+            .then(
+                if (backgroundUri != null) {
+                    // 有自选背景：白雾毛玻璃，采样照片背景
+                    Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
+                } else {
+                    // 无自选背景：白色实心卡片（顶栏白色卡）
+                    Modifier.background(MaterialTheme.colorScheme.surface)
+                }
+            )
             .then(clickModifier)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

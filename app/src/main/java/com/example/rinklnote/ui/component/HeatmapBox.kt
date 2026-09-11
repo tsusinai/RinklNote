@@ -39,9 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.Blue40
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
 import java.time.LocalDate
 
 /** 月度每日支出热力图：周一起始的月历格子，每个格子按当日支出深浅着色。
@@ -72,17 +70,22 @@ fun HeatmapBox(
     modifier: Modifier = Modifier,
     heatmap: MonthHeatmap,
     hazeState: HazeState,
+    backgroundUri: String? = null,
     onDetailClick: () -> Unit = {}
 ) {
     val hotColor = Blue40
-    val maxExpense = heatmap.dailyExpense.values.maxOrNull()?.coerceAtLeast(1f) ?: 1f
-    val today = LocalDate.now(bookkeepingZone())
-    val todayDay =
+    // 缓存重计算：maxExpense / rangeTotals / rangeMax / today 只随 heatmap 变化，重组时不重复算。
+    val maxExpense = remember(heatmap) {
+        heatmap.dailyExpense.values.maxOrNull()?.coerceAtLeast(1f) ?: 1f
+    }
+    val today = remember { LocalDate.now(bookkeepingZone()) }
+    val todayDay = remember(heatmap, today) {
         if (heatmap.year == today.year && heatmap.monthValue == today.monthValue) today.dayOfMonth else -1
+    }
 
     // 收起态三段（1-10/11-20/21-月末）的支出合计及其相对强度。
-    val rangeTotals = heatRangeTotals(heatmap.dailyExpense, heatmap.daysInMonth)
-    val rangeMax = rangeTotals.maxOrNull()?.coerceAtLeast(1f) ?: 1f
+    val rangeTotals = remember(heatmap) { heatRangeTotals(heatmap.dailyExpense, heatmap.daysInMonth) }
+    val rangeMax = remember(rangeTotals) { rangeTotals.maxOrNull()?.coerceAtLeast(1f) ?: 1f }
 
     // 展开/收起：默认收回，点击标题区切换。
     var expanded by remember { mutableStateOf(false) }
@@ -96,9 +99,16 @@ fun HeatmapBox(
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp)
-            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.thin())
+            .then(
+                if (backgroundUri != null) {
+                    // 有自选背景：透明 + 白色描边
+                    Modifier.border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(15.dp))
+                } else {
+                    // 无自选背景：白色实心卡片（首页首个组件之一）
+                    Modifier.background(MaterialTheme.colorScheme.surface)
+                }
+            )
             .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
         // 标题行：左侧标题+chevron 可点（切换展开/收起），右侧「明细」独立打开汇总。

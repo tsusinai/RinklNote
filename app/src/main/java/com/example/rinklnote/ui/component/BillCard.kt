@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
@@ -45,7 +46,6 @@ import com.example.rinklnote.util.toDateString
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
 
 /** 一天一张卡：日期头 + 该日所有账单。内部经 derivedStateOf 读取 revealed/menu，
  *  侧滑只重组真正受影响的行，而非整卡。 */
@@ -64,6 +64,7 @@ fun BillCard(
     onEdit: (Bill) -> Unit,
     onDelete: (Bill) -> Unit,
     hazeState: HazeState,
+    backgroundUri: String? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -71,7 +72,7 @@ fun BillCard(
             .padding(horizontal = 14.dp)
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .hazeEffect(hazeState, HazeMaterials.regular())
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
@@ -87,8 +88,12 @@ fun BillCard(
             )
             val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
             val sign = if (totalAmount >= 0) "+" else "-"
+            // 缓存金额格式化（重组时不重复 String.format）。
+            val totalText = remember(totalAmount) {
+                String.format(Locale.US, "%s¥%.2f", sign, kotlin.math.abs(totalAmount))
+            }
             Text(
-                text = String.format(Locale.US, "%s¥%.2f", sign, kotlin.math.abs(totalAmount)),
+                text = totalText,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (totalAmount >= 0) incomeGreen else MaterialTheme.colorScheme.tertiary
@@ -156,6 +161,10 @@ private fun BillItem(
 ) {
     val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
     val isExpense = billType == "EXPENSE"
+    // 缓存金额格式化（重组时不重复 String.format）。
+    val amountText = remember(amount, isExpense) {
+        String.format(Locale.US, "%s¥%.2f", if (isExpense) "-" else "+", amount)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -197,7 +206,7 @@ private fun BillItem(
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = String.format(Locale.US, "%s¥%.2f", if (isExpense) "-" else "+", amount),
+            text = amountText,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = if (isExpense) MaterialTheme.colorScheme.tertiary else incomeGreen

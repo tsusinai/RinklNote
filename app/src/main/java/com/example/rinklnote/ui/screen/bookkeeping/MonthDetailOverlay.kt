@@ -1,10 +1,6 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import com.example.rinklnote.ui.theme.Motion
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,17 +60,16 @@ private sealed interface MonthFilter {
 
 @Composable
 fun MonthDetailOverlay(
-    visible: Boolean,
     monthLabel: String,
     bills: List<Bill>,
     month: LocalDate,
     expenseTotal: Double,
     incomeTotal: Double,
     monthDetail: MonthDetailData,
-    onDismiss: () -> Unit
+    onBack: () -> Unit
 ) {
     // 选中筛选；切换可见/换月时自动重置为「无」
-    var filter by remember(visible, bills) { mutableStateOf<MonthFilter>(MonthFilter.None) }
+    var filter by remember(bills) { mutableStateOf<MonthFilter>(MonthFilter.None) }
 
     // 明细清单：跟随筛选收窄，否则整月
     val filteredBills = remember(bills, filter) {
@@ -92,18 +87,13 @@ fun MonthDetailOverlay(
             .map { (name, bl) -> Triple(name, bl.sumOf { it.amount }, bl) }
     }
 
-    BackHandler(enabled = visible) { onDismiss() }
+    BackHandler { onBack() }
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
-        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 14.dp, top = 180.dp, end = 14.dp, bottom = 8.dp)
@@ -191,7 +181,7 @@ fun MonthDetailOverlay(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiary,
                         )
-                        TextButton(onClick = onDismiss) {
+                        TextButton(onClick = onBack) {
                             Text("关闭", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -205,7 +195,6 @@ fun MonthDetailOverlay(
                     )
                 }
             }
-        }
     }
 }
 

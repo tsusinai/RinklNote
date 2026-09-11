@@ -79,6 +79,8 @@ fun BookkeepingScreen(
     onFinanceClick: () -> Unit,
     onMoreClick: () -> Unit,
     onAiClick: () -> Unit,
+    onMonthDetailClick: () -> Unit,
+    onEditBill: (Bill) -> Unit,
     backgroundUri: String?,
     hazeState: HazeState,
     viewModel: BookkeepingViewModel
@@ -105,7 +107,6 @@ fun BookkeepingScreen(
     var revealedBillId by remember { mutableStateOf<Long?>(null) }
     var menuBill by remember { mutableStateOf<Bill?>(null) }
     var deleteTarget by remember { mutableStateOf<Bill?>(null) }
-    var showMonthDetail by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -158,7 +159,8 @@ fun BookkeepingScreen(
                     currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     aiSummary = if (isCurrentMonth) state.aiSummary else null,
                     aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false,
-                    hazeState = hazeState
+                    hazeState = hazeState,
+                    backgroundUri = backgroundUri
                 )
             }
 
@@ -168,26 +170,32 @@ fun BookkeepingScreen(
                 HeatmapBox(
                     heatmap = heatmap,
                     hazeState = hazeState,
-                    onDetailClick = { showMonthDetail = true }
+                    onDetailClick = onMonthDetailClick
                 )
             }
             item(key = "spacer-2") { Spacer(modifier = Modifier.height(horizonalPadding)) }
 
             groupedBills.forEach { (date, bills) ->
                 item(key = date) {
+                    // 缓存该日合计，重组时不重复 sumOf。
+                    val totalAmount = remember(date, bills) {
+                        bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amount else it.amount }
+                    }
                     BillCard(
                         date = date,
                         dayOfWeek = date.toDayOfWeek(),
-                        totalAmount = bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amount else it.amount },
+                        totalAmount = totalAmount,
                         bills = bills,
                         revealedBillId = revealedBillId,
                         menuBill = menuBill,
                         hazeState = hazeState,
+                        backgroundUri = backgroundUri,
                         onRevealChange = { revealedBillId = it },
                         onMenuChange = { menuBill = it },
                         onEdit = { bill ->
                             menuBill = null
                             viewModel.onEvent(BookkeepingEvent.EditBill(bill))
+                            onEditBill(bill)
                         },
                         onDelete = { bill ->
                             menuBill = null
@@ -205,6 +213,8 @@ fun BookkeepingScreen(
         TopBar(
             monthLabel = monthLabel,
             scrimAlpha = topBarScrimAlpha,
+            hasBackground = backgroundUri != null,
+            listScrolled = listScrolled,
             offset = state.selectedMonthOffset,
             onPrev = { viewModel.selectMonth(state.selectedMonthOffset - 1) },
             onNext = { viewModel.selectMonth(state.selectedMonthOffset + 1) },
@@ -233,25 +243,6 @@ fun BookkeepingScreen(
                 )
         }
 
-        // Edit overlay — fullscreen, covers everything while editing；用上滑进入（与快加键盘一致）
-        AnimatedVisibility(
-            visible = state.editingBill != null,
-            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
-            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
-        ) {
-            state.editingBill?.let { bill ->
-                BillEditOverlay(
-                    bill = bill,
-                    expenseCategories = state.expenseCategories,
-                    incomeCategories = state.incomeCategories,
-                    accounts = state.accounts,
-                    onCancel = { viewModel.onEvent(BookkeepingEvent.CancelEdit) },
-                    onConfirm = { newBill -> viewModel.onEvent(BookkeepingEvent.ConfirmEdit(newBill)) },
-                    onLoadSubCategories = viewModel::subCategories
-                )
-            }
-        }
-
         // Delete confirm dialog
         deleteTarget?.let { bill ->
             AlertDialog(
@@ -271,18 +262,6 @@ fun BookkeepingScreen(
                 }
             )
         }
-
-        // Month detail overlay — shows the currently selected month's summary
-        MonthDetailOverlay(
-            visible = showMonthDetail,
-            monthLabel = monthLabel,
-            bills = state.bills,
-            month = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
-            expenseTotal = state.totalExpense,
-            incomeTotal = state.totalIncome,
-            monthDetail = state.monthDetail,
-            onDismiss = { showMonthDetail = false }
-        )
     }
 }
 
@@ -304,6 +283,8 @@ private fun DayBanner(headerBg: Int) {
 private fun TopBar(
     monthLabel: String,
     scrimAlpha: Float,
+    hasBackground: Boolean,
+    listScrolled: Boolean,
     offset: Int,
     onPrev: () -> Unit,
     onNext: () -> Unit,
@@ -314,6 +295,13 @@ private fun TopBar(
     onAiClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 文字色三态：有背景→白（靠 scrim/照片衬托）；无背景+顶部→深色（onSurface）压在纯白上；无背景+滚动→浅灰（onSurfaceVariant）
+    val textColor = when {
+        hasBackground -> Color.White
+        !listScrolled -> MaterialTheme.colorScheme.onSurface
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val iconColor = textColor
     Box(modifier = modifier.fillMaxWidth()) {
         // 顶部渐隐遮罩：白色图标下的内容（照片/滚动上来的账单）被它压暗，保证可读性。
         if (scrimAlpha > 0f) {
@@ -349,7 +337,7 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onMoreClick),
-                tint = Color.White
+                tint = iconColor
             )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
@@ -358,7 +346,7 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onAiClick),
-                tint = Color.White
+                tint = iconColor
             )
         }
         Row(
@@ -369,7 +357,7 @@ private fun TopBar(
                 "‹ ",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = textColor,
                 modifier = Modifier
                     .padding(horizontal = 6.dp)
                     .pointerInput(Unit) { detectTapGestures { onPrev() } }
@@ -378,14 +366,14 @@ private fun TopBar(
                 text = monthLabel,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = textColor,
                 modifier = Modifier.pointerInput(Unit) { detectTapGestures { onBackToNow() } }
             )
             Text(
                 " ›",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (offset < 0) Color.White else Color.White.copy(alpha = 0.35f),
+                color = if (offset < 0) textColor else textColor.copy(alpha = 0.35f),
                 modifier = Modifier
                     .padding(horizontal = 6.dp)
                     .pointerInput(offset) { detectTapGestures { if (offset < 0) onNext() } }
@@ -401,7 +389,7 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onFinanceClick),
-                tint = Color.White
+                tint = iconColor
             )
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
@@ -410,7 +398,7 @@ private fun TopBar(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onOpenDrawer),
-                tint = Color.White
+                tint = iconColor
             )
         }
         } // 内容层 Box
