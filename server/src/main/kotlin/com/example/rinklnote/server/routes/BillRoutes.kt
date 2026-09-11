@@ -25,7 +25,8 @@ data class CreateBillRequest(
     val accountId: Long,
     val remark: String? = null,
     val date: Long? = null,
-    val baseUpdatedAt: Long? = null // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
+    val baseUpdatedAt: Long? = null, // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
+    val sortOrder: Long? = null // 同日内显式排序名次（App 端拖动重排）
 )
 
 @Serializable
@@ -106,7 +107,8 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     subCategoryName = body.subCategoryName,
                     accountId = body.accountId,
                     remark = body.remark,
-                    date = body.date
+                    date = body.date,
+                    sortOrder = body.sortOrder
                 )
                 call.respond(HttpStatusCode.Created, bill)
             }
@@ -150,6 +152,7 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         it[BillsTable.subCategoryName] = body.subCategoryName
                         it[BillsTable.accountId] = body.accountId
                         it[BillsTable.remark] = body.remark
+                        it[BillsTable.sortOrder] = body.sortOrder
                         it[BillsTable.updatedAt] = now
                     }
 
@@ -159,7 +162,7 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         subCategoryName = body.subCategoryName, accountId = body.accountId,
                         remark = body.remark, date = row[BillsTable.date],
                         source = row[BillsTable.billSource], createdAt = row[BillsTable.createdAt],
-                        updatedAt = now
+                        updatedAt = now, sortOrder = body.sortOrder
                     )
                 }
 

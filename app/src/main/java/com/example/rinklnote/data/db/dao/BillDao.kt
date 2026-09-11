@@ -16,10 +16,11 @@ interface BillDao {
     @Update
     suspend fun update(bill: Bill)
 
-    @Query("SELECT * FROM bills WHERE deleted = 0 ORDER BY date DESC, created_at DESC")
+    // 排序：日倒序；日内按显式 sort_order 降序，未排序（NULL）按 created_at 兜底（新账单在前）。
+    @Query("SELECT * FROM bills WHERE deleted = 0 ORDER BY date DESC, COALESCE(sort_order, created_at) DESC, created_at DESC")
     fun observeAll(): Flow<List<Bill>>
 
-    @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :monthStart AND date < :nextMonthStart ORDER BY date DESC")
+    @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :monthStart AND date < :nextMonthStart ORDER BY date DESC, COALESCE(sort_order, created_at) DESC, created_at DESC")
     fun observeByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>>
 
     @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
@@ -75,7 +76,7 @@ interface BillDao {
     suspend fun getById(id: Long): Bill?
 
 
-    @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd ORDER BY date DESC")
+    @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd ORDER BY date DESC, COALESCE(sort_order, created_at) DESC, created_at DESC")
     suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill>
 
     @Query("SELECT category_name, SUM(amount) as total FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")

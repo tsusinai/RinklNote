@@ -17,6 +17,7 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
+import com.example.rinklnote.util.reorderRanks
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -94,6 +95,8 @@ sealed interface BookkeepingEvent {
     data object CancelEdit : BookkeepingEvent
     data class ConfirmEdit(val bill: Bill) : BookkeepingEvent
     data class DeleteBill(val bill: Bill) : BookkeepingEvent
+    /** 拖动重排：newOrder 为该日账单自上而下的新顺序（包含被拖动项）。 */
+    data class ReorderBills(val newOrder: List<Bill>) : BookkeepingEvent
     data class SelectMonth(val offset: Int) : BookkeepingEvent
 }
 
@@ -146,6 +149,7 @@ class BookkeepingViewModel(
             is BookkeepingEvent.CancelEdit -> _editState.update { it.copy(editingBill = null) }
             is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
             is BookkeepingEvent.DeleteBill -> deleteBill(event.bill)
+            is BookkeepingEvent.ReorderBills -> reorderBills(event.newOrder)
             is BookkeepingEvent.SelectMonth -> selectMonth(event.offset)
         }
     }
@@ -256,6 +260,20 @@ class BookkeepingViewModel(
         viewModelScope.launch {
             repository.deleteBill(bill) // soft delete locally (dirty=1, deleted=1)
             syncManager?.let { launch { it.pushBill(bill.copy(deleted = true, dirty = true)) } }
+        }
+    }
+
+    /** 拖动重排提交：按新序赋 sort_order 名次并整批置脏，逐条推送服务端。 */
+    private fun reorderBills(newOrder: List<Bill>) {
+        if (newOrder.isEmpty()) return
+        val ranks = reorderRanks(newOrder.size)
+        val now = System.currentTimeMillis()
+        val reRanked = newOrder.mapIndexed { i, bill ->
+            bill.copy(sortOrder = ranks[i], dirty = true, updatedAt = now)
+        }
+        viewModelScope.launch {
+            repository.reorderBills(reRanked)
+            syncManager?.let { sm -> reRanked.forEach { bill -> launch { sm.pushBill(bill) } } }
         }
     }
 

@@ -23,7 +23,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
     entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class],
-    version = 11,
+    version = 12,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -134,6 +134,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE budgets ADD COLUMN sub_category_id INTEGER")
             }
         }
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            // 拖动重排：同日显式排序名次；NULL = 未显式排序（查询按 COALESCE(sort_order, created_at) 兜底）。
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN sort_order INTEGER DEFAULT NULL")
+            }
+        }
 
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
@@ -141,7 +147,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration()
                 .build()
         }

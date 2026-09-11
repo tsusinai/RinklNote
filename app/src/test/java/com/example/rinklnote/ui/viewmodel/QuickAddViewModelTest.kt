@@ -212,6 +212,7 @@ class QuickAddViewModelTest {
         override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
+        override suspend fun reorderBills(bills: List<Bill>) {}
         override suspend fun updateAccount(account: Account) {}
         override fun observeAccounts(): Flow<List<Account>> = accounts
         override suspend fun insertAccount(account: Account): Long = 0

@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import android.content.res.Resources
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -10,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -24,16 +26,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,13 +48,17 @@ import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
@@ -60,6 +69,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import com.example.rinklnote.ui.component.BillCard
+import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
@@ -103,10 +113,8 @@ fun BookkeepingScreen(
         DayPart.NIGHT -> R.drawable.night
     }
 
-    // Interaction state
-    var revealedBillId by remember { mutableStateOf<Long?>(null) }
-    var menuBill by remember { mutableStateOf<Bill?>(null) }
-    var deleteTarget by remember { mutableStateOf<Bill?>(null) }
+    // Interaction state：长按拖动排序 + 拖入 FAB 删除区（左滑删除与长按菜单已移除）
+    val (dragHost, dragHaptics) = rememberBillDragHost()
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -129,7 +137,41 @@ fun BookkeepingScreen(
         computeMonthHeatmap(state.bills, state.selectedMonthOffset)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // 拖动收尾：松手时按当前状态决定删除（不弹确认框——拖入+松手两段手势即防误触）或重排
+    val onDragFinished: () -> Unit = {
+        val d = dragHost.dragging
+        if (d != null) {
+            val dragged = state.bills.firstOrNull { it.id == d.billId }
+            if (dragHost.isOverDelete) {
+                dragHaptics.heavy()
+                dragged?.let { viewModel.onEvent(BookkeepingEvent.DeleteBill(it)) }
+            } else if (dragged != null) {
+                val dayBills = groupedBills[d.date].orEmpty()
+                val others = dayBills.filter { it.id != d.billId }
+                val gap = (dragHost.insertionIndex ?: others.size).coerceIn(0, others.size)
+                viewModel.onEvent(
+                    BookkeepingEvent.ReorderBills(others.toMutableList().apply { add(gap, dragged) })
+                )
+            }
+            dragHost.endDrag()
+        }
+    }
+
+    // 震动边沿：进入删除区（重）、插入位变化（轻）
+    LaunchedEffect(dragHost.isOverDelete) {
+        if (dragHost.isOverDelete) dragHaptics.heavy()
+    }
+    LaunchedEffect(dragHost.insertionIndex) {
+        if (dragHost.insertionIndex != null && !dragHost.isOverDelete) dragHaptics.light()
+    }
+
+    // 页面根 Box 在 composition 根下的 Y 偏移（换算 ghost 位置用，通常为 0）
+    var screenOriginY by remember { mutableStateOf(0f) }
+
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .onGloballyPositioned { screenOriginY = it.boundsInRoot().top }
+    ) {
         // 毛玻璃源：有自选照片时由 nav 层整窗铺满（含底部栏），此处不再叠一层；
         // 无照片时本页自己铺主题渐变，供各卡片 hazeEffect 采样。
         if (backgroundUri == null) {
@@ -186,21 +228,14 @@ fun BookkeepingScreen(
                         dayOfWeek = date.toDayOfWeek(),
                         totalAmount = totalAmount,
                         bills = bills,
-                        revealedBillId = revealedBillId,
-                        menuBill = menuBill,
+                        dragHost = dragHost,
                         hazeState = hazeState,
                         backgroundUri = backgroundUri,
-                        onRevealChange = { revealedBillId = it },
-                        onMenuChange = { menuBill = it },
                         onEdit = { bill ->
-                            menuBill = null
                             viewModel.onEvent(BookkeepingEvent.EditBill(bill))
                             onEditBill(bill)
                         },
-                        onDelete = { bill ->
-                            menuBill = null
-                            deleteTarget = bill
-                        }
+                        onDragFinished = onDragFinished
                     )
                     Spacer(modifier = Modifier.height(horizonalPadding))
                 }
@@ -225,42 +260,77 @@ fun BookkeepingScreen(
             onAiClick = onAiClick
         )
 
-        // FAB
+        // FAB：常态 = 加账单；拖动中变删除区（命中时放大 + 红色高亮），松手删除
+        val isDragging = dragHost.dragging != null
+        val overDelete = dragHost.isOverDelete
+        val fabScale by animateFloatAsState(if (overDelete) 1.18f else 1f, label = "fabScale")
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
+                .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                 .rinkShadow(CircleShape)
                 .size(51.dp)
                 .clip(CircleShape)
                 .hazeEffect(hazeState, HazeMaterials.thin())
-                .clickable { onOpenDrawer() },
+                .clickable(enabled = !isDragging) { onOpenDrawer() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(painter = painterResource(R.drawable.ic_add_bill),
-                contentDescription = "增加账单",
-                tint = Color.Unspecified
+            Crossfade(targetState = isDragging, label = "fabIcon") { deleting ->
+                if (deleting) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "拖到此处删除账单",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_add_bill),
+                        contentDescription = "增加账单",
+                        tint = Color.Unspecified
+                    )
+                }
+            }
+            if (overDelete) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
                 )
+            }
         }
 
-        // Delete confirm dialog
-        deleteTarget?.let { bill ->
-            AlertDialog(
-                onDismissRequest = { deleteTarget = null },
-                title = { Text("删除账单") },
-                text = { Text("确定删除这笔${(bill.subCategoryName ?: bill.categoryName)}的账单吗？") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        deleteTarget = null
-                        viewModel.onEvent(BookkeepingEvent.DeleteBill(bill))
-                    }) {
-                        Text("删除", color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+        // 拖动 ghost：被拖行从卡片抽出后，在最顶层跟随手指（略放大 + 投影 + 不透明底保证可读）
+        dragHost.dragging?.let { d ->
+            val dragged = state.bills.firstOrNull { it.id == d.billId } ?: return@let
+            // pointer/bounds 都是 composition 根坐标；换算到本页 Box 内
+            val ghostTop = d.pointerY - d.grabOffsetY - screenOriginY
+            key(d.billId) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .absoluteOffset(y = with(density) { ghostTop.toDp() })
+                        .graphicsLayer {
+                            scaleX = 1.05f
+                            scaleY = 1.05f
+                            shadowElevation = 20f
+                            shape = RoundedCornerShape(12.dp)
+                        }
+                        .zIndex(10f)
+                ) {
+                    BillRowContent(
+                        categoryName = dragged.subCategoryName ?: dragged.categoryName,
+                        amount = dragged.amount,
+                        billType = dragged.billType.value,
+                        remark = dragged.remark,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 16.dp)
+                    )
                 }
-            )
+            }
         }
     }
 }

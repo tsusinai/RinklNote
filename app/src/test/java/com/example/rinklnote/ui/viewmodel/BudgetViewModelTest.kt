@@ -385,6 +385,7 @@ class BudgetViewModelTest {
         override suspend fun addBill(bill: Bill): Long = 0
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
+        override suspend fun reorderBills(bills: List<Bill>) {}
         override fun observeAccounts(): Flow<List<Account>> = accounts
         override suspend fun insertAccount(account: Account): Long = 0
         override suspend fun updateAccount(account: Account) {}

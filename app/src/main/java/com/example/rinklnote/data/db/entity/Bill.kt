@@ -45,6 +45,8 @@ data class Bill(
     @ColumnInfo(name = "server_id") val serverId: Long? = null, // server bill id for dedup
     @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
     @ColumnInfo(name = "base_updated_at") val baseUpdatedAt: Long? = null, // 最后被服务端确认的 updatedAt（条件 PUT 的 base）
+    // 同日内显式排序名次（拖动重排写入）；NULL = 未显式排序，查询按 COALESCE(sort_order, created_at) 兜底。
+    @ColumnInfo(name = "sort_order") val sortOrder: Long? = null,
     val deleted: Boolean = false,
     val dirty: Boolean = false // true = local edit/delete not yet pushed to server
 )

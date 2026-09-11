@@ -94,6 +94,12 @@ internal class BillRepositoryImpl(
         // 反向回补删除的这笔对该账户余额的影响。
         nudgeAccount(bill.accountId, -balanceDelta(bill))
     }.also { onBillMutated() }
+
+
+    override suspend fun reorderBills(bills: List<Bill>) = db.withTransaction {
+        // 仅调序：金额/账户不变，无需触碰余额；VM 已统一盖章 dirty/updatedAt/sortOrder。
+        bills.forEach { billDao.update(it) }
+    }
 
     /** 记账对目标账户余额的增量：支出为负、收入为正。 */
     private fun balanceDelta(bill: Bill): Double =

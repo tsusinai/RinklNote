@@ -51,7 +51,9 @@ data class BillDTO(
     val source: String,
     val createdAt: Long,
     val updatedAt: Long? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    // 同日内显式排序名次（拖动重排）；null = 未排序（查询端 COALESCE(created_at) 兜底）。
+    val sortOrder: Long? = null
 )
 
 @Serializable
@@ -73,7 +75,8 @@ data class CreateBillRequest(
     val accountId: Long,
     val remark: String? = null,
     val date: Long? = null,
-    val baseUpdatedAt: Long? = null // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
+    val baseUpdatedAt: Long? = null, // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
+    val sortOrder: Long? = null // 同日内显式排序名次（拖动重排）
 )
 
 @Serializable

@@ -42,6 +42,8 @@ interface BillRepository {
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)
+    /** 拖动重排：同日新序整批落库（VM 已统一盖章 dirty/updatedAt/sortOrder）。 */
+    suspend fun reorderBills(bills: List<Bill>)
 
     // Accounts — reactive source + per-user CRUD/sync
     fun observeAccounts(): Flow<List<Account>>

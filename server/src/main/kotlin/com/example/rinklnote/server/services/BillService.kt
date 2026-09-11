@@ -21,7 +21,9 @@ data class BillDTO(
     val source: String,
     val createdAt: Long,
     val updatedAt: Long? = null,
-    val deleted: Boolean = false
+    val deleted: Boolean = false,
+    // 同日内显式排序名次（App 端拖动重排）；null = 未排序。
+    val sortOrder: Long? = null
 )
 
 @Serializable
@@ -144,7 +146,8 @@ class BillService {
         subCategoryName: String?,
         accountId: Long,
         remark: String?,
-        date: Long?
+        date: Long?,
+        sortOrder: Long? = null
     ): BillDTO {
         require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
@@ -174,6 +177,7 @@ class BillService {
                 it[BillsTable.billSource] = "WEB"
                 it[BillsTable.createdAt] = now
                 it[BillsTable.updatedAt] = now
+                it[BillsTable.sortOrder] = sortOrder
             } get BillsTable.id
         }
 
@@ -182,7 +186,7 @@ class BillService {
             categoryId = categoryId, categoryName = categoryName,
             subCategoryName = subCategoryName, accountId = accountId,
             remark = remark, date = billDate, source = "WEB",
-            createdAt = now, updatedAt = now
+            createdAt = now, updatedAt = now, sortOrder = sortOrder
         )
     }
 
@@ -233,7 +237,8 @@ class BillService {
                     source = it[BillsTable.billSource],
                     createdAt = it[BillsTable.createdAt],
                     updatedAt = it[BillsTable.updatedAt],
-                    deleted = it[BillsTable.deleted]
+                    deleted = it[BillsTable.deleted],
+                    sortOrder = it[BillsTable.sortOrder]
                 )
             }
         }
@@ -608,6 +613,7 @@ class BillService {
         source = this[BillsTable.billSource],
         createdAt = this[BillsTable.createdAt],
         updatedAt = this[BillsTable.updatedAt],
-        deleted = this[BillsTable.deleted]
+        deleted = this[BillsTable.deleted],
+        sortOrder = this[BillsTable.sortOrder]
     )
 }

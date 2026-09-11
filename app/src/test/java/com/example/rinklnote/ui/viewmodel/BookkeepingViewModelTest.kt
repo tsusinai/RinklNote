@@ -25,6 +25,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -83,6 +84,29 @@ class BookkeepingViewModelTest {
         assertEquals(before, repo.billRanges.size)
     }
 
+    @Test
+    fun `reorder event stamps dirty and assigns descending ranks by new order`() = runTest(dispatcher) {
+        val vm = newVM()
+        val day = getMonthStart(0) + 1
+        fun bill(id: Long) = Bill(
+            id = id, amount = 10.0, categoryId = 1, categoryName = "测试",
+            accountId = 1, date = day, createdAt = id
+        )
+        // 新序：b3 在最上，b1 居中，b2 在最下
+        vm.onEvent(BookkeepingEvent.ReorderBills(listOf(bill(3), bill(1), bill(2))))
+        advanceUntilIdle()
+
+        val reordered = repo.reordered.single()
+        assertEquals(listOf(3L, 1L, 2L), reordered.map { it.id })
+        // 盖章：全部置脏、更新时间非零
+        assertTrue(reordered.all { it.dirty })
+        assertTrue(reordered.all { (it.updatedAt ?: 0) > 0 })
+        // 名次：自上而下严格降序且互异
+        val ranks = reordered.map { it.sortOrder!! }
+        assertEquals(ranks.sortedDescending(), ranks)
+        assertEquals(ranks.distinct().size, ranks.size)
+    }
+
     /** Repository fake that records the month windows it is asked to observe/aggregate. */
     private class FakeBillRepository : BillRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(emptyList())
@@ -91,6 +115,11 @@ class BookkeepingViewModelTest {
 
         val billRanges = mutableListOf<Pair<Long, Long>>()
         val totalRanges = mutableListOf<Pair<Long, Long>>()
+        val reordered = mutableListOf<List<Bill>>()
+
+        override suspend fun reorderBills(bills: List<Bill>) {
+            reordered += bills
+        }
 
         override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> {
             billRanges += monthStart to nextMonthStart

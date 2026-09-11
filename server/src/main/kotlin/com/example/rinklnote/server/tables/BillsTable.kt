@@ -16,6 +16,8 @@ object BillsTable : Table("bills") {
     val billSource = varchar("source", 10) // "QQ" or "APP"
     val createdAt = long("created_at")
     val updatedAt = long("updated_at").nullable()
+    // 同日内显式排序名次（App 端拖动重排）；NULL = 未排序。
+    val sortOrder = long("sort_order").nullable()
     val deleted = bool("deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)

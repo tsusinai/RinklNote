@@ -110,6 +110,7 @@ class SyncManager(
                         serverId = dto.id,
                         updatedAt = dto.updatedAt,
                         baseUpdatedAt = dto.updatedAt,
+                        sortOrder = dto.sortOrder,
                         deleted = false
                     )
                 }
@@ -420,7 +421,8 @@ private fun Bill.toRequest() = CreateBillRequest(
     subCategoryName = subCategoryName,
     accountId = accountId,
     remark = remark,
-    date = date
+    date = date,
+    sortOrder = sortOrder
 )
 
 private fun TemplateDTO.toEntity() = BillTemplate(
