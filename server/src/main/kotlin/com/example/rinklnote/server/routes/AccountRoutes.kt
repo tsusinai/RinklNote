@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.Money
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -11,10 +12,24 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class CreateAccountRequest(val name: String, val iconColor: String, val balance: Double = 0.0)
+data class CreateAccountRequest(
+    val name: String,
+    val iconColor: String,
+    // 新字段（分，权威值）；旧客户端只发 balance 时回退。
+    val balanceMinor: Long? = null,
+    // 旧字段（元），仅供回退。
+    val balance: Double? = null
+)
 
 @Serializable
-data class UpdateAccountRequest(val name: String? = null, val iconColor: String? = null, val balance: Double? = null)
+data class UpdateAccountRequest(
+    val name: String? = null,
+    val iconColor: String? = null,
+    // 新字段（分，权威值）；旧客户端只发 balance 时回退。
+    val balanceMinor: Long? = null,
+    // 旧字段（元），仅供回退。
+    val balance: Double? = null
+)
 
 fun Route.accountRoutes(billService: BillService) {
     authenticate("auth-jwt") {
@@ -26,8 +41,10 @@ fun Route.accountRoutes(billService: BillService) {
             post {
                 val userId = call.userId()
                 val body = call.receive<CreateAccountRequest>()
+                val balanceMinor = if (body.balanceMinor == null && body.balance == null) 0L
+                else Money.resolveBalanceMinor(body.balanceMinor, body.balance)
                 try {
-                    val dto = billService.createAccount(userId, body.name, body.iconColor, body.balance)
+                    val dto = billService.createAccount(userId, body.name, body.iconColor, balanceMinor)
                     call.respond(HttpStatusCode.Created, dto)
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "请求不合法")))
@@ -38,17 +55,20 @@ fun Route.accountRoutes(billService: BillService) {
                 val id = call.parameters["id"]?.toLongOrNull()
                     ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
                 val body = call.receive<UpdateAccountRequest>()
-                if (body.balance != null) {
-                    if (body.balance < 0 || !body.balance.isFinite()) {
-                        return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "余额不能为负"))
-                    }
-                }
                 val dto = billService.renameAccount(id, userId, body.name ?: "", body.iconColor ?: "")
                 if (dto == null) {
                     return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账户不存在"))
                 }
-                if (body.balance != null) {
-                    billService.updateAccountBalance(id, body.balance, userId)
+                if (body.balanceMinor != null || body.balance != null) {
+                    val balanceMinor = try {
+                        Money.resolveBalanceMinor(body.balanceMinor, body.balance)
+                    } catch (e: IllegalArgumentException) {
+                        return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "余额不合法")))
+                    }
+                    if (balanceMinor < 0) {
+                        return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "余额不能为负"))
+                    }
+                    billService.updateAccountBalance(id, balanceMinor, userId)
                 }
                 val fresh = billService.accountsFor(userId).firstOrNull { it.id == id } ?: dto
                 call.respond(fresh)

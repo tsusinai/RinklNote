@@ -54,7 +54,7 @@ class AccountServiceTest {
 
     @Test
     fun `createAccount adds a custom account only for that user`() {
-        val w = service.createAccount(1L, "招商银行", "#123456", 0.0)
+        val w = service.createAccount(1L, "招商银行", "#123456", 0L)
         assertTrue(w.id > 0)
         // 自定义账户与默认账户共存（无顺序要求）
         assertEquals(setOf("微信", "支付宝", "无账户", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
@@ -62,7 +62,7 @@ class AccountServiceTest {
 
     @Test
     fun `renameAccount changes name and returns dto, null for other user or missing`() {
-        val w = service.createAccount(1L, "招商银行", "#123456", 0.0)
+        val w = service.createAccount(1L, "招商银行", "#123456", 0L)
         val renamed = service.renameAccount(w.id, 1L, "招行卡", "#000000")
         assertEquals("招行卡", renamed!!.name)
         assertNull(service.renameAccount(w.id, 99999L, "x", "y"))
@@ -72,20 +72,20 @@ class AccountServiceTest {
     @Test(expected = IllegalArgumentException::class)
     fun `createAccount rejects a duplicate name`() {
         service.ensureDefaultAccounts(1L)
-        service.createAccount(1L, "微信", "#000000", 0.0)
+        service.createAccount(1L, "微信", "#000000", 0L)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun `renameAccount rejects renaming to an existing sibling`() {
         service.ensureDefaultAccounts(1L)
-        val custom = service.createAccount(1L, "招商银行", "#123456", 0.0)
+        val custom = service.createAccount(1L, "招商银行", "#123456", 0L)
         val wechat = service.accountsFor(1L).first { it.name == "微信" }
         service.renameAccount(wechat.id, 1L, "招商银行", "#000000")
     }
 
     @Test
     fun `deleteAccount soft-deletes and hides it from accountsFor`() {
-        val w = service.createAccount(1L, "招商银行", "#123456", 0.0)
+        val w = service.createAccount(1L, "招商银行", "#123456", 0L)
         assertTrue(service.deleteAccount(w.id, 1L))
         assertFalse(service.accountsFor(1L).any { it.id == w.id })
     }
@@ -95,7 +95,7 @@ class AccountServiceTest {
         insertUser(2L, "13800000022")
         service.ensureDefaultAccounts(1L)
         service.ensureDefaultAccounts(2L)
-        service.createAccount(1L, "招商银行", "#123456", 0.0)
+        service.createAccount(1L, "招商银行", "#123456", 0L)
         assertEquals(4, service.accountsFor(1L).size)
         assertEquals(3, service.accountsFor(2L).size) // 用户2没有自定义账户
     }

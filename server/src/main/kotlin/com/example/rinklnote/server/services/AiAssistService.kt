@@ -10,19 +10,40 @@ import java.time.format.DateTimeFormatter
 data class AiRecordResponse(val reply: String)
 
 @Serializable
-data class AiTodayResponse(val reply: String, val expense: Double, val income: Double, val count: Int)
+data class AiTodayResponse(
+    val reply: String,
+    val expenseMinor: Long, val incomeMinor: Long,
+    // 旧字段，仅供旧客户端。
+    val expense: Double, val income: Double,
+    val count: Int
+)
 
 @Serializable
 data class AiMonthResponse(
-    val reply: String, val expense: Double, val income: Double,
+    val reply: String,
+    val expenseMinor: Long, val incomeMinor: Long,
+    val budgetMinor: Long?, val remainingMinor: Long?,
+    // 旧字段，仅供旧客户端。
+    val expense: Double, val income: Double,
     val budget: Double?, val remaining: Double?
 )
 
 @Serializable
-data class AiAccountBalance(val name: String, val balance: Double)
+data class AiAccountBalance(
+    val name: String,
+    val balanceMinor: Long,
+    // 旧字段，仅供旧客户端。
+    val balance: Double
+)
 
 @Serializable
-data class AiBalanceResponse(val reply: String, val accounts: List<AiAccountBalance>, val total: Double)
+data class AiBalanceResponse(
+    val reply: String,
+    val accounts: List<AiAccountBalance>,
+    val totalMinor: Long,
+    // 旧字段，仅供旧客户端。
+    val total: Double
+)
 
 @Serializable
 data class AiSummaryResponse(val reply: String, val summary: String, val highlights: List<String>)
@@ -38,10 +59,10 @@ class AiAssistService(
     private val insightService: InsightService,
     private val zone: ZoneId = ZoneId.of("Asia/Shanghai")
 ) {
-    fun record(userId: Long, amount: Double, category: String?, remark: String?): AiRecordResponse {
-        require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
-        val bill = billService.createBill(userId, amount, category, remark, "AI")
-        return AiRecordResponse("已记录：${bill.categoryName} ¥${"%.2f".format(bill.amount)}")
+    fun record(userId: Long, amountMinor: Long, category: String?, remark: String?): AiRecordResponse {
+        require(amountMinor > 0) { "金额必须大于0" }
+        val bill = billService.createBill(userId, amountMinor, category, remark, "AI")
+        return AiRecordResponse("已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}")
     }
 
     fun today(userId: Long): AiTodayResponse {
@@ -49,11 +70,13 @@ class AiAssistService(
         val todayEnd = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val bills = billService.allBills(userId).filter { it.date >= todayStart && it.date < todayEnd }
         val expenseBills = bills.filter { it.billType == "EXPENSE" }
-        val expense = Money.cents(expenseBills.sumOf { it.amount })
-        val income = Money.cents(bills.filter { it.billType == "INCOME" }.sumOf { it.amount })
+        val expense = expenseBills.sumOf { it.amountMinor }
+        val income = bills.filter { it.billType == "INCOME" }.sumOf { it.amountMinor }
         return AiTodayResponse(
-            "今天已花 ¥${"%.2f".format(expense)}（${expenseBills.size}笔），收入 ¥${"%.2f".format(income)}",
-            expense, income, expenseBills.size
+            "今天已花 ¥${Money.format(expense)}（${expenseBills.size}笔），收入 ¥${Money.format(income)}",
+            expenseMinor = expense, incomeMinor = income,
+            expense = Money.fromMinor(expense), income = Money.fromMinor(income),
+            count = expenseBills.size
         )
     }
 
@@ -63,21 +86,31 @@ class AiAssistService(
         val nextMonthStart = now.withDayOfMonth(1).plusMonths(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
         val budget = budgetService.list(userId).firstOrNull { it.monthStart == monthStart && !it.deleted }
-        val remaining = budget?.let { Money.cents(it.amount - stats.totalExpense) }
+        val remaining = budget?.let { it.amountMinor - stats.totalExpenseMinor }
         val reply = buildString {
-            append("本月支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}")
-            if (budget != null) append("，预算 ¥${"%.2f".format(budget.amount)}，剩余 ¥${"%.2f".format(remaining!!)}")
+            append("本月支出 ¥${Money.format(stats.totalExpenseMinor)}，收入 ¥${Money.format(stats.totalIncomeMinor)}")
+            if (budget != null) append("，预算 ¥${Money.format(budget.amountMinor)}，剩余 ¥${Money.format(remaining!!)}")
         }
-        return AiMonthResponse(reply, stats.totalExpense, stats.totalIncome, budget?.amount, remaining)
+        return AiMonthResponse(
+            reply,
+            expenseMinor = stats.totalExpenseMinor, incomeMinor = stats.totalIncomeMinor,
+            budgetMinor = budget?.amountMinor, remainingMinor = remaining,
+            expense = Money.fromMinor(stats.totalExpenseMinor), income = Money.fromMinor(stats.totalIncomeMinor),
+            budget = budget?.let { Money.fromMinor(it.amountMinor) }, remaining = remaining?.let { Money.fromMinor(it) }
+        )
     }
 
     fun balance(userId: Long): AiBalanceResponse {
         val accounts = billService.accountsFor(userId)
-        val total = Money.cents(accounts.sumOf { it.balance })
+        val total = accounts.sumOf { it.balanceMinor }
         val reply = if (accounts.isEmpty()) "还没有账户，先去 App 加一个吧～"
-        else "账户余额合计 ¥${"%.2f".format(total)}：\n" +
-            accounts.joinToString("\n") { "${it.name} ¥${"%.2f".format(it.balance)}" }
-        return AiBalanceResponse(reply, accounts.map { AiAccountBalance(it.name, it.balance) }, total)
+        else "账户余额合计 ¥${Money.format(total)}：\n" +
+            accounts.joinToString("\n") { "${it.name} ¥${Money.format(it.balanceMinor)}" }
+        return AiBalanceResponse(
+            reply,
+            accounts.map { AiAccountBalance(it.name, it.balanceMinor, Money.fromMinor(it.balanceMinor)) },
+            totalMinor = total, total = Money.fromMinor(total)
+        )
     }
 
     suspend fun summary(userId: Long, month: String?): AiSummaryResponse {

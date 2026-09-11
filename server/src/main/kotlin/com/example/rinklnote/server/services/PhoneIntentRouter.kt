@@ -77,11 +77,11 @@ class PhoneIntentRouter(
         // F. Bookkeeping
         val result = nluService.parse(content, userId)
         if (result.amount != null && result.amount > 0) {
-            val bill = billService.createBill(userId, result.amount, result.categoryName, result.remark, source)
+            val bill = billService.createBill(userId, Money.toMinor(result.amount), result.categoryName, result.remark, source)
             return listOf(
-                "已记录：${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
-                "已记录成功～ ${bill.categoryName} ¥${"%.2f".format(bill.amount)}",
-                "好嘞，已记录 ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"
+                "已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
+                "已记录成功～ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
+                "好嘞，已记录 ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"
             ).random()
         }
 
@@ -103,17 +103,17 @@ class PhoneIntentRouter(
         val todayStart = LocalDate.now(shanghai).atStartOfDay(shanghai).toInstant().toEpochMilli()
         val bills = billService.allBills(userId)
             .filter { it.billType == "EXPENSE" && it.date >= todayStart }
-        val total = Money.cents(bills.sumOf { it.amount })
-        return "今天已花 ¥${"%.2f".format(total)}（${bills.size}笔），悠着点哦"
+        val total = bills.sumOf { it.amountMinor }
+        return "今天已花 ¥${Money.format(total)}（${bills.size}笔），悠着点哦"
     }
 
     private fun monthExpense(userId: Long): String {
         val (monthStart, nextMonthStart) = currentMonthRange()
         val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
         return listOf(
-            "本月花销：支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}",
-            "这个月你花 ¥${"%.2f".format(stats.totalExpense)}，进账 ¥${"%.2f".format(stats.totalIncome)}",
-            "本月账单：支出 ¥${"%.2f".format(stats.totalExpense)}，收入 ¥${"%.2f".format(stats.totalIncome)}"
+            "本月花销：支出 ¥${Money.format(stats.totalExpenseMinor)}，收入 ¥${Money.format(stats.totalIncomeMinor)}",
+            "这个月你花 ¥${Money.format(stats.totalExpenseMinor)}，进账 ¥${Money.format(stats.totalIncomeMinor)}",
+            "本月账单：支出 ¥${Money.format(stats.totalExpenseMinor)}，收入 ¥${Money.format(stats.totalIncomeMinor)}"
         ).random()
     }
 
@@ -121,18 +121,18 @@ class PhoneIntentRouter(
         val (monthStart, nextMonthStart) = currentMonthRange()
         val bills = billService.allBills(userId)
             .filter { it.categoryName == category && it.date >= monthStart && it.date < nextMonthStart }
-        val total = Money.cents(bills.sumOf { it.amount })
-        return "$category 这个月花了 ¥${"%.2f".format(total)}（${bills.size}笔）"
+        val total = bills.sumOf { it.amountMinor }
+        return "$category 这个月花了 ¥${Money.format(total)}（${bills.size}笔）"
     }
 
     private fun budget(userId: Long): String {
         val (monthStart, nextMonthStart) = currentMonthRange()
         val budget = budgetService.list(userId).firstOrNull { it.monthStart == monthStart && !it.deleted }
             ?: return "这个月还没设预算哦，去网页设一个吧～"
-        val spent = billService.monthlyStats(userId, monthStart, nextMonthStart).totalExpense
-        val remaining = Money.cents(budget.amount - spent)
-        val pct = if (budget.amount > 0) ((spent / budget.amount) * 100).toInt() else 0
-        return "本月预算 ¥${"%.2f".format(budget.amount)}，已用 ¥${"%.2f".format(spent)}，剩余 ¥${"%.2f".format(remaining)}（已用${pct}%）"
+        val spent = billService.monthlyStats(userId, monthStart, nextMonthStart).totalExpenseMinor
+        val remaining = budget.amountMinor - spent
+        val pct = if (budget.amountMinor > 0) ((spent.toDouble() / budget.amountMinor) * 100).toInt() else 0
+        return "本月预算 ¥${Money.format(budget.amountMinor)}，已用 ¥${Money.format(spent)}，剩余 ¥${Money.format(remaining)}（已用${pct}%）"
     }
 
     private fun topCategories(userId: Long): String {
@@ -140,7 +140,7 @@ class PhoneIntentRouter(
         val top = billService.monthlyStats(userId, monthStart, nextMonthStart).topExpenseCategories
         if (top.isEmpty()) return "这个月还没有支出，先记一笔吧～"
         return "这个月花得最多的几类：\n" + top.mapIndexed { i, (name, amt) ->
-            "${i + 1}. $name ¥${"%.2f".format(amt)}"
+            "${i + 1}. $name ¥${Money.format(amt)}"
         }.joinToString("\n")
     }
 
@@ -149,7 +149,7 @@ class PhoneIntentRouter(
         val bills = billService.allBills(userId).sortedByDescending { it.date }.take(n)
         if (bills.isEmpty()) return "还没有任何账单，来记第一笔吧～"
         return bills.mapIndexed { i, b ->
-            "${i + 1}. ${formatDate(b.date)} ${b.categoryName} ¥${"%.2f".format(b.amount)} ${b.remark?.take(20) ?: ""}".trimEnd()
+            "${i + 1}. ${formatDate(b.date)} ${b.categoryName} ¥${Money.format(b.amountMinor)} ${b.remark?.take(20) ?: ""}".trimEnd()
         }.joinToString("\n")
     }
 
@@ -184,19 +184,19 @@ class PhoneIntentRouter(
     private fun suggest(userId: Long): String {
         val pattern = insightService.suggestDailyPattern(userId)
             ?: return "还没摸到你常花的习惯，多记几笔我就懂你啦～"
-        val amount = pattern["amount"]?.toDoubleOrNull() ?: 0.0
+        val amountStr = pattern["amount"] ?: "0.00"
         return listOf(
-            "${pattern["label"]}时段你常点 ${pattern["categoryName"]} ¥${"%.2f".format(amount)}，记一笔正好",
-            "${pattern["label"]}到饭点了，你平时那个 ${pattern["categoryName"]} ¥${"%.2f".format(amount)} 别忘了记～"
+            "${pattern["label"]}时段你常点 ${pattern["categoryName"]} ¥$amountStr，记一笔正好",
+            "${pattern["label"]}到饭点了，你平时那个 ${pattern["categoryName"]} ¥$amountStr 别忘了记～"
         ).random()
     }
 
     private fun balance(userId: Long): String {
         val accounts = billService.accountsFor(userId)
         if (accounts.isEmpty()) return "还没有账户，先去 App 加一个吧～"
-        val total = Money.cents(accounts.sumOf { it.balance })
-        return "账户余额合计 ¥${"%.2f".format(total)}：\n" +
-            accounts.joinToString("\n") { "${it.name} ¥${"%.2f".format(it.balance)}" }
+        val total = accounts.sumOf { it.balanceMinor }
+        return "账户余额合计 ¥${Money.format(total)}：\n" +
+            accounts.joinToString("\n") { "${it.name} ¥${Money.format(it.balanceMinor)}" }
     }
 
     // ── Delete intent ──
@@ -213,7 +213,7 @@ class PhoneIntentRouter(
                 val amount = extractAmountWithSuffix(content)
                 when {
                     cat != null -> candidates.firstOrNull { it.categoryName == cat }
-                    amount != null -> candidates.firstOrNull { Money.cents(it.amount) == Money.cents(amount) }
+                    amount != null -> candidates.firstOrNull { it.amountMinor == Money.toMinor(amount) }
                     else -> null
                 }
             }
@@ -231,8 +231,8 @@ class PhoneIntentRouter(
         }
         billService.deleteBill(target.id, userId)
         return listOf(
-            "已删除：${target.categoryName} ¥${"%.2f".format(target.amount)}（${formatDate(target.date)}）",
-            "已删除成功～ ${target.categoryName} ¥${"%.2f".format(target.amount)}（${formatDate(target.date)}）"
+            "已删除：${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）",
+            "已删除成功～ ${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）"
         ).random()
     }
 

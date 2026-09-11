@@ -76,6 +76,7 @@ class PhoneIntentRouterTest {
     private fun insertBill(userId: Long, amount: Double, categoryName: String, date: Long): Long = transaction {
         BillsTable.insert {
             it[BillsTable.userId] = userId
+            it[BillsTable.amountMinor] = Money.toMinor(amount)
             it[BillsTable.amount] = amount
             it[BillsTable.billType] = "EXPENSE"
             it[BillsTable.categoryId] = catId(categoryName)
@@ -171,7 +172,7 @@ class PhoneIntentRouterTest {
     @Test
     fun `budget query reports spent and remaining`() = runBlocking {
         val monthStart = currentMonthStart()
-        budgetService.upsert(1L, monthStart, 1000.0)
+        budgetService.upsert(1L, monthStart, 100000L)
         insertBill(1L, 300.0, "三餐", monthStart)
 
         val reply = router.route("这个月预算", 1L)

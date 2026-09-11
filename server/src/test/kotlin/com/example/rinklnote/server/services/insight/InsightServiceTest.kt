@@ -2,6 +2,7 @@ package com.example.rinklnote.server.services.insight
 
 import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.TestDatabase
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.services.nlu.LLMParserConfig
@@ -67,6 +68,7 @@ class InsightServiceTest {
         transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = userId
+                it[BillsTable.amountMinor] = Money.toMinor(amount)
                 it[BillsTable.amount] = amount
                 it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = 1
@@ -86,11 +88,11 @@ class InsightServiceTest {
             categories = listOf("三餐", "交通"),
             year = 2026,
             month = 8,
-            totalExpense = 100.0,
-            totalIncome = 50.0,
-            topCategories = listOf("三餐" to 100.0),
+            totalExpense = 10000L,
+            totalIncome = 5000L,
+            topCategories = listOf("三餐" to 10000L),
             recentBills = listOf(
-                BillDTO(id = 1, amount = 28.0, billType = "EXPENSE", categoryId = 1,
+                BillDTO(id = 1, amountMinor = 2800L, amount = 28.0, billType = "EXPENSE", categoryId = 1,
                     categoryName = "三餐", subCategoryName = null, accountId = 1,
                     remark = "机密周二午餐", date = 1724169600000L, source = "app",
                     createdAt = 1724169600000L)

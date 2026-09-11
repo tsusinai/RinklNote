@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
@@ -68,14 +69,14 @@ fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billS
 
                 val bill = billService.createBill(
                     userId = user.id,
-                    amount = result.amount,
+                    amountMinor = Money.toMinor(result.amount),
                     categoryName = result.categoryName,
                     remark = result.remark,
                     source = "QQ"
                 )
 
                 call.respondText(
-                    """{"reply":"已记录: ${bill.categoryName} ¥${"%.2f".format(bill.amount)}"}""",
+                    """{"reply":"已记录: ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"}""",
                     ContentType.Application.Json
                 )
             } catch (e: Exception) {

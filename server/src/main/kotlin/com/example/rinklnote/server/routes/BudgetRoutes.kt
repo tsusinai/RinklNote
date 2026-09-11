@@ -1,6 +1,7 @@
 package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BudgetService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.UpsertBudgetRequest
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -31,11 +32,16 @@ fun Route.budgetRoutes(budgetService: BudgetService) {
                 val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
                     ?: return@put call.respond(HttpStatusCode.Unauthorized)
                 val body = call.receive<UpsertBudgetRequest>()
+                val amountMinor = try {
+                    Money.resolveAmountMinor(body.amountMinor, body.amount)
+                } catch (e: IllegalArgumentException) {
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "金额不合法")))
+                }
                 call.respond(
                     budgetService.upsert(
                         userId,
                         body.monthStart,
-                        body.amount,
+                        amountMinor,
                         body.categoryId,
                         body.subCategoryId,
                         body.periodType

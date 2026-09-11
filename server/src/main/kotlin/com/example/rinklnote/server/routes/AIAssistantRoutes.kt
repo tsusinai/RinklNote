@@ -2,6 +2,7 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -20,7 +21,10 @@ data class AiAskRequest(val text: String)
 
 @Serializable
 data class AiRecordRequest(
-    val amount: Double,
+    // 新字段（分，权威值）；旧客户端只发 amount 时回退。
+    val amountMinor: Long? = null,
+    // 旧字段（元），仅供回退。
+    val amount: Double? = null,
     val category: String? = null,
     val type: String? = null,
     val remark: String? = null,
@@ -95,11 +99,16 @@ fun Route.aiAssistantRoutes(
             val userId = call.aiUserIdOrNull()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, mapOf("reply" to "未授权：令牌缺失或已失效"))
             val body = call.receive<AiRecordRequest>()
-            if (body.amount <= 0 || !body.amount.isFinite()) {
+            val amountMinor = try {
+                Money.resolveAmountMinor(body.amountMinor, body.amount)
+            } catch (e: IllegalArgumentException) {
+                return@post call.respond(HttpStatusCode.BadRequest, mapOf("reply" to "没听清金额，试试「午餐20元」"))
+            }
+            if (amountMinor <= 0) {
                 return@post call.respond(HttpStatusCode.BadRequest, mapOf("reply" to "没听清金额，试试「午餐20元」"))
             }
             // createBill 由分类名推导 EXPENSE/INCOME；type 字段为描述性，不参与落库判断。
-            call.respond(aiAssistService.record(userId, body.amount, body.category, body.remark))
+            call.respond(aiAssistService.record(userId, amountMinor, body.category, body.remark))
         }
 
         get("/today") {

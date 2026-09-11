@@ -10,6 +10,9 @@ import java.time.ZoneId
 @Serializable
 data class BillDTO(
     val id: Long,
+    // 新字段（分，权威值）；旧客户端请忽略。
+    val amountMinor: Long,
+    // 旧字段，仅供旧客户端，勿用；值 = Money.fromMinor(amountMinor)。
     val amount: Double,
     val billType: String,
     val categoryId: Long,
@@ -58,6 +61,8 @@ data class CategoryDTO(
 data class AccountDTO(
     val id: Long,
     val name: String,
+    val balanceMinor: Long,
+    // 旧字段，仅供旧客户端，勿用；值 = Money.fromMinor(balanceMinor)。
     val balance: Double,
     val iconColor: String,
     val updatedAt: Long = 0,
@@ -67,12 +72,12 @@ data class AccountDTO(
 class BillService {
     fun createBill(
         userId: Long,
-        amount: Double,
+        amountMinor: Long,
         categoryName: String?,
         remark: String?,
         source: String = "QQ"
     ): BillDTO {
-        require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
+        require(amountMinor > 0) { "金额必须大于0" }
         val sanitizedRemark = remark?.take(500)
 
         val now = System.currentTimeMillis()
@@ -115,7 +120,8 @@ class BillService {
         val billId = transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = userId
-                it[BillsTable.amount] = amount
+                it[BillsTable.amountMinor] = amountMinor
+                it[BillsTable.amount] = Money.fromMinor(amountMinor)
                 it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = catId
                 it[BillsTable.categoryName] = catName
@@ -129,7 +135,7 @@ class BillService {
         }
 
         return BillDTO(
-            id = billId, amount = amount, billType = billType,
+            id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = billType,
             categoryId = catId, categoryName = catName,
             subCategoryName = null, accountId = accountId,
             remark = sanitizedRemark, date = todayStart, source = source,
@@ -139,7 +145,7 @@ class BillService {
 
     fun createWebBill(
         userId: Long,
-        amount: Double,
+        amountMinor: Long,
         billType: String,
         categoryId: Long,
         categoryName: String,
@@ -149,7 +155,7 @@ class BillService {
         date: Long?,
         sortOrder: Long? = null
     ): BillDTO {
-        require(amount > 0 && amount.isFinite()) { "金额必须大于0" }
+        require(amountMinor > 0) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
         val ownsAccount = transaction {
             AccountsTable.selectAll()
@@ -166,7 +172,8 @@ class BillService {
         val billId = transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = userId
-                it[BillsTable.amount] = amount
+                it[BillsTable.amountMinor] = amountMinor
+                it[BillsTable.amount] = Money.fromMinor(amountMinor)
                 it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = categoryId
                 it[BillsTable.categoryName] = categoryName
@@ -182,7 +189,7 @@ class BillService {
         }
 
         return BillDTO(
-            id = billId, amount = amount, billType = billType,
+            id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = billType,
             categoryId = categoryId, categoryName = categoryName,
             subCategoryName = subCategoryName, accountId = accountId,
             remark = remark, date = billDate, source = "WEB",
@@ -226,7 +233,8 @@ class BillService {
             query.limit(limit + 1).map {
                 BillDTO(
                     id = it[BillsTable.id],
-                    amount = it[BillsTable.amount],
+                    amountMinor = it[BillsTable.amountMinor] ?: 0L,
+                    amount = Money.fromMinor(it[BillsTable.amountMinor] ?: 0L),
                     billType = it[BillsTable.billType],
                     categoryId = it[BillsTable.categoryId],
                     categoryName = it[BillsTable.categoryName],
@@ -276,7 +284,8 @@ class BillService {
     private fun ResultRow.toAccountDto() = AccountDTO(
         id = this[AccountsTable.id],
         name = this[AccountsTable.name],
-        balance = this[AccountsTable.balance],
+        balanceMinor = this[AccountsTable.balanceMinor] ?: 0L,
+        balance = Money.fromMinor(this[AccountsTable.balanceMinor] ?: 0L),
         iconColor = this[AccountsTable.iconColor],
         updatedAt = this[AccountsTable.updatedAt],
         deleted = this[AccountsTable.deleted]
@@ -300,6 +309,7 @@ class BillService {
                     it[AccountsTable.userId] = userId
                     it[AccountsTable.name] = name
                     it[AccountsTable.iconColor] = color
+                    it[AccountsTable.balanceMinor] = Money.toMinor(balance)
                     it[AccountsTable.balance] = balance
                     it[AccountsTable.updatedAt] = now
                 }
@@ -317,9 +327,9 @@ class BillService {
         }
     }
 
-    fun createAccount(userId: Long, name: String, iconColor: String, balance: Double): AccountDTO {
+    fun createAccount(userId: Long, name: String, iconColor: String, balanceMinor: Long): AccountDTO {
         require(name.isNotBlank()) { "账户名不能为空" }
-        require(balance >= 0 && balance.isFinite()) { "余额不能为负" }
+        require(balanceMinor >= 0) { "余额不能为负" }
         // (user_id, name) 唯一索引：同名账户对同一用户不可重复（含默认账户名）
         val exists = transaction {
             AccountsTable.selectAll()
@@ -333,11 +343,12 @@ class BillService {
                 it[AccountsTable.userId] = userId
                 it[AccountsTable.name] = name
                 it[AccountsTable.iconColor] = iconColor
-                it[AccountsTable.balance] = balance
+                it[AccountsTable.balanceMinor] = balanceMinor
+                it[AccountsTable.balance] = Money.fromMinor(balanceMinor)
                 it[AccountsTable.updatedAt] = now
             } get AccountsTable.id
         }
-        return AccountDTO(id, name, balance, iconColor, now, false)
+        return AccountDTO(id, name, balanceMinor, Money.fromMinor(balanceMinor), iconColor, now, false)
     }
 
     fun renameAccount(id: Long, userId: Long, name: String, iconColor: String): AccountDTO? = transaction {
@@ -469,17 +480,18 @@ class BillService {
             AccountsTable.insert {
                 it[AccountsTable.name] = name
                 it[AccountsTable.iconColor] = color
+                it[AccountsTable.balanceMinor] = Money.toMinor(balance)
                 it[AccountsTable.balance] = balance
             }
         }
     }
 
     data class MonthStats(
-        val totalExpense: Double,
-        val totalIncome: Double,
-        val topExpenseCategories: List<Pair<String, Double>>,
+        val totalExpenseMinor: Long,
+        val totalIncomeMinor: Long,
+        val topExpenseCategories: List<Pair<String, Long>>,
         // 日报需要总笔数与收入分类；收入侧此前是空实现，见 InsightService.dailyReport。
-        val topIncomeCategories: List<Pair<String, Double>> = emptyList(),
+        val topIncomeCategories: List<Pair<String, Long>> = emptyList(),
         val billCount: Long = 0
     )
 
@@ -488,7 +500,7 @@ class BillService {
      * bill into memory. Used by the insight endpoints.
      */
     fun monthlyStats(userId: Long, monthStart: Long, nextMonthStart: Long): MonthStats = transaction {
-        val totalExpense = BillsTable.select(BillsTable.amount.sum())
+        val totalExpense = BillsTable.select(BillsTable.amountMinor.sum())
             .where {
                 (BillsTable.userId eq userId) and
                     (BillsTable.deleted eq false) and
@@ -496,8 +508,8 @@ class BillService {
                     (BillsTable.date greaterEq monthStart) and
                     (BillsTable.date less nextMonthStart)
             }
-            .first()[BillsTable.amount.sum()] ?: 0.0
-        val totalIncome = BillsTable.select(BillsTable.amount.sum())
+            .first()[BillsTable.amountMinor.sum()] ?: 0L
+        val totalIncome = BillsTable.select(BillsTable.amountMinor.sum())
             .where {
                 (BillsTable.userId eq userId) and
                     (BillsTable.deleted eq false) and
@@ -505,8 +517,8 @@ class BillService {
                     (BillsTable.date greaterEq monthStart) and
                     (BillsTable.date less nextMonthStart)
             }
-            .first()[BillsTable.amount.sum()] ?: 0.0
-        val topCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amount.sum())
+            .first()[BillsTable.amountMinor.sum()] ?: 0L
+        val topCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amountMinor.sum())
             .where {
                 (BillsTable.userId eq userId) and
                     (BillsTable.deleted eq false) and
@@ -515,11 +527,11 @@ class BillService {
                     (BillsTable.date less nextMonthStart)
             }
             .groupBy(BillsTable.categoryName)
-            .orderBy(BillsTable.amount.sum() to SortOrder.DESC)
+            .orderBy(BillsTable.amountMinor.sum() to SortOrder.DESC)
             .limit(5)
-            .map { it[BillsTable.categoryName] to Money.cents(it[BillsTable.amount.sum()] ?: 0.0) }
+            .map { it[BillsTable.categoryName] to (it[BillsTable.amountMinor.sum()] ?: 0L) }
 
-        val topIncomeCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amount.sum())
+        val topIncomeCategories = BillsTable.select(BillsTable.categoryName, BillsTable.amountMinor.sum())
             .where {
                 (BillsTable.userId eq userId) and
                     (BillsTable.deleted eq false) and
@@ -528,9 +540,9 @@ class BillService {
                     (BillsTable.date less nextMonthStart)
             }
             .groupBy(BillsTable.categoryName)
-            .orderBy(BillsTable.amount.sum() to SortOrder.DESC)
+            .orderBy(BillsTable.amountMinor.sum() to SortOrder.DESC)
             .limit(5)
-            .map { it[BillsTable.categoryName] to Money.cents(it[BillsTable.amount.sum()] ?: 0.0) }
+            .map { it[BillsTable.categoryName] to (it[BillsTable.amountMinor.sum()] ?: 0L) }
         // 用 Query.count() 而不是手工 select(id.count())：后者要构造两次等价表达式，
         // 依赖 Exposed 表达式相等语义才能从结果行取值；count() 直接走聚合计数，无此隐患。
         val billCount = BillsTable.selectAll()
@@ -542,11 +554,10 @@ class BillService {
             }
             .count()
 
-        // Round SQL SUM results to cents: summing double-precision columns drifts,
-        // and downstream exact comparisons (e.g. Web budget over/under) would misfire.
+        // 整数分聚合已无浮点漂移，无需再四舍五入。
         MonthStats(
-            Money.cents(totalExpense),
-            Money.cents(totalIncome),
+            totalExpense,
+            totalIncome,
             topCategories,
             topIncomeCategories,
             billCount
@@ -581,17 +592,18 @@ class BillService {
             }
     }
 
-    fun updateAccountBalance(id: Long, balance: Double, userId: Long): AccountDTO? = transaction {
+    fun updateAccountBalance(id: Long, balanceMinor: Long, userId: Long): AccountDTO? = transaction {
         val row = AccountsTable.selectAll()
             .where { (AccountsTable.id eq id) and (AccountsTable.userId eq userId) }
             .singleOrNull()
             ?: return@transaction null
         val now = System.currentTimeMillis()
         AccountsTable.update({ AccountsTable.id eq id }) {
-            it[AccountsTable.balance] = balance
+            it[AccountsTable.balanceMinor] = balanceMinor
+            it[AccountsTable.balance] = Money.fromMinor(balanceMinor)
             it[AccountsTable.updatedAt] = now
         }
-        row.toAccountDto().copy(balance = balance, updatedAt = now)
+        row.toAccountDto().copy(balanceMinor = balanceMinor, balance = Money.fromMinor(balanceMinor), updatedAt = now)
     }
 
     fun getBill(id: Long, userId: Long): BillDTO? = transaction {
@@ -602,7 +614,8 @@ class BillService {
 
     private fun ResultRow.toBillDto() = BillDTO(
         id = this[BillsTable.id],
-        amount = this[BillsTable.amount],
+        amountMinor = this[BillsTable.amountMinor] ?: 0L,
+        amount = Money.fromMinor(this[BillsTable.amountMinor] ?: 0L),
         billType = this[BillsTable.billType],
         categoryId = this[BillsTable.categoryId],
         categoryName = this[BillsTable.categoryName],

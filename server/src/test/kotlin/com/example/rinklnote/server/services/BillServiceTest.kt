@@ -24,6 +24,8 @@ import java.time.ZoneId
 /**
  * BillService sync pagination + monthly aggregation (Phase 1 & 3 regressions).
  * Uses an in-memory H2 database seeded with the default categories/accounts.
+ *
+ * 金额以整数分（Long）为单位断言；amountMinor 为权威值，amount 为兼容旧客户端的元字段。
  */
 class BillServiceTest {
 
@@ -72,6 +74,7 @@ class BillServiceTest {
     ): Long = transaction {
         BillsTable.insert {
             it[BillsTable.userId] = userId
+            it[BillsTable.amountMinor] = Money.toMinor(amount)
             it[BillsTable.amount] = amount
             it[BillsTable.billType] = billType
             it[BillsTable.categoryId] = 1
@@ -125,7 +128,7 @@ class BillServiceTest {
         // Sync deliberately includes soft-deleted bills as tombstones so clients
         // can reconcile deletions; it must still never leak another user's bills.
         assertEquals(2, page.bills.size)
-        assertEquals(listOf(10.0, 20.0), page.bills.map { it.amount })
+        assertEquals(listOf(1000L, 2000L), page.bills.map { it.amountMinor })
         assertFalse(page.hasMore)
     }
 
@@ -142,9 +145,9 @@ class BillServiceTest {
         insertBill(2L, 777.0, updatedAt = 500, date = monthStart + 4)
 
         val stats = service.monthlyStats(1L, monthStart, nextMonthStart)
-        assertEquals(100.0, stats.totalExpense, 0.0001)
-        assertEquals(50.0, stats.totalIncome, 0.0001)
-        assertEquals(listOf("三餐" to 100.0), stats.topExpenseCategories)
+        assertEquals(10000L, stats.totalExpenseMinor)
+        assertEquals(5000L, stats.totalIncomeMinor)
+        assertEquals(listOf("三餐" to 10000L), stats.topExpenseCategories)
     }
 
     @Test
@@ -154,7 +157,7 @@ class BillServiceTest {
         insertBill(1L, 30.0, updatedAt = 2000)
 
         val page = service.syncBills(1L, after = null, afterId = null, limit = 200)
-        assertEquals(listOf(20.0, 30.0, 10.0), page.bills.map { it.amount })
+        assertEquals(listOf(2000L, 3000L, 1000L), page.bills.map { it.amountMinor })
         // ordering by (updatedAt, id) — the composite key used by clients
         transaction {
             val rows = BillsTable.selectAll()
@@ -168,23 +171,25 @@ class BillServiceTest {
     @Test
     fun `updateAccountBalance updates and returns the account`() {
         val before = service.accountsFor(1L).firstOrNull { it.name == "微信" } ?: error("微信 missing")
-        val updated = service.updateAccountBalance(before.id, 500.0, 1L)
+        val updated = service.updateAccountBalance(before.id, 50000L, 1L)
         assertNotNull(updated)
         assertEquals(before.id, updated!!.id)
+        assertEquals(50000L, updated.balanceMinor)
         assertEquals(500.0, updated.balance, 0.0001)
         val after = service.accountsFor(1L).first { it.id == before.id }
+        assertEquals(50000L, after.balanceMinor)
         assertEquals(500.0, after.balance, 0.0001)
     }
 
     @Test
     fun `updateAccountBalance returns null for unknown id`() {
-        assertNull(service.updateAccountBalance(99999, 1.0, 1L))
+        assertNull(service.updateAccountBalance(99999, 1L, 1L))
     }
 
     @Test
     fun `getBill returns own bill but null for another user`() {
         val id = insertBill(1L, 10.0, updatedAt = 1000)
-        assertEquals(10.0, service.getBill(id, 1L)!!.amount, 0.0001)
+        assertEquals(1000L, service.getBill(id, 1L)!!.amountMinor)
         assertNull(service.getBill(id, 2L))
         assertNull(service.getBill(999999, 1L))
     }
@@ -193,7 +198,7 @@ class BillServiceTest {
     fun `updateAccountBalance is scoped to the account owner`() {
         val w = service.accountsFor(1L).first { it.name == "微信" }
         // 用户 2 无法改动用户 1 的账户余额
-        assertNull(service.updateAccountBalance(w.id, 999.0, 2L))
+        assertNull(service.updateAccountBalance(w.id, 99900L, 2L))
     }
 
     @Test

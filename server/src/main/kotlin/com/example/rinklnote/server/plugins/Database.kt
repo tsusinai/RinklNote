@@ -131,4 +131,30 @@ private fun Transaction.runMigrations() {
     }
 
     try { exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_accounts_user_name ON accounts(user_id, name)") } catch (_: Exception) {}
+
+    // v15 迁移：金额统一为整数分。新增 amount_minor / balance_minor（BIGINT）承载权威值，
+    // 旧浮点列 amount / balance 暂保留（过渡期兼容旧客户端，勿直接读取）。
+    // createMissingTablesAndColumns 已自动加列（可空，历史数据不会因 NOT NULL 报错），
+    // 这里幂等回填历史数据、补默认值 0 并置 NOT NULL。
+    // 加列用 ADD COLUMN IF NOT EXISTS 避免与 Exposed 自动建列冲突（PostgreSQL/H2 均支持）。
+    listOf(
+        "ALTER TABLE bills ADD COLUMN IF NOT EXISTS amount_minor BIGINT",
+        "UPDATE bills SET amount_minor = CAST(ROUND(amount * 100) AS BIGINT) WHERE amount_minor IS NULL",
+        "ALTER TABLE bills ALTER COLUMN amount_minor SET DEFAULT 0",
+        "ALTER TABLE bills ALTER COLUMN amount_minor SET NOT NULL",
+        "ALTER TABLE budgets ADD COLUMN IF NOT EXISTS amount_minor BIGINT",
+        "UPDATE budgets SET amount_minor = CAST(ROUND(amount * 100) AS BIGINT) WHERE amount_minor IS NULL",
+        "ALTER TABLE budgets ALTER COLUMN amount_minor SET DEFAULT 0",
+        "ALTER TABLE budgets ALTER COLUMN amount_minor SET NOT NULL",
+        "ALTER TABLE bill_templates ADD COLUMN IF NOT EXISTS amount_minor BIGINT",
+        "UPDATE bill_templates SET amount_minor = CAST(ROUND(amount * 100) AS BIGINT) WHERE amount_minor IS NULL",
+        "ALTER TABLE bill_templates ALTER COLUMN amount_minor SET DEFAULT 0",
+        "ALTER TABLE bill_templates ALTER COLUMN amount_minor SET NOT NULL",
+        "ALTER TABLE accounts ADD COLUMN IF NOT EXISTS balance_minor BIGINT",
+        "UPDATE accounts SET balance_minor = CAST(ROUND(balance * 100) AS BIGINT) WHERE balance_minor IS NULL",
+        "ALTER TABLE accounts ALTER COLUMN balance_minor SET DEFAULT 0",
+        "ALTER TABLE accounts ALTER COLUMN balance_minor SET NOT NULL"
+    ).forEach { sql ->
+        try { exec(sql) } catch (_: Exception) {}
+    }
 }

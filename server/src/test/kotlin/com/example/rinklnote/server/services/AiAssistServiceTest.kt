@@ -69,6 +69,7 @@ class AiAssistServiceTest {
         transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = 1L
+                it[BillsTable.amountMinor] = Money.toMinor(amount)
                 it[BillsTable.amount] = amount
                 it[BillsTable.billType] = billType
                 it[BillsTable.categoryId] = catId(categoryName)
@@ -83,7 +84,7 @@ class AiAssistServiceTest {
 
     @Test
     fun `record creates an AI bill and replies`() {
-        val r = service.record(1L, 20.0, "三餐", null)
+        val r = service.record(1L, 2000L, "三餐", null)
         assertTrue(r.reply.contains("已记录"))
         assertTrue(r.reply.contains("三餐"))
         val src = transaction {
@@ -105,7 +106,7 @@ class AiAssistServiceTest {
 
     @Test
     fun `month reports expense income and budget remaining`() {
-        budgetService.upsert(1L, monthStart(), 1000.0)
+        budgetService.upsert(1L, monthStart(), 100000L)
         insertBill(300.0, "三餐", monthStart())
         val r = service.month(1L)
         assertEquals(300.0, r.expense, 0.001)

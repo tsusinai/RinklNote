@@ -5,7 +5,10 @@ import org.jetbrains.exposed.sql.Table
 object BillsTable : Table("bills") {
     val id = long("id").autoIncrement()
     val userId = long("user_id").references(UsersTable.id)
+    // 旧浮点列，过渡期保留，勿直接读取（已由迁移回填到 amount_minor，新代码一律用 amount_minor）。
     val amount = double("amount")
+    // 整数分（权威值）。
+    val amountMinor = long("amount_minor").nullable()
     val billType = varchar("bill_type", 10) // "EXPENSE" or "INCOME"
     val categoryId = long("category_id").references(CategoriesTable.id)
     val categoryName = varchar("category_name", 50)

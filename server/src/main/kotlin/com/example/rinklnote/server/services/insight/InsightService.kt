@@ -5,6 +5,8 @@ import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.tables.BotConfigTable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -44,15 +46,29 @@ data class HabitResponse(
     val content: String? = null
 )
 
+/**
+ * 旧客户端兼容字段（元）统一说明：
+ * Json 默认 `encodeDefaults = false`，带默认值的属性在「取值等于默认值」时会被整个省略。
+ * 这些兼容字段的默认值都由 amountMinor 换算而来，恰好恒等于默认值，因此**必须**加
+ * `@EncodeDefault(ALWAYS)` 才能保证始终被序列化输出；否则旧客户端会因字段缺失反序列化失败。
+ */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class CategoryAmount(val name: String, val amount: Double)
+data class CategoryAmount(
+    val name: String,
+    val amountMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amount: Double = Money.fromMinor(amountMinor)
+)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class MonthlyAnomalyResponse(
     val month: String,
-    val totalExpense: Double,
+    val totalExpenseMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val totalExpense: Double = Money.fromMinor(totalExpenseMinor),
     val activeDays: Int,
-    val avgDailyExpense: Double,
+    val avgDailyExpenseMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val avgDailyExpense: Double = Money.fromMinor(avgDailyExpenseMinor),
     val spikeDays: List<MonthlySpike>,
     val biggestSingle: SingleBill?,
     val topCategories: List<CategoryAmount>,
@@ -62,31 +78,53 @@ data class MonthlyAnomalyResponse(
 @Serializable
 private data class MonthlyAnomalyAnalysis(val analysis: String)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class MonthlySpike(val date: String, val amount: Double, val ratioPct: Int)
+data class MonthlySpike(
+    val date: String,
+    val amountMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amount: Double = Money.fromMinor(amountMinor),
+    val ratioPct: Int
+)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
-data class SingleBill(val amount: Double, val categoryName: String, val date: String)
+data class SingleBill(
+    val amountMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amount: Double = Money.fromMinor(amountMinor),
+    val categoryName: String,
+    val date: String
+)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class DailyReportResponse(
     val date: String,
-    val totalExpense: Double,
-    val totalIncome: Double,
+    val totalExpenseMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val totalExpense: Double = Money.fromMinor(totalExpenseMinor),
+    val totalIncomeMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val totalIncome: Double = Money.fromMinor(totalIncomeMinor),
     val expenseCategories: List<CategoryAmount>,
     val incomeCategories: List<CategoryAmount>,
     val billCount: Int,
     val summary: String
 )
 
+// 注：此前漏了 @Serializable，而 InsightRoutes 的 /monthly-review 是直接 call.respond(该类型)，
+// 运行时会抛「Serializer for class 'MonthlyReviewResponse' is not found」。补上。
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
 data class MonthlyReviewResponse(
     val month: String,
     val summary: String,
     val highlights: List<String>,
-    val totalExpense: Double,
-    val totalIncome: Double,
+    val totalExpenseMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val totalExpense: Double = Money.fromMinor(totalExpenseMinor),
+    val totalIncomeMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val totalIncome: Double = Money.fromMinor(totalIncomeMinor),
     val activeDays: Int,
-    val avgDailyExpense: Double,
+    val avgDailyExpenseMinor: Long,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val avgDailyExpense: Double = Money.fromMinor(avgDailyExpenseMinor),
     val spikeDays: List<MonthlySpike>,
     val biggestSingle: SingleBill?,
     val topCategories: List<CategoryAmount>
@@ -102,20 +140,20 @@ class InsightService(
         val today = java.time.LocalDate.now(SHANGHAI).toString()
         val summary = buildString {
             appendLine("✅ 今日账单总结")
-            appendLine("支出: ￥${"%.2f".format(stats.totalExpense)}")
-            if (stats.totalIncome > 0) appendLine("收入: ￥${"%.2f".format(stats.totalIncome)}")
+            appendLine("支出: ￥${Money.format(stats.totalExpenseMinor)}")
+            if (stats.totalIncomeMinor > 0) appendLine("收入: ￥${Money.format(stats.totalIncomeMinor)}")
             appendLine("共 ${stats.billCount} 笔")
             if (stats.topExpenseCategories.isNotEmpty()) {
                 appendLine("支出分类:")
                 stats.topExpenseCategories.take(3).forEach {
-                    appendLine("  - ${it.first}: ￥${"%.2f".format(it.second)}")
+                    appendLine("  - ${it.first}: ￥${Money.format(it.second)}")
                 }
             }
         }
         return DailyReportResponse(
             date = today,
-            totalExpense = stats.totalExpense,
-            totalIncome = stats.totalIncome,
+            totalExpenseMinor = stats.totalExpenseMinor,
+            totalIncomeMinor = stats.totalIncomeMinor,
             expenseCategories = stats.topExpenseCategories.map { CategoryAmount(it.first, it.second) },
             incomeCategories = stats.topIncomeCategories.map { CategoryAmount(it.first, it.second) },
             billCount = stats.billCount.toInt(),
@@ -137,15 +175,15 @@ class InsightService(
 
         // SQL aggregate — no loading of all bills for a single month.
         val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
-        val totalExpense = stats.totalExpense
-        val totalIncome = stats.totalIncome
+        val totalExpense = stats.totalExpenseMinor
+        val totalIncome = stats.totalIncomeMinor
         val byCategory = stats.topExpenseCategories
 
         val context = """
 账单数据 ($month):
-- 总支出: ¥${"%.2f".format(totalExpense)}
-- 总收入: ¥${"%.2f".format(totalIncome)}
-- 支出分类TOP5: ${byCategory.joinToString { "${it.first} ¥${"%.2f".format(it.second)}" }}
+- 总支出: ¥${Money.format(totalExpense)}
+- 总收入: ¥${Money.format(totalIncome)}
+- 支出分类TOP5: ${byCategory.joinToString { "${it.first} ¥${Money.format(it.second)}" }}
 
 请你用自然亲切的中文写一段简洁的月度消费总结（80-150字），语气温和，别像冷冰冰的报告，并列出2-3个值得关注的点(highlights)。
 
@@ -165,7 +203,7 @@ class InsightService(
         } catch (_: Exception) {}
 
         return MonthlySummaryResponse(
-            summary = "${month} 总支出 ¥${"%.2f".format(totalExpense)}，收入 ¥${"%.2f".format(totalIncome)}，钱要花得开心，也要记得给自己留一点～",
+            summary = "${month} 总支出 ¥${Money.format(totalExpense)}，收入 ¥${Money.format(totalIncome)}，钱要花得开心，也要记得给自己留一点～",
             highlights = emptyList()
         )
     }
@@ -179,8 +217,8 @@ class InsightService(
         val f = computeMonthlyFacts(userId, month)
         val analysis = anomalyAnalysis(f)
         return MonthlyAnomalyResponse(
-            month = f.month, totalExpense = f.totalExpense, activeDays = f.activeDays,
-            avgDailyExpense = f.avgDailyExpense, spikeDays = f.spikeDays,
+            month = f.month, totalExpenseMinor = f.totalExpense, activeDays = f.activeDays,
+            avgDailyExpenseMinor = f.avgDailyExpense, spikeDays = f.spikeDays,
             biggestSingle = f.biggestSingle, topCategories = f.topCategories,
             analysis = analysis
         )
@@ -189,13 +227,13 @@ class InsightService(
     /** LLM 生成月度异常分析；失败/缺失回退到规则文案（含同样的事实点）。 */
     private suspend fun anomalyAnalysis(f: MonthlyFacts): String {
         val spikeLines = if (f.spikeDays.isEmpty()) "无"
-            else f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" }
-        val topLines = f.topCategories.joinToString { "${it.name} ¥${"%.2f".format(it.amount)}" }
-        val biggest = f.biggestSingle?.let { "${it.categoryName} ¥${"%.2f".format(it.amount)}（${it.date}）" } ?: "无"
+            else f.spikeDays.joinToString("、") { "${it.date} ¥${Money.format(it.amountMinor)}（超日均${it.ratioPct}%）" }
+        val topLines = f.topCategories.joinToString { "${it.name} ¥${Money.format(it.amountMinor)}" }
+        val biggest = f.biggestSingle?.let { "${it.categoryName} ¥${Money.format(it.amountMinor)}（${it.date}）" } ?: "无"
         val context = """
 账单异常数据 (${f.month}):
-- 总支出: ¥${"%.2f".format(f.totalExpense)}
-- 记账天数: ${f.activeDays} 天，日均支出: ¥${"%.2f".format(f.avgDailyExpense)}
+- 总支出: ¥${Money.format(f.totalExpense)}
+- 记账天数: ${f.activeDays} 天，日均支出: ¥${Money.format(f.avgDailyExpense)}
 - 超标日: ${spikeLines}
 - 最大单笔: ${biggest}
 - 消费集中TOP5: ${topLines}
@@ -219,15 +257,15 @@ class InsightService(
     }
 
     private fun fallbackAnomalyAnalysis(f: MonthlyFacts): String {
-        val sb = StringBuilder("本月支出 ¥${"%.2f".format(f.totalExpense)}，记账 ${f.activeDays} 天，日均 ¥${"%.2f".format(f.avgDailyExpense)}。")
+        val sb = StringBuilder("本月支出 ¥${Money.format(f.totalExpense)}，记账 ${f.activeDays} 天，日均 ¥${Money.format(f.avgDailyExpense)}。")
         if (f.spikeDays.isEmpty()) {
             sb.append("整体节奏比较平稳，没有明显超标日。")
         } else {
             sb.append("有 ${f.spikeDays.size} 天支出明显超标：")
-                .append(f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" })
+                .append(f.spikeDays.joinToString("、") { "${it.date} ¥${Money.format(it.amountMinor)}（超日均${it.ratioPct}%）" })
                 .append("。")
         }
-        f.biggestSingle?.let { sb.append("最大单笔是${it.categoryName} ¥${"%.2f".format(it.amount)}。") }
+        f.biggestSingle?.let { sb.append("最大单笔是${it.categoryName} ¥${Money.format(it.amountMinor)}。") }
         return sb.toString()
     }
 
@@ -240,17 +278,17 @@ class InsightService(
         val f = computeMonthlyFacts(userId, month)
 
         val spikeLines = if (f.spikeDays.isEmpty()) "无"
-            else f.spikeDays.joinToString("、") { "${it.date} ¥${"%.2f".format(it.amount)}（超日均${it.ratioPct}%）" }
-        val topLines = f.topCategories.joinToString { "${it.name} ¥${"%.2f".format(it.amount)}" }
+            else f.spikeDays.joinToString("、") { "${it.date} ¥${Money.format(it.amountMinor)}（超日均${it.ratioPct}%）" }
+        val topLines = f.topCategories.joinToString { "${it.name} ¥${Money.format(it.amountMinor)}" }
 
         val context = """
 账单数据 ($month):
-- 总支出: ¥${"%.2f".format(f.totalExpense)}
-- 总收入: ¥${"%.2f".format(f.totalIncome)}
-- 记账天数: ${f.activeDays} 天，日均支出: ¥${"%.2f".format(f.avgDailyExpense)}
+- 总支出: ¥${Money.format(f.totalExpense)}
+- 总收入: ¥${Money.format(f.totalIncome)}
+- 记账天数: ${f.activeDays} 天，日均支出: ¥${Money.format(f.avgDailyExpense)}
 - 支出分类TOP5: ${topLines}
 - 超标日: ${spikeLines}
-- 最大单笔: ${f.biggestSingle?.let { "${it.categoryName} ¥${"%.2f".format(it.amount)}（${it.date}）" } ?: "无"}
+- 最大单笔: ${f.biggestSingle?.let { "${it.categoryName} ¥${Money.format(it.amountMinor)}（${it.date}）" } ?: "无"}
 
 请你用自然亲切的中文写一段简洁的月度消费复盘（80-150字），语气温和，别像冷冰冰的报告，并列出2-3个值得关注的点(highlights)。若某月超标日/最大单笔异常明显，请在总结中自然点出，但别过度渲染。
 
@@ -265,23 +303,23 @@ class InsightService(
             if (jsonStr != null) {
                 val parsed = Json { ignoreUnknownKeys = true; isLenient = true }
                     .decodeFromString<MonthlySummaryResponse>(jsonStr)
-                return MonthlyReviewResponse(
-                    month = month, summary = parsed.summary, highlights = parsed.highlights,
-                    totalExpense = f.totalExpense, totalIncome = f.totalIncome,
-                    activeDays = f.activeDays, avgDailyExpense = f.avgDailyExpense,
-                    spikeDays = f.spikeDays, biggestSingle = f.biggestSingle, topCategories = f.topCategories
-                )
+        return MonthlyReviewResponse(
+            month = month, summary = parsed.summary, highlights = parsed.highlights,
+            totalExpenseMinor = f.totalExpense, totalIncomeMinor = f.totalIncome,
+            activeDays = f.activeDays, avgDailyExpenseMinor = f.avgDailyExpense,
+            spikeDays = f.spikeDays, biggestSingle = f.biggestSingle, topCategories = f.topCategories
+        )
             }
         } catch (_: Exception) {}
 
         val sumMsg = buildString {
-            append("${month} 总支出 ¥${"%.2f".format(f.totalExpense)}，收入 ¥${"%.2f".format(f.totalIncome)}")
-            if (f.activeDays > 0) append("，日均 ¥${"%.2f".format(f.avgDailyExpense)}")
+            append("${month} 总支出 ¥${Money.format(f.totalExpense)}，收入 ¥${Money.format(f.totalIncome)}")
+            if (f.activeDays > 0) append("，日均 ¥${Money.format(f.avgDailyExpense)}")
         }
         return MonthlyReviewResponse(
             month = month, summary = sumMsg + "，钱要花得开心，也要记得给自己留一点～", highlights = emptyList(),
-            totalExpense = f.totalExpense, totalIncome = f.totalIncome,
-            activeDays = f.activeDays, avgDailyExpense = f.avgDailyExpense,
+            totalExpenseMinor = f.totalExpense, totalIncomeMinor = f.totalIncome,
+            activeDays = f.activeDays, avgDailyExpenseMinor = f.avgDailyExpense,
             spikeDays = f.spikeDays, biggestSingle = f.biggestSingle, topCategories = f.topCategories
         )
     }
@@ -295,26 +333,27 @@ class InsightService(
 
         val inWindow = billService.allBills(userId).filter { it.date >= monthStart && it.date < nextMonthStart }
         val expenses = inWindow.filter { it.billType == "EXPENSE" }
-        val totalExpense = Money.cents(expenses.sumOf { it.amount })
-        val totalIncome = Money.cents(inWindow.filter { it.billType == "INCOME" }.sumOf { it.amount })
+        val totalExpense = expenses.sumOf { it.amountMinor }
+        val totalIncome = inWindow.filter { it.billType == "INCOME" }.sumOf { it.amountMinor }
 
         val byDay = expenses.groupBy { dayKey(it.date) }
         val activeDays = byDay.size
-        val avg = if (activeDays > 0) Money.cents(totalExpense / activeDays) else 0.0
+        // 日均支出（整数分）用于波动比例计算；与整数分同单位，避免整数相除漂移。
+        val avg = if (activeDays > 0) Money.toMinor(totalExpense.toDouble() / activeDays) else 0L
 
         val spikes = byDay.mapNotNull { (d, bills) ->
-            val dayTotal = Money.cents(bills.sumOf { it.amount })
+            val dayTotal = bills.sumOf { it.amountMinor }
             if (avg > 0 && dayTotal > avg * anomalyThreshold) {
-                MonthlySpike(date = d, amount = dayTotal, ratioPct = ((dayTotal / avg - 1) * 100).toInt())
+                MonthlySpike(date = d, amountMinor = dayTotal, ratioPct = ((dayTotal.toDouble() / avg - 1) * 100).toInt())
             } else null
         }.sortedByDescending { it.ratioPct }
 
-        val biggest = expenses.maxByOrNull { it.amount }?.let {
-            SingleBill(amount = it.amount, categoryName = it.categoryName, date = dayKey(it.date))
+        val biggest = expenses.maxByOrNull { it.amountMinor }?.let {
+            SingleBill(amountMinor = it.amountMinor, categoryName = it.categoryName, date = dayKey(it.date))
         }
 
         val top = expenses.groupBy { it.categoryName }
-            .mapValues { Money.cents(it.value.sumOf { b -> b.amount }) }
+            .mapValues { it.value.sumOf { b -> b.amountMinor } }
             .entries.sortedByDescending { it.value }.take(5)
             .map { CategoryAmount(it.key, it.value) }
 
@@ -325,10 +364,10 @@ class InsightService(
 
 data class MonthlyFacts(
         val month: String,
-        val totalExpense: Double,
-        val totalIncome: Double,
+        val totalExpense: Long,
+        val totalIncome: Long,
         val activeDays: Int,
-        val avgDailyExpense: Double,
+        val avgDailyExpense: Long,
         val spikeDays: List<MonthlySpike>,
         val biggestSingle: SingleBill?,
         val topCategories: List<CategoryAmount>
@@ -345,20 +384,20 @@ data class MonthlyFacts(
         val thirtyDaysAgo = now - 30L * 24 * 60 * 60 * 1000
 
         val recentExpenses = bills.filter { it.billType == "EXPENSE" && it.date >= thirtyDaysAgo }
-        val dailyAvg = Money.cents(recentExpenses.sumOf { it.amount } / 30.0)
+        val dailyAvg = recentExpenses.sumOf { it.amountMinor } / 30.0
 
         val todayStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai")).toInstant().toEpochMilli()
-        val todayExpense = Money.cents(bills.filter { it.billType == "EXPENSE" && it.date >= todayStart }
-            .sumOf { it.amount })
+        val todayExpense = bills.filter { it.billType == "EXPENSE" && it.date >= todayStart }
+            .sumOf { it.amountMinor }
 
         val alerts = mutableListOf<AnomalyAlert>()
 
         if (dailyAvg > 0 && todayExpense > dailyAvg * anomalyThreshold) {
-            val pct = ((todayExpense / dailyAvg - 1) * 100).toInt()
+            val pct = ((todayExpense.toDouble() / dailyAvg - 1) * 100).toInt()
             alerts.add(AnomalyAlert(
                 level = "WARN",
-                message = "今天花了 ¥${"%.2f".format(todayExpense)}，比平时日均 ¥${"%.2f".format(dailyAvg)} 高 $pct%，留意一下哦",
+                message = "今天花了 ¥${Money.format(todayExpense)}，比平时日均 ¥${"%.2f".format(dailyAvg)} 高 $pct%，留意一下哦",
                 type = "DAILY_SPIKE"
             ))
         }
@@ -384,11 +423,11 @@ data class MonthlyFacts(
         // 只取目标月份窗口内的账单，避免跨月数据污染回答。
         val monthBills = bills.filter { it.date >= monthStart && it.date < nextMonthStart }
 
-        val totalExpense = Money.cents(monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amount })
-        val totalIncome = Money.cents(monthBills.filter { it.billType == "INCOME" }.sumOf { it.amount })
+        val totalExpense = monthBills.filter { it.billType == "EXPENSE" }.sumOf { it.amountMinor }
+        val totalIncome = monthBills.filter { it.billType == "INCOME" }.sumOf { it.amountMinor }
         val topCategories = monthBills.filter { it.billType == "EXPENSE" }
             .groupBy { it.categoryName }
-            .mapValues { Money.cents(it.value.sumOf { b -> b.amount }) }
+            .mapValues { it.value.sumOf { b -> b.amountMinor } }
             .entries.sortedByDescending { it.value }.take(5)
             .map { it.key to it.value }
         val recentBills = monthBills.sortedByDescending { it.date }.take(10)
@@ -451,14 +490,14 @@ data class MonthlyFacts(
 
         if (recent.isEmpty()) return null
 
-        val grouped = recent.groupBy { Pair(it.categoryName, it.amount) }
+        val grouped = recent.groupBy { Pair(it.categoryName, it.amountMinor) }
         val best = grouped.maxByOrNull { it.value.size } ?: return null
         if (best.value.size < config.minOccurrences) return null
 
         return mapOf(
             "label" to window.label,
             "categoryName" to best.key.first,
-            "amount" to best.key.second.toString()
+            "amount" to Money.format(best.key.second)
         )
     }
 
@@ -486,7 +525,7 @@ data class MonthlyFacts(
         }
     }
 
-    data class HabitReminder(val label: String, val categoryName: String, val amount: Double)
+    data class HabitReminder(val label: String, val categoryName: String, val amountMinor: Long, val amount: Double = Money.fromMinor(amountMinor))
 
     /**
      * FR6 习惯提醒：命中当前时段 + 回看窗口内某分类频率 ≥ minOccurrences 且今日未记该分类。
@@ -506,7 +545,7 @@ data class MonthlyFacts(
         val recent = bills.filter { it.billType == "EXPENSE" && it.date >= lookbackStart && it.date < todayStart }
         if (recent.isEmpty()) return null
 
-        val grouped = recent.groupBy { Pair(it.categoryName, it.amount) }
+        val grouped = recent.groupBy { Pair(it.categoryName, it.amountMinor) }
         val best = grouped.maxByOrNull { it.value.size } ?: return null
         if (best.value.size < config.minOccurrences) return null
         // 今日已记该分类则不提醒
@@ -521,8 +560,8 @@ data class MonthlyFacts(
 习惯提醒线索（聚合，无任何明细/备注）:
 - 时段: ${habit.label}
 - 常记分类: ${habit.categoryName}
-- 常记金额: ¥${"%.2f".format(habit.amount)}
-请用一句话（≤30字）给出自然亲切、不硬性的提醒文案，例如「${habit.label}时段你常点 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，记得记一笔吗？」
+- 常记金额: ¥${Money.format(habit.amountMinor)}
+请用一句话（≤30字）给出自然亲切、不硬性的提醒文案，例如「${habit.label}时段你常点 ${habit.categoryName} ¥${Money.format(habit.amountMinor)}，记得记一笔吗？」
 返回JSON: {"answer": "..."}
 """.trimIndent()
         return try {
@@ -530,9 +569,9 @@ data class MonthlyFacts(
             val parsed = jsonStr?.let { Json { ignoreUnknownKeys = true; isLenient = true }.decodeFromString<QueryResponse>(it) }
             val ans = parsed?.answer?.trim()
             if (!ans.isNullOrBlank()) ans
-            else "「${habit.label}」你常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记了吗？"
+            else "「${habit.label}」你常记 ${habit.categoryName} ¥${Money.format(habit.amountMinor)}，今天记了吗？"
         } catch (_: Exception) {
-            "「${habit.label}」到点啦，你平时常记 ${habit.categoryName} ¥${"%.2f".format(habit.amount)}，今天记得补一笔呀～"
+            "「${habit.label}」到点啦，你平时常记 ${habit.categoryName} ¥${Money.format(habit.amountMinor)}，今天记得补一笔呀～"
         }
     }
 
@@ -604,13 +643,13 @@ data class MonthlyFacts(
             categories: List<String>,
             year: Int,
             month: Int,
-            totalExpense: Double,
-            totalIncome: Double,
-            topCategories: List<Pair<String, Double>>,
+            totalExpense: Long,
+            totalIncome: Long,
+            topCategories: List<Pair<String, Long>>,
             recentBills: List<BillDTO>
         ): String {
             val recentLines = recentBills.sortedByDescending { it.date }.take(10)
-                .joinToString("\n") { "- ${formatDate(it.date)} ${it.categoryName} ¥${"%.2f".format(it.amount)}" }
+                .joinToString("\n") { "- ${formatDate(it.date)} ${it.categoryName} ¥${Money.format(it.amountMinor)}" }
             return """
 用户问题: "$query"
 
@@ -618,9 +657,9 @@ data class MonthlyFacts(
 
 数据 ($year-$month):
 - 月份: ${year}-${month}
-- 总支出: ¥${"%.2f".format(totalExpense)}
-- 总收入: ¥${"%.2f".format(totalIncome)}
-- 支出分类TOP5: ${topCategories.joinToString { pair -> "${pair.first} ¥${"%.2f".format(pair.second)}" }}
+- 总支出: ¥${Money.format(totalExpense)}
+- 总收入: ¥${Money.format(totalIncome)}
+- 支出分类TOP5: ${topCategories.joinToString { pair -> "${pair.first} ¥${Money.format(pair.second)}" }}
 
 最近10笔记录:
 $recentLines

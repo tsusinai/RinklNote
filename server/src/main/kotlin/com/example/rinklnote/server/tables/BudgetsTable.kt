@@ -9,7 +9,10 @@ object BudgetsTable : Table("budgets") {
     val periodType = varchar("period_type", 10).default("MONTHLY") // MONTHLY | YEARLY(二期)
     val categoryId = long("category_id").references(CategoriesTable.id).nullable()
     val subCategoryId = long("sub_category_id").references(SubCategoriesTable.id).nullable()
+    // 旧浮点列，过渡期保留，勿直接读取。
     val amount = double("amount")
+    // 整数分（权威值）。
+    val amountMinor = long("amount_minor").nullable()
     val createdAt = long("created_at")
     val updatedAt = long("updated_at").nullable()
     val deleted = bool("deleted").default(false)

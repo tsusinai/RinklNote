@@ -2,6 +2,7 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.nlu.NLUService
 import com.example.rinklnote.server.tables.BillsTable
 import io.ktor.http.*
@@ -17,7 +18,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class CreateBillRequest(
-    val amount: Double,
+    // 新字段（分，权威值）；旧客户端只发 amount 时回退。
+    val amountMinor: Long? = null,
+    // 旧字段（元），仅供回退。
+    val amount: Double? = null,
     val billType: String,
     val categoryId: Long,
     val categoryName: String,
@@ -98,19 +102,24 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     ?: return@post call.respond(HttpStatusCode.Unauthorized)
 
                 val body = call.receive<CreateBillRequest>()
-                val bill = billService.createWebBill(
-                    userId = userId,
-                    amount = body.amount,
-                    billType = body.billType,
-                    categoryId = body.categoryId,
-                    categoryName = body.categoryName,
-                    subCategoryName = body.subCategoryName,
-                    accountId = body.accountId,
-                    remark = body.remark,
-                    date = body.date,
-                    sortOrder = body.sortOrder
-                )
-                call.respond(HttpStatusCode.Created, bill)
+                try {
+                    val amountMinor = Money.resolveAmountMinor(body.amountMinor, body.amount)
+                    val bill = billService.createWebBill(
+                        userId = userId,
+                        amountMinor = amountMinor,
+                        billType = body.billType,
+                        categoryId = body.categoryId,
+                        categoryName = body.categoryName,
+                        subCategoryName = body.subCategoryName,
+                        accountId = body.accountId,
+                        remark = body.remark,
+                        date = body.date,
+                        sortOrder = body.sortOrder
+                    )
+                    call.respond(HttpStatusCode.Created, bill)
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "请求不合法")))
+                }
             }
 
             put("/{id}") {
@@ -122,7 +131,12 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
 
                 val body = call.receive<CreateBillRequest>()
-                require(body.amount > 0 && body.amount.isFinite()) { "金额必须大于0" }
+                val amountMinor = try {
+                    Money.resolveAmountMinor(body.amountMinor, body.amount)
+                } catch (e: IllegalArgumentException) {
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "金额不合法")))
+                }
+                require(amountMinor > 0) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
 
                 // 条件 PUT：带 baseUpdatedAt 且和服务端最新 updatedAt 不符 → 409 + 当前最新 DTO，
@@ -145,7 +159,8 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
 
                     val now = System.currentTimeMillis()
                     BillsTable.update({ BillsTable.id eq billId }) {
-                        it[BillsTable.amount] = body.amount
+                        it[BillsTable.amountMinor] = amountMinor
+                        it[BillsTable.amount] = Money.fromMinor(amountMinor)
                         it[BillsTable.billType] = body.billType
                         it[BillsTable.categoryId] = body.categoryId
                         it[BillsTable.categoryName] = body.categoryName
@@ -157,7 +172,7 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     }
 
                     BillDTO(
-                        id = billId, amount = body.amount, billType = body.billType,
+                        id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = body.billType,
                         categoryId = body.categoryId, categoryName = body.categoryName,
                         subCategoryName = body.subCategoryName, accountId = body.accountId,
                         remark = body.remark, date = row[BillsTable.date],

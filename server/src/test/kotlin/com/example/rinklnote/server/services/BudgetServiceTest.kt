@@ -94,6 +94,7 @@ class BudgetServiceTest {
         transaction {
             BillsTable.insert {
                 it[BillsTable.userId] = userId
+                it[BillsTable.amountMinor] = Money.toMinor(amount)
                 it[BillsTable.amount] = amount
                 it[BillsTable.billType] = "EXPENSE"
                 it[BillsTable.categoryId] = categoryId
@@ -109,7 +110,7 @@ class BudgetServiceTest {
 
     @Test
     fun `upsert creates a new budget for a user and month`() {
-        val created = service.upsert(1L, monthStart = 100, amount = 500.0)
+        val created = service.upsert(1L, monthStart = 100, amountMinor = 50000L)
         assertTrue(created.id > 0)
         assertEquals(100, created.monthStart)
         assertEquals(500.0, created.amount, 0.0001)
@@ -124,8 +125,8 @@ class BudgetServiceTest {
 
     @Test
     fun `upsert with same user and month updates instead of duplicating`() {
-        val first = service.upsert(1L, monthStart = 200, amount = 300.0)
-        val second = service.upsert(1L, monthStart = 200, amount = 888.0)
+        val first = service.upsert(1L, monthStart = 200, amountMinor = 30000L)
+        val second = service.upsert(1L, monthStart = 200, amountMinor = 88800L)
 
         assertEquals(first.id, second.id)
         assertEquals(888.0, second.amount, 0.0001)
@@ -134,13 +135,13 @@ class BudgetServiceTest {
 
     @Test
     fun `upsert revives a deleted row for the same month`() {
-        val created = service.upsert(1L, monthStart = 300, amount = 100.0)
+        val created = service.upsert(1L, monthStart = 300, amountMinor = 10000L)
         // Simulate a remote soft-delete of the budget row.
         transaction {
             BudgetsTable.update({ BudgetsTable.id eq created.id }) { it[BudgetsTable.deleted] = true }
         }
 
-        val revived = service.upsert(1L, monthStart = 300, amount = 250.0)
+        val revived = service.upsert(1L, monthStart = 300, amountMinor = 25000L)
         assertEquals(created.id, revived.id)
         assertTrue(!revived.deleted)
         assertEquals(250.0, revived.amount, 0.0001)
@@ -148,8 +149,8 @@ class BudgetServiceTest {
 
     @Test
     fun `list is scoped per user`() {
-        service.upsert(1L, monthStart = 400, amount = 100.0)
-        service.upsert(2L, monthStart = 400, amount = 999.0)
+        service.upsert(1L, monthStart = 400, amountMinor = 10000L)
+        service.upsert(2L, monthStart = 400, amountMinor = 99900L)
 
         val user1 = service.list(1L)
         val user2 = service.list(2L)
@@ -160,9 +161,9 @@ class BudgetServiceTest {
 
     @Test
     fun `upsert keeps total and category budgets in same month and list returns both`() {
-        val total = service.upsert(1L, monthStart = 100, amount = 2000.0)
+        val total = service.upsert(1L, monthStart = 100, amountMinor = 200000L)
         val categoryId = insertCategory("交通")
-        val category = service.upsert(1L, monthStart = 100, amount = 800.0, categoryId = categoryId)
+        val category = service.upsert(1L, monthStart = 100, amountMinor = 80000L, categoryId = categoryId)
 
         val all = service.list(1L)
         assertEquals(2, all.size)
@@ -183,8 +184,8 @@ class BudgetServiceTest {
     @Test
     fun `upsert with same user month and category updates instead of duplicating`() {
         val categoryId = insertCategory("交通")
-        val first = service.upsert(1L, monthStart = 200, amount = 300.0, categoryId = categoryId)
-        val second = service.upsert(1L, monthStart = 200, amount = 999.0, categoryId = categoryId)
+        val first = service.upsert(1L, monthStart = 200, amountMinor = 30000L, categoryId = categoryId)
+        val second = service.upsert(1L, monthStart = 200, amountMinor = 99900L, categoryId = categoryId)
 
         assertEquals(first.id, second.id)
         assertEquals(999.0, second.amount, 0.0001)
@@ -199,9 +200,9 @@ class BudgetServiceTest {
         val subId = insertSubCategory("早餐", mealId)
         val accountId = insertAccount(1L)
 
-        service.upsert(1L, monthStart = start, amount = 2000.0)
-        service.upsert(1L, monthStart = start, amount = 500.0, categoryId = mealId)
-        service.upsert(1L, monthStart = start, amount = 300.0, categoryId = mealId, subCategoryId = subId)
+        service.upsert(1L, monthStart = start, amountMinor = 200000L)
+        service.upsert(1L, monthStart = start, amountMinor = 50000L, categoryId = mealId)
+        service.upsert(1L, monthStart = start, amountMinor = 30000L, categoryId = mealId, subCategoryId = subId)
 
         insertExpense(1L, 60.0, date = start + 86_400_000, categoryId = mealId, accountId = accountId)
         insertExpense(
@@ -238,7 +239,7 @@ class BudgetServiceTest {
         val mealId = insertCategory("三餐")
         val accountId = insertAccount(1L)
 
-        service.upsert(1L, monthStart = prevStart, amount = 1000.0)
+        service.upsert(1L, monthStart = prevStart, amountMinor = 100000L)
         insertExpense(1L, 600.0, date = prevStart + 86_400_000, categoryId = mealId, accountId = accountId)
 
         val s = service.summary(1L, start)
@@ -269,7 +270,7 @@ class BudgetServiceTest {
         val mealId = insertCategory("三餐")
         val accountId = insertAccount(1L)
 
-        service.upsert(1L, monthStart = start, amount = 1000.0)
+        service.upsert(1L, monthStart = start, amountMinor = 100000L)
         insertExpense(1L, 600.0, date = prevStart + 86_400_000, categoryId = mealId, accountId = accountId)
 
         val s = service.summary(1L, start)
