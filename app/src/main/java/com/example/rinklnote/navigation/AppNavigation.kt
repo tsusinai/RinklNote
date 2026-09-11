@@ -34,10 +34,12 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -49,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +84,7 @@ import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.login.LoginPage
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
+import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.Motion
@@ -98,6 +102,7 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 
@@ -445,6 +450,10 @@ fun AppNavigation(app: RinklNoteApp) {
                         onLoginClick = { showLogin = true },
                         onBindQQClick = { showBindQQ = true },
                         onQqBotGuideClick = { showQqBotGuide = true },
+                        onCropBackground = { uri ->
+                            // 图库选完 → 取景框裁剪路由（content:// 仅会话内可读，须当场裁剪落盘）
+                            navController.navigate("background-crop/" + Uri.encode(uri.toString()))
+                        },
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState
                     )
@@ -455,6 +464,26 @@ fun AppNavigation(app: RinklNoteApp) {
                         isLoggedIn = authState.isLoggedIn,
                         onVoiceInput = { startVoice(VoiceTarget.AI) }
                     )
+                }
+                // 背景取景框裁剪：图库选图后的中间路由，非 tab 路由 → 底栏自动隐藏、内容区占满全屏。
+                composable(
+                    route = "background-crop/{uri}",
+                    arguments = listOf(navArgument("uri") { type = NavType.StringType })
+                ) { entry ->
+                    val uriStr = entry.arguments?.getString("uri").orEmpty()
+                    if (uriStr.isNotBlank()) {
+                        val scope = rememberCoroutineScope()
+                        BackgroundCropScreen(
+                            imageUri = Uri.parse(uriStr),
+                            onConfirm = { path ->
+                                scope.launch {
+                                    app.settingsManager.setBackgroundUri(path)
+                                    navController.popBackStack()
+                                }
+                            },
+                            onCancel = { navController.popBackStack() }
+                        )
+                    }
                 }
             }
 

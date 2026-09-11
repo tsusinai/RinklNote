@@ -76,6 +76,9 @@ dependencies {
     // Coil - 图片加载
     implementation(libs.coil.compose)
 
+    // ExifInterface - 背景取景框解码回正
+    implementation(libs.androidx.exifinterface)
+
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

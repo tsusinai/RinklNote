@@ -129,6 +129,7 @@ fun ProfileScreen(
     onLoginClick: () -> Unit,
     onBindQQClick: () -> Unit,
     onQqBotGuideClick: () -> Unit,
+    onCropBackground: (Uri) -> Unit,
     backgroundUri: String?,
     hazeState: HazeState
 ) {
@@ -188,17 +189,11 @@ fun ProfileScreen(
         }
     }
 
-    // 图库选背景：拷到应用内部存储，写回设置。
+    // 图库选背景：选完先进入取景框裁剪路由，确认后才落盘写回设置。
     val pickBackgroundLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        if (uri != null) {
-            coroutineScope.launch {
-                val path = copyBackgroundToInternal(context, uri)
-                if (path != null) settingsManager.setBackgroundUri(path)
-                else Toast.makeText(context, "未读到图片，请换一张重试", Toast.LENGTH_SHORT).show()
-            }
-        }
+        if (uri != null) onCropBackground(uri)
     }
 
     var showPassword by remember { mutableStateOf(false) }
@@ -972,21 +967,7 @@ private fun formatSyncTime(epochMillis: Long): String {
         .format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
 }
 
-/** 把图库选的照片拷进应用内部存储并返回其绝对路径；PhotoPicker 的 content:// 仅在会话内可读，
- *  拷到 filesDir 后跨重启稳定，Coil 可直接按路径加载。失败返回 null。 */
-private fun copyBackgroundToInternal(context: Context, uri: Uri): String? {
-    return try {
-        val dir = File(context.filesDir, "backgrounds").apply { mkdirs() }
-        val file = File(dir, "bg_${System.currentTimeMillis()}.jpg")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
-        }
-        file.absolutePath
-    } catch (_: Exception) {
-        null
-    }
-}
-
+/** 把账单导出为 CSV 并唤起分享。 */
 private fun exportBills(context: android.content.Context, bills: List<Bill>) {
     val sb = StringBuilder("\uFEFF")
     sb.appendLine("日期,类型,分类,子分类,金额,备注,来源")
