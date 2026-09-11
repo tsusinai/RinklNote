@@ -304,10 +304,13 @@ private fun saveFallback(context: Context, uri: Uri): String? {
 /** 解码照片并按 EXIF 回正、限制最大边长（防止 OOM）；失败返回 null。 */
 private fun decodeOrientedBitmap(context: Context, uri: Uri, maxDim: Int): Bitmap? {
     return try {
-        // 1) 只读边界求采样率
+        // 1) 只读边界求采样率。注意：inJustDecodeBounds=true 时 decodeStream 恒返回 null（仅填充
+        //    outWidth/outHeight），不能用其返回值判失败；以 outWidth 有效性为准。
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: return null
+        context.contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
         while (max(bounds.outWidth, bounds.outHeight) / sample > maxDim * 2) sample *= 2
         // 2) 实际解码
