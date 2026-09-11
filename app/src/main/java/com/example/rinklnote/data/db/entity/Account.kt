@@ -12,7 +12,8 @@ import androidx.room.PrimaryKey
 data class Account(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
-    val balance: Double = 0.0,
+    // 余额单位：分（minor unit）。
+    @androidx.room.ColumnInfo(name = "balance_minor") val balanceMinor: Long = 0L,
     @androidx.room.ColumnInfo(name = "icon_color") val iconColor: String,
     @androidx.room.ColumnInfo(name = "server_id") val serverId: Long? = null,
     @androidx.room.ColumnInfo(name = "updated_at") val updatedAt: Long? = null,

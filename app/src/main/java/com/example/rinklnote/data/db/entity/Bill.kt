@@ -32,7 +32,8 @@ import com.example.rinklnote.domain.Source
 )
 data class Bill(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val amount: Double,
+    // 金额单位：分（minor unit），整数存储避免浮点漂移。展示统一走 Money.format。
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
     @ColumnInfo(name = "bill_type") val billType: BillType = BillType.EXPENSE,
     @ColumnInfo(name = "category_id") val categoryId: Long,
     @ColumnInfo(name = "category_name") val categoryName: String,

@@ -56,8 +56,8 @@ private const val AI_SUMMARY_REFRESH_INTERVAL_MS = 10 * 60 * 1000L
 @androidx.compose.runtime.Immutable
 data class BookkeepingMonthState(
     val bills: List<Bill> = emptyList(),
-    val totalExpense: Double = 0.0,
-    val totalIncome: Double = 0.0,
+    val totalExpense: Long = 0L,
+    val totalIncome: Long = 0L,
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val currentDate: Long = System.currentTimeMillis(),

@@ -111,7 +111,7 @@ class AiViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, repo.addedBills.size)
-        assertEquals(28.0, repo.addedBills[0].amount, 0.0001)
+        assertEquals(2800L, repo.addedBills[0].amountMinor)
         assertEquals("三餐", repo.addedBills[0].categoryName)
         assertTrue(vm.consumeBookingPending())
         assertFalse(vm.consumeBookingPending())
@@ -274,7 +274,7 @@ class AiViewModelTest {
             listOf(Category(11, "工资", "salary", BillType.INCOME))
         )
         override val accounts: MutableStateFlow<List<Account>> = MutableStateFlow(
-            listOf(Account(1, "微信", 0.0, "#28C145"))
+            listOf(Account(1, "微信", 0L, "#28C145"))
         )
 
         val addedBills = mutableListOf<Bill>()
@@ -301,10 +301,10 @@ class AiViewModelTest {
             flowOf(emptyList())
         override fun observeTemplates(): Flow<List<BillTemplate>> = flowOf(emptyList())
         override fun observeBudgets(): Flow<List<Budget>> = flowOf(emptyList())
-        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double = 0.0
-        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double = 0.0
-        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
-        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
+        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long = 0L
+        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long = 0L
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
         override suspend fun reorderBills(bills: List<Bill>) {}
@@ -327,10 +327,10 @@ class AiViewModelTest {
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
         override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
-            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+            DailyReport("", 0L, 0L, emptyList(), emptyList(), 0)
         override suspend fun countUnsynced(): Long = 0
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 
@@ -339,8 +339,8 @@ class AiViewModelTest {
         var reviewResult: MonthlyReviewResponse =
             MonthlyReviewResponse(
                 summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"),
-                spikeDays = listOf(MonthlySpike("8/15", 200.0, 60)),
-                topCategories = listOf(CategoryAmount("餐饮", 800.0))
+                spikeDays = listOf(MonthlySpike(date = "8/15", amountMinor = 20000L, ratioPct = 60)),
+                topCategories = listOf(CategoryAmount(name = "餐饮", amountMinor = 80000L))
             )
         var monthlyError: Exception? = null
         var anomalyResult: AnomalyResponse =
@@ -372,18 +372,18 @@ class AiViewModelTest {
         override suspend fun changePassword(request: ChangePasswordRequest): MessageResponse = MessageResponse("")
         override suspend fun unbindQQ(): MessageResponse = MessageResponse("")
         override suspend fun syncBills(after: Long?, afterId: Long?, limit: Int): SyncResponse = SyncResponse(emptyList(), 0L)
-        override suspend fun uploadBill(bill: CreateBillRequest): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
-        override suspend fun updateBill(id: Long, bill: CreateBillRequest): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
+        override suspend fun uploadBill(bill: CreateBillRequest): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)
+        override suspend fun updateBill(id: Long, bill: CreateBillRequest): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)
         override suspend fun deleteBill(id: Long): MessageResponse = MessageResponse("")
-        override suspend fun getBill(id: Long): BillDTO = BillDTO(0, 0.0, "", 0, "", null, 0, null, 0L, "", 0L)
+        override suspend fun getBill(id: Long): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)
         override suspend fun getAccounts(): List<AccountDTO> = emptyList()
         override suspend fun createAccount(request: CreateAccountRequest): AccountDTO =
-            AccountDTO(0, "", 0.0, "")
+            AccountDTO(id = 0, name = "", balanceMinor = 0L, iconColor = "", updatedAt = null)
         override suspend fun updateAccount(id: Long, request: UpdateAccountRequest): AccountDTO =
-            AccountDTO(0, "", 0.0, "")
+            AccountDTO(id = 0, name = "", balanceMinor = 0L, iconColor = "", updatedAt = null)
         override suspend fun deleteAccount(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
-        override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(id = 0, monthStart = 0L, amount = 0.0, createdAt = 0L)
+        override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(id = 0, monthStart = 0L, amountMinor = 0L, createdAt = 0L)
         override suspend fun getBudgetSummary(periodStart: Long): BudgetSummaryDTO =
             BudgetSummaryDTO(
                 periodStart = periodStart,
@@ -393,7 +393,7 @@ class AiViewModelTest {
         override suspend fun transcribe(file: MultipartBody.Part): TranscribeResponse = TranscribeResponse()
         override suspend fun getTemplates(): List<TemplateDTO> = emptyList()
         override suspend fun createTemplate(template: TemplateDTO): TemplateDTO =
-            TemplateDTO(0, "", 0.0, 0, "", null, 0)
+            TemplateDTO(id = 0, label = "", amountMinor = 0L, categoryId = 0, categoryName = "", accountId = 0)
         override suspend fun deleteTemplate(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getSuggestion(): Map<String, String> = emptyMap()
         override suspend fun getSuggestConfig(): Map<String, String> = emptyMap()
@@ -401,7 +401,7 @@ class AiViewModelTest {
         override suspend fun getAiDisabled(): Map<String, Boolean> = mapOf("disabled" to false)
         override suspend fun setAiDisabled(request: AiDisabledRequest): Map<String, Boolean> = mapOf("disabled" to request.disabled)
         override suspend fun getDailyReport(): DailyReportResponse =
-            DailyReportResponse("", 0.0, 0.0, emptyList(), emptyList(), 0, "")
+            DailyReportResponse("", 0L, 0.0, 0L, 0.0, emptyList(), emptyList(), 0, "")
         override suspend fun getDailyReportSetting(): DailyReportSettingDto =
             DailyReportSettingDto(enabled = false, hour = 9, minute = 0)
         override suspend fun setDailyReportSetting(request: DailyReportSettingDto): DailyReportSettingDto =
@@ -424,8 +424,8 @@ class AiViewModelTest {
         override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 }

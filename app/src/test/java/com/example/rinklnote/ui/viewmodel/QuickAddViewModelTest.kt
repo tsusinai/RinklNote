@@ -90,7 +90,7 @@ class QuickAddViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, repo.addedBills.size)
-        assertEquals(20.0, repo.addedBills[0].amount, 0.0001)
+        assertEquals(2000L, repo.addedBills[0].amountMinor)
         assertEquals("三餐", repo.addedBills[0].categoryName)
         assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
     }
@@ -154,7 +154,7 @@ class QuickAddViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, repo.addedBills.size)
-        assertEquals(25.0, repo.addedBills[0].amount, 0.0001)
+        assertEquals(2500L, repo.addedBills[0].amountMinor)
         assertEquals("三餐", repo.addedBills[0].categoryName)
         assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
 
@@ -187,7 +187,7 @@ class QuickAddViewModelTest {
             listOf(Category(11, "工资", "salary", BillType.INCOME))
         )
         override val accounts: MutableStateFlow<List<Account>> = MutableStateFlow(
-            listOf(Account(1, "微信", 0.0, "#28C145"))
+            listOf(Account(1, "微信", 0L, "#28C145"))
         )
 
         val addedBills = mutableListOf<Bill>()
@@ -206,10 +206,10 @@ class QuickAddViewModelTest {
         override fun observeChatMessages(): Flow<List<ChatMessage>> = flowOf(emptyList())
         override suspend fun insertChatMessage(message: ChatMessage): Long = 0
         override suspend fun countChatMessages(kind: String, since: Long): Long = 0
-        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double = 0.0
-        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double = 0.0
-        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
-        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
+        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long = 0L
+        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long = 0L
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
         override suspend fun reorderBills(bills: List<Bill>) {}
@@ -232,10 +232,10 @@ class QuickAddViewModelTest {
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
         override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
-            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+            DailyReport("", 0L, 0L, emptyList(), emptyList(), 0)
         override suspend fun countUnsynced(): Long = 0
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 
@@ -249,8 +249,8 @@ class QuickAddViewModelTest {
         override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 }

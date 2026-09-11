@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.viewmodel
 
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.repository.AccountRepository
+import com.example.rinklnote.util.Money
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -49,8 +50,8 @@ class AssetsViewModelTest {
         return vm
     }
 
-    private fun account(id: Long, name: String, balance: Double) =
-        Account(id = id, name = name, balance = balance, iconColor = "#28C145", updatedAt = 0L, dirty = false)
+    private fun account(id: Long, name: String, yuanBalance: Double) =
+        Account(id = id, name = name, balanceMinor = Money.yuanToMinor(yuanBalance), iconColor = "#28C145", updatedAt = 0L, dirty = false)
 
     @Test
     fun `state accounts come from observeAccounts flow`() = runTest(dispatcher) {
@@ -63,12 +64,12 @@ class AssetsViewModelTest {
     @Test
     fun `addAccount inserts with dirty true and correct fields`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.onEvent(AssetsEvent.AddAccount("支付宝", "#06B4FD", 500.0))
+        vm.onEvent(AssetsEvent.AddAccount("支付宝", "#06B4FD", 50000L))
         advanceUntilIdle()
         assertEquals(1, repo.inserted.size)
         val a = repo.inserted.last()
         assertEquals("支付宝", a.name)
-        assertEquals(500.0, a.balance, 0.0001)
+        assertEquals(50000L, a.balanceMinor)
         assertEquals("#06B4FD", a.iconColor)
         assertTrue(a.dirty)
         assertFalse(a.deleted)
@@ -93,11 +94,11 @@ class AssetsViewModelTest {
         repo.accounts.value = listOf(account(1, "微信", 100.0))
         val vm = newVM()
         val orig = vm.state.value.accounts.first()
-        vm.onEvent(AssetsEvent.ChangeBalance(orig, 250.0))
+        vm.onEvent(AssetsEvent.ChangeBalance(orig, 25000L))
         advanceUntilIdle()
         assertEquals(1, repo.updatedLocal.size)
         val u = repo.updatedLocal.last()
-        assertEquals(250.0, u.balance, 0.0001)
+        assertEquals(25000L, u.balanceMinor)
         assertTrue(u.dirty)
     }
 
@@ -117,12 +118,12 @@ class AssetsViewModelTest {
         repo.accounts.value = listOf(account(1, "微信", 100.0))
         val vm = newVM()
         val orig = vm.state.value.accounts.first()
-        vm.onEvent(AssetsEvent.ReconcileAccount(orig, 50.0))
+        vm.onEvent(AssetsEvent.ReconcileAccount(orig, 5000L))
         advanceUntilIdle()
         assertEquals(1, repo.reconciled.size)
         val (acc, offset) = repo.reconciled.last()
         assertEquals(1L, acc.id)
-        assertEquals(50.0, offset, 0.0001)
+        assertEquals(5000L, offset)
     }
 
     @Test
@@ -140,7 +141,7 @@ class AssetsViewModelTest {
         val inserted = mutableListOf<Account>()
         val updatedLocal = mutableListOf<Account>()
         val softDeleted = mutableListOf<Account>()
-        val reconciled = mutableListOf<Pair<Account, Double>>()
+        val reconciled = mutableListOf<Pair<Account, Long>>()
         var reconcileAllCalled = false
 
         override fun observeAccounts(): Flow<List<Account>> = accounts
@@ -155,9 +156,9 @@ class AssetsViewModelTest {
         override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account {
-            reconciled += account to openingOffset
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffsetMinor: Long): Account {
+            reconciled += account to openingOffsetMinor
             return account
         }
         override suspend fun reconcileAllAccounts(): List<Account> {

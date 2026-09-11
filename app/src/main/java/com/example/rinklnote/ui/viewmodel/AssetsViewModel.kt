@@ -18,13 +18,13 @@ data class AssetsState(
 )
 
 sealed interface AssetsEvent {
-    data class AddAccount(val name: String, val iconColor: String, val balance: Double) : AssetsEvent
+    data class AddAccount(val name: String, val iconColor: String, val balanceMinor: Long) : AssetsEvent
     data class RenameAccount(val account: Account, val name: String) : AssetsEvent
-    data class ChangeBalance(val account: Account, val balance: Double) : AssetsEvent
+    data class ChangeBalance(val account: Account, val balanceMinor: Long) : AssetsEvent
     data class DeleteAccount(val account: Account) : AssetsEvent
 
     /** 单账户对账：期末余额 = openingOffset + 该账户账单收支合计。 */
-    data class ReconcileAccount(val account: Account, val openingOffset: Double) : AssetsEvent
+    data class ReconcileAccount(val account: Account, val openingOffsetMinor: Long) : AssetsEvent
     /** 全部对账：每个账户余额重算为各自账单合计（期初偏移 0）。 */
     data object ReconcileAll : AssetsEvent
 }
@@ -59,14 +59,14 @@ class AssetsViewModel(
     }
 
     /** 供对账对话框加载该账户的账单收支合计（非删除账单）。 */
-    suspend fun getAccountNet(accountId: Long): Double = accountRepository.getAccountNet(accountId)
+    suspend fun getAccountNet(accountId: Long): Long = accountRepository.getAccountNet(accountId)
 
     private fun addAccount(event: AssetsEvent.AddAccount) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val account = Account(
                 name = event.name,
-                balance = event.balance,
+                balanceMinor = event.balanceMinor,
                 iconColor = event.iconColor,
                 updatedAt = now,
                 deleted = false,
@@ -94,7 +94,7 @@ class AssetsViewModel(
     private fun changeBalance(event: AssetsEvent.ChangeBalance) {
         viewModelScope.launch {
             val updated = event.account.copy(
-                balance = event.balance,
+                balanceMinor = event.balanceMinor,
                 updatedAt = System.currentTimeMillis(),
                 dirty = true
             )
@@ -118,7 +118,7 @@ class AssetsViewModel(
 
     private fun reconcileAccount(event: AssetsEvent.ReconcileAccount) {
         viewModelScope.launch {
-            val updated = accountRepository.reconcileAccount(event.account, event.openingOffset)
+            val updated = accountRepository.reconcileAccount(event.account, event.openingOffsetMinor)
             syncManager?.let { launch { it.pushAccount(updated) } }
         }
     }

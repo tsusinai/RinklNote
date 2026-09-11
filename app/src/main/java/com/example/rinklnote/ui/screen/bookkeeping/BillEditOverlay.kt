@@ -55,6 +55,7 @@ import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.util.Money
 
 private fun categoryIconRes(name: String): Int = when (name) {
     "三餐" -> R.drawable.ic_category_meals
@@ -90,7 +91,7 @@ fun BillEditOverlay(
 
     val initialCategories = if (bill.billType == BillType.EXPENSE) expenseCategories else incomeCategories
 
-    var amount by remember(bill.id) { mutableStateOf(bill.amount.toBigDecimal().stripTrailingZeros().toPlainString()) }
+    var amount by remember(bill.id) { mutableStateOf(Money.toYuanInputString(bill.amountMinor)) }
     var billType by remember(bill.id) { mutableStateOf(bill.billType.value) }
     var selectedCategory by remember(bill.id) {
         mutableStateOf(initialCategories.firstOrNull { it.id == bill.categoryId } ?: initialCategories.firstOrNull())
@@ -139,12 +140,12 @@ fun BillEditOverlay(
     }
 
     fun confirmEdit() {
-        val amountVal = amount.toDoubleOrNull() ?: return
+        val amountMinorVal = Money.parseMinor(amount) ?: return
         val cat = selectedCategory ?: return
         val acct = selectedAccount ?: return
         onConfirm(
             bill.copy(
-                amount = amountVal,
+                amountMinor = amountMinorVal,
                 billType = BillType.fromValue(billType),
                 categoryId = cat.id,
                 categoryName = cat.name,
@@ -350,7 +351,7 @@ private fun AccountCard(
                     Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(String.format("%.2f", account.balance), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+                    Text(Money.format(account.balanceMinor), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(modifier = Modifier.width(8.dp))
                     SelectDot(selectedAccount?.id == account.id)
                 }

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.domain.PieSlice
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -239,7 +240,7 @@ private fun PiePage(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        "¥${String.format("%.0f", slice.amount)}·${(slice.pct * 100).roundToInt()}%",
+                        "${Money.format(slice.amount)}·${(slice.pct * 100).roundToInt()}%",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -278,7 +279,7 @@ private fun TrendPage(
     }
     val todayLabelLayout = remember(todayInMonth, daySeries) {
         if (todayInMonth > 0) textMeasurer.measure(
-            AnnotatedString("¥${String.format("%.2f", daySeries.getOrElse(todayInMonth - 1) { 0f })}"),
+            AnnotatedString(Money.format(daySeries.getOrElse(todayInMonth - 1) { 0f }.toLong())),
             TextStyle(fontSize = 8.sp, color = primary, textAlign = TextAlign.Center)
         ) else null
     }

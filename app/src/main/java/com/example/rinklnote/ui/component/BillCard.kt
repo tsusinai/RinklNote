@@ -49,6 +49,7 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.screen.bookkeeping.BillDragHost
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.toDateString
 
 /**
@@ -60,7 +61,7 @@ import com.example.rinklnote.util.toDateString
 fun BillCard(
     date: Long,
     dayOfWeek: String,
-    totalAmount: Double,
+    totalAmount: Long,
     bills: List<Bill>,
     dragHost: BillDragHost,
     onEdit: (Bill) -> Unit,
@@ -99,9 +100,9 @@ fun BillCard(
             )
             val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
             val sign = if (totalAmount >= 0) "+" else "-"
-            // 缓存金额格式化（重组时不重复 String.format）。
+            // 缓存金额格式化（重组时不重复计算）；金额为「分」，展示统一走 Money.format。
             val totalText = remember(totalAmount) {
-                String.format(Locale.US, "%s¥%.2f", sign, kotlin.math.abs(totalAmount))
+                sign + Money.format(kotlin.math.abs(totalAmount))
             }
             Text(
                 text = totalText,
@@ -199,7 +200,7 @@ private fun DraggableBillRow(
     ) {
         BillRowContent(
             categoryName = bill.subCategoryName ?: bill.categoryName,
-            amount = bill.amount,
+            amountMinor = bill.amountMinor,
             billType = bill.billType.value,
             remark = bill.remark
         )
@@ -210,16 +211,16 @@ private fun DraggableBillRow(
 @Composable
 internal fun BillRowContent(
     categoryName: String,
-    amount: Double,
+    amountMinor: Long,
     billType: String,
     remark: String?,
     modifier: Modifier = Modifier
 ) {
     val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
     val isExpense = billType == "EXPENSE"
-    // 缓存金额格式化（重组时不重复 String.format）。
-    val amountText = remember(amount, isExpense) {
-        String.format(Locale.US, "%s¥%.2f", if (isExpense) "-" else "+", amount)
+    // 缓存金额格式化（重组时不重复计算）；金额为「分」，展示统一走 Money.format。
+    val amountText = remember(amountMinor, isExpense) {
+        (if (isExpense) "-" else "+") + Money.format(amountMinor)
     }
     Row(
         modifier = modifier

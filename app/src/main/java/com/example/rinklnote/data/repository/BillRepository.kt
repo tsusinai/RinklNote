@@ -11,10 +11,11 @@ import com.example.rinklnote.data.db.entity.SubCategory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
+/** 日报聚合结果：金额一律为「分」（minor unit）。 */
 data class DailyReport(
     val date: String,
-    val totalExpense: Double,
-    val totalIncome: Double,
+    val totalExpense: Long,
+    val totalIncome: Long,
     val expenseCategories: List<DailyCategoryAmount>,
     val incomeCategories: List<DailyCategoryAmount>,
     val billCount: Int
@@ -35,10 +36,11 @@ interface BillRepository {
     suspend fun insertChatMessage(message: ChatMessage): Long
     suspend fun countChatMessages(kind: String, since: Long): Long
 
-    suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double
-    suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double
-    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double>
-    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double>
+    // 金额一律为「分」（minor unit）
+    suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long
+    suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long
+    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long>
+    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long>
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)
@@ -71,8 +73,8 @@ interface BillRepository {
 
     suspend fun countUnsynced(): Long
 
-    // Balance reconciliation against each account's own record net (income − expense).
-    suspend fun getAccountNet(accountId: Long): Double
-    suspend fun reconcileAccount(account: Account, openingOffset: Double): Account
+    // Balance reconciliation against each account's own record net (income − expense)，单位：分。
+    suspend fun getAccountNet(accountId: Long): Long
+    suspend fun reconcileAccount(account: Account, openingOffset: Long): Account
     suspend fun reconcileAllAccounts(): List<Account>
 }

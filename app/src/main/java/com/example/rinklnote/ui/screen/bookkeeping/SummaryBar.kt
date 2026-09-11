@@ -31,13 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.util.Money
 
 @SuppressLint("DefaultLocale")
 @Composable
 fun SummaryBar(
     currentMonth: Int = java.time.LocalDate.now().monthValue,
-    totalExpense: Double,
-    totalIncome: Double,
+    totalExpense: Long,
+    totalIncome: Long,
     aiSummary: String? = null,
     aiSummaryLoading: Boolean = false
 ) {
@@ -86,7 +87,7 @@ fun SummaryBar(
                 color = MaterialTheme.colorScheme.tertiary
             )
             Text(
-                text = "${String.format("%.2f", totalExpense)}  ",
+                text = "${Money.formatPlain(totalExpense)}  ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.tertiary
@@ -98,7 +99,7 @@ fun SummaryBar(
                 color = IncomeGreen
             )
             Text(
-                text = "${String.format("%.2f", totalIncome)}  ",
+                text = "${Money.formatPlain(totalIncome)}  ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = IncomeGreen

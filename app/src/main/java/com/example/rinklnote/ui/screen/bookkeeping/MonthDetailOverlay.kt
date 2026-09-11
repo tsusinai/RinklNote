@@ -47,6 +47,7 @@ import com.example.rinklnote.domain.MonthDetailData
 import com.example.rinklnote.ui.component.MonthChartPager
 import com.example.rinklnote.ui.theme.Blue80
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
 import java.time.LocalDate
@@ -63,8 +64,8 @@ fun MonthDetailOverlay(
     monthLabel: String,
     bills: List<Bill>,
     month: LocalDate,
-    expenseTotal: Double,
-    incomeTotal: Double,
+    expenseTotal: Long,
+    incomeTotal: Long,
     monthDetail: MonthDetailData,
     onBack: () -> Unit
 ) {
@@ -84,7 +85,7 @@ fun MonthDetailOverlay(
     }
     val filteredGroup = remember(filteredBills) {
         filteredBills.groupBy { it.categoryName }
-            .map { (name, bl) -> Triple(name, bl.sumOf { it.amount }, bl) }
+            .map { (name, bl) -> Triple(name, bl.sumOf { it.amountMinor }, bl) }
     }
 
     BackHandler { onBack() }
@@ -202,12 +203,12 @@ fun MonthDetailOverlay(
 @Composable
 private fun MonthHeatmap(
     month: LocalDate,
-    dayAmounts: Map<Int, Double>,
+    dayAmounts: Map<Int, Long>,
     selectedDay: Int?,
     onDayTap: (Int) -> Unit
 ) {
     val daysInMonth = month.lengthOfMonth()
-    val maxAmount = dayAmounts.values.maxOrNull() ?: 0.0
+    val maxAmount = dayAmounts.values.maxOrNull() ?: 0L
     val primary = MaterialTheme.colorScheme.primary
     Column(modifier = Modifier.fillMaxWidth()) {
         Text("每日支出热力图", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -223,9 +224,9 @@ private fun MonthHeatmap(
                         // 月外占位格——保持网格不塌缩，不可点击
                         Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
                     } else {
-                        val amount = dayAmounts[day] ?: 0.0
-                        val alpha = if (maxAmount > 0) (amount / maxAmount).toFloat() else 0f
-                        val fill = if (amount > 0) {
+                        val amount = dayAmounts[day] ?: 0L
+                        val alpha = if (maxAmount > 0) (amount.toDouble() / maxAmount).toFloat() else 0f
+                        val fill = if (amount > 0L) {
                             Blue80.copy(alpha = 0.15f + 0.85f * alpha)
                         } else {
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -279,8 +280,8 @@ private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
 
 @Composable
 private fun TotalsCard(
-    expenseTotal: Double,
-    incomeTotal: Double,
+    expenseTotal: Long,
+    incomeTotal: Long,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -292,24 +293,24 @@ private fun TotalsCard(
     ) {
         Row {
             Text("支出", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("¥${String.format("%.2f", expenseTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
+            Text("${Money.format(expenseTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
         }
         Row {
             Text("收入", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("¥${String.format("%.2f", incomeTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = IncomeGreen)
+            Text("${Money.format(incomeTotal)}", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = IncomeGreen)
         }
     }
 }
 
 @Composable
-private fun CategoryHeader(categoryName: String, subtotal: Double) {
+private fun CategoryHeader(categoryName: String, subtotal: Long) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(categoryName, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-        Text("¥${String.format("%.2f", subtotal)}", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
+        Text("${Money.format(subtotal)}", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.tertiary)
     }
 }
 
@@ -352,7 +353,7 @@ private fun DetailRow(bill: Bill) {
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = (if (isExpense) "-" else "+") + String.format("%.2f", bill.amount),
+            text = (if (isExpense) "-" else "+") + Money.format(bill.amountMinor),
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen

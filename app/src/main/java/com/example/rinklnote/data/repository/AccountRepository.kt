@@ -13,7 +13,8 @@ interface AccountRepository {
     suspend fun getUnsyncedAccounts(): List<Account>
     suspend fun getAccountByServerId(serverId: Long): Account?
     suspend fun deleteAccountByServerId(serverId: Long)
-    suspend fun getAccountNet(accountId: Long): Double
-    suspend fun reconcileAccount(account: Account, openingOffset: Double): Account
+    // 金额一律为「分」（minor unit）
+    suspend fun getAccountNet(accountId: Long): Long
+    suspend fun reconcileAccount(account: Account, openingOffset: Long): Account
     suspend fun reconcileAllAccounts(): List<Account>
 }

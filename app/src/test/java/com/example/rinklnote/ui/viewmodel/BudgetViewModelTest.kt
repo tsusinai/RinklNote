@@ -11,6 +11,7 @@ import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.BudgetRepository
 import com.example.rinklnote.data.repository.DailyReport
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.getMonthStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -71,7 +72,7 @@ class BudgetViewModelTest {
         month: Long = monthStart
     ) = Budget(
         monthStart = month,
-        amount = amount,
+        amountMinor = Money.yuanToMinor(amount),
         periodType = "MONTHLY",
         categoryId = categoryId,
         subCategoryId = subCategoryId
@@ -85,7 +86,7 @@ class BudgetViewModelTest {
         subCategoryName: String? = null
     ) = Bill(
         id = id,
-        amount = amount,
+        amountMinor = Money.yuanToMinor(amount),
         billType = BillType.EXPENSE,
         categoryId = categoryId,
         categoryName = categoryName,
@@ -127,30 +128,30 @@ class BudgetViewModelTest {
         val result = deriveMonthBudget(budgets, bills, expenseCategories(), subCategories(), monthStart)
 
         // 总额层
-        assertEquals(1000.0, result.totalBudget?.amount ?: 0.0, 0.0001)
-        assertEquals(100.0, result.monthExpense, 0.0001)
-        val totalState = BudgetState(totalBudget = result.totalBudget, monthExpense = result.monthExpense)
+        assertEquals(100000L, result.totalBudget?.amountMinor ?: 0L)
+        assertEquals(10000L, result.monthExpenseMinor)
+        val totalState = BudgetState(totalBudget = result.totalBudget, monthExpenseMinor = result.monthExpenseMinor)
         assertEquals(0.1f, totalState.totalProgress, 0.0001f)
         assertFalse(totalState.isOverTotal)
 
         // 分类层：三餐 20(午餐) + 50(无子分类) = 70
         val cat1 = result.categoryBudgets.first { it.categoryId == 1L }
         assertEquals("三餐", cat1.categoryName)
-        assertEquals(300.0, cat1.amount, 0.0001)
-        assertEquals(70.0, cat1.expense, 0.0001)
+        assertEquals(30000L, cat1.amountMinor)
+        assertEquals(7000L, cat1.expenseMinor)
 
         // 交通 30(打车)
         val cat2 = result.categoryBudgets.first { it.categoryId == 2L }
-        assertEquals(30.0, cat2.expense, 0.0001)
+        assertEquals(3000L, cat2.expenseMinor)
 
         // 子分类层：名称匹配（parentCategoryId == categoryId && name == subCategoryName）
         val lunch = cat1.subBudgets.first { it.subCategoryId == 11L }
         assertEquals("午餐", lunch.name)
-        assertEquals(80.0, lunch.amount, 0.0001)
-        assertEquals(20.0, lunch.expense, 0.0001)
+        assertEquals(8000L, lunch.amountMinor)
+        assertEquals(2000L, lunch.expenseMinor)
         val taxi = cat2.subBudgets.first { it.subCategoryId == 21L }
-        assertEquals(60.0, taxi.amount, 0.0001)
-        assertEquals(30.0, taxi.expense, 0.0001)
+        assertEquals(6000L, taxi.amountMinor)
+        assertEquals(3000L, taxi.expenseMinor)
     }
 
     @Test
@@ -168,12 +169,12 @@ class BudgetViewModelTest {
 
         val result = deriveMonthBudget(budgets, bills, expenseCategories(), subCategories(), monthStart)
 
-        assertEquals(60.0, result.monthExpense, 0.0001)
+        assertEquals(6000L, result.monthExpenseMinor)
         val cat1 = result.categoryBudgets.first { it.categoryId == 1L }
-        assertEquals(50.0, cat1.expense, 0.0001)
+        assertEquals(5000L, cat1.expenseMinor)
         assertTrue(cat1.subBudgets.isEmpty())
         val cat2 = result.categoryBudgets.first { it.categoryId == 2L }
-        assertEquals(10.0, cat2.expense, 0.0001)
+        assertEquals(1000L, cat2.expenseMinor)
     }
 
     @Test
@@ -191,7 +192,7 @@ class BudgetViewModelTest {
 
         val lunch = result.categoryBudgets.first { it.categoryId == 1L }.subBudgets.first { it.subCategoryId == 11L }
         assertEquals("午餐", lunch.name)
-        assertEquals(20.0, lunch.expense, 0.0001)
+        assertEquals(2000L, lunch.expenseMinor)
         assertFalse(lunch.isOverBudget)
     }
 
@@ -206,8 +207,8 @@ class BudgetViewModelTest {
         val result = deriveMonthBudget(budgets, bills, expenseCategories(), subCategories(), monthStart)
 
         val cat1 = result.categoryBudgets.first { it.categoryId == 1L }
-        assertEquals(0.0, cat1.amount, 0.0001)
-        assertEquals(50.0, cat1.expense, 0.0001)
+        assertEquals(0L, cat1.amountMinor)
+        assertEquals(5000L, cat1.expenseMinor)
         // 交通无支出无预算 → 不补全
         assertEquals(1, result.categoryBudgets.size)
     }
@@ -231,21 +232,21 @@ class BudgetViewModelTest {
         val vm = newVM()
         val state = vm.state.value
 
-        assertEquals(1000.0, state.totalBudget?.amount ?: 0.0, 0.0001)
-        assertEquals(100.0, state.monthExpense, 0.0001)
+        assertEquals(100000L, state.totalBudget?.amountMinor ?: 0L)
+        assertEquals(10000L, state.monthExpenseMinor)
         assertEquals(0.1f, state.totalProgress, 0.0001f)
 
         val cat1 = state.categoryBudgets.first { it.categoryId == 1L }
-        assertEquals(70.0, cat1.expense, 0.0001)
+        assertEquals(7000L, cat1.expenseMinor)
         assertEquals(0.7f / 3f, cat1.progress, 0.0001f)
         val lunch = cat1.subBudgets.first { it.subCategoryId == 11L }
-        assertEquals(20.0, lunch.expense, 0.0001)
+        assertEquals(2000L, lunch.expenseMinor)
         assertEquals(0.25f, lunch.progress, 0.0001f)
 
         // 交通：无分类预算但有支出 → 补全为「未设」行
         val cat2 = state.categoryBudgets.first { it.categoryId == 2L }
-        assertEquals(0.0, cat2.amount, 0.0001)
-        assertEquals(30.0, cat2.expense, 0.0001)
+        assertEquals(0L, cat2.amountMinor)
+        assertEquals(3000L, cat2.expenseMinor)
     }
 
     @Test
@@ -262,7 +263,7 @@ class BudgetViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.state.value.isOverTotal)
-        assertEquals(1.0, vm.state.value.overTotalBy, 0.0001)
+        assertEquals(100L, vm.state.value.overTotalBy)
     }
 
     @Test
@@ -281,7 +282,7 @@ class BudgetViewModelTest {
 
         val over = vm.state.value.categoryBudgets.first { it.categoryId == 1L }
         assertTrue(over.isOverBudget)
-        assertEquals(1.0, over.overBudgetBy, 0.0001)
+        assertEquals(100L, over.overBudgetBy)
     }
 
     @Test
@@ -289,20 +290,20 @@ class BudgetViewModelTest {
         billRepo.expenseCategories.value = expenseCategories()
         val vm = newVM()
 
-        vm.onEvent(BudgetEvent.SetBudget(amount = 300.0, categoryId = 1))
+        vm.onEvent(BudgetEvent.SetBudget(amountMinor = 30000L, categoryId = 1))
         advanceUntilIdle()
 
         assertEquals(1, budgetRepo.upserted.size)
         val saved = budgetRepo.upserted[0]
         assertEquals(monthStart, saved.monthStart)
-        assertEquals(300.0, saved.amount, 0.0001)
+        assertEquals(30000L, saved.amountMinor)
         assertEquals(1L, saved.categoryId)
         assertNull(saved.subCategoryId)
         assertEquals("MONTHLY", saved.periodType)
         assertTrue(saved.dirty)
 
         val row = vm.state.value.categoryBudgets.first { it.categoryId == 1L }
-        assertEquals(300.0, row.amount, 0.0001)
+        assertEquals(30000L, row.amountMinor)
         assertEquals("三餐", row.categoryName)
     }
 
@@ -311,13 +312,13 @@ class BudgetViewModelTest {
         billRepo.expenseCategories.value = expenseCategories()
         val vm = newVM()
 
-        vm.onEvent(BudgetEvent.SetBudget(amount = 60.0, categoryId = 2, subCategoryId = 21))
+        vm.onEvent(BudgetEvent.SetBudget(amountMinor = 6000L, categoryId = 2, subCategoryId = 21))
         advanceUntilIdle()
 
         assertEquals(1, budgetRepo.upserted.size)
         assertEquals(21L, budgetRepo.upserted[0].subCategoryId)
         val row = vm.state.value.categoryBudgets.first { it.categoryId == 2L }
-        assertEquals(60.0, row.subBudgets.first { it.subCategoryId == 21L }.amount, 0.0001)
+        assertEquals(6000L, row.subBudgets.first { it.subCategoryId == 21L }.amountMinor)
         assertEquals("打车", row.subBudgets.first { it.subCategoryId == 21L }.name)
     }
 
@@ -327,33 +328,33 @@ class BudgetViewModelTest {
         budgetRepo.budgets.value = listOf(budgetRow(amount = 100.0, categoryId = 1))
         val vm = newVM()
 
-        vm.onEvent(BudgetEvent.SetBudget(amount = 150.0, categoryId = 1))
+        vm.onEvent(BudgetEvent.SetBudget(amountMinor = 15000L, categoryId = 1))
         advanceUntilIdle()
 
         assertEquals(1, budgetRepo.upserted.size)
-        assertEquals(150.0, budgetRepo.upserted[0].amount, 0.0001)
+        assertEquals(15000L, budgetRepo.upserted[0].amountMinor)
         assertTrue(budgetRepo.upserted[0].dirty)
         assertEquals(1, budgetRepo.budgets.value.size)
-        assertEquals(150.0, vm.state.value.categoryBudgets.first { it.categoryId == 1L }.amount, 0.0001)
+        assertEquals(15000L, vm.state.value.categoryBudgets.first { it.categoryId == 1L }.amountMinor)
     }
 
     @Test
     fun `last month surplus derives from previous month total budget minus expense`() = runTest(dispatcher) {
-        billRepo.lastMonthExpense = 300.0
+        billRepo.lastMonthExpense = 30000L
         budgetRepo.budgets.value = listOf(
-            Budget(monthStart = prevMonthStart, amount = 500.0, periodType = "MONTHLY")
+            Budget(monthStart = prevMonthStart, amountMinor = 50000L, periodType = "MONTHLY")
         )
 
         val vm = newVM()
-        assertEquals(200.0, vm.state.value.lastMonthSurplus ?: 0.0, 0.0001)
+        assertEquals(20000L, vm.state.value.lastMonthSurplusMinor ?: 0L)
     }
 
     @Test
     fun `last month surplus null when previous month has no budget`() = runTest(dispatcher) {
-        billRepo.lastMonthExpense = 300.0
+        billRepo.lastMonthExpense = 30000L
 
         val vm = newVM()
-        assertNull(vm.state.value.lastMonthSurplus)
+        assertNull(vm.state.value.lastMonthSurplusMinor)
     }
 
     // ---------- fakes ----------
@@ -364,7 +365,7 @@ class BudgetViewModelTest {
         override val accounts: Flow<List<Account>> = flowOf(emptyList())
 
         val bills = MutableStateFlow<List<Bill>>(emptyList())
-        var lastMonthExpense: Double = 0.0
+        var lastMonthExpense: Long = 0L
 
         private val subCategoriesByParent = mapOf(
             1L to listOf(SubCategory(11, "午餐", 1), SubCategory(12, "晚餐", 1)),
@@ -378,10 +379,10 @@ class BudgetViewModelTest {
         override fun observeChatMessages(): Flow<List<ChatMessage>> = flowOf(emptyList())
         override suspend fun insertChatMessage(message: ChatMessage): Long = 0
         override suspend fun countChatMessages(kind: String, since: Long): Long = 0
-        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double = lastMonthExpense
-        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double = 0.0
-        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
-        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
+        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long = lastMonthExpense
+        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long = 0L
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long> = flowOf(0L)
         override suspend fun addBill(bill: Bill): Long = 0
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
@@ -408,10 +409,10 @@ class BudgetViewModelTest {
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
         override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
-            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+            DailyReport("", 0L, 0L, emptyList(), emptyList(), 0)
         override suspend fun countUnsynced(): Long = 0
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 

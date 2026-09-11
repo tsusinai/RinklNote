@@ -75,6 +75,7 @@ import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
+import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -237,7 +238,7 @@ fun AssetsScreen(
                     account = account,
                     onConfirm = { updated ->
                         editingAccount = null
-                        viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balance))
+                        viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balanceMinor))
                     },
                     onDismiss = { editingAccount = null }
                 )
@@ -248,7 +249,7 @@ fun AssetsScreen(
             AddAccountDialog(
                 onConfirm = { name, color, balance ->
                     addingAccount = false
-                    viewModel.onEvent(AssetsEvent.AddAccount(name, color, balance))
+                    viewModel.onEvent(AssetsEvent.AddAccount(name, color, Money.yuanToMinor(balance)))
                 },
                 onDismiss = { addingAccount = false }
             )
@@ -397,7 +398,7 @@ private fun TotalAssetsCard(
     accounts: List<Account>,
     hidden: Boolean
 ) {
-    val total = remember(accounts) { accounts.sumOf { it.balance } }
+    val total = remember(accounts) { accounts.sumOf { it.balanceMinor } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -416,7 +417,7 @@ private fun TotalAssetsCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = if (hidden) "****" else String.format("%.2f", total),
+                text = if (hidden) "****" else Money.formatPlain(total),
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -477,7 +478,7 @@ private fun AccountCard(
             modifier = Modifier.weight(1f)
         )
         Text(
-            text = if (hidden) "***" else String.format("%.2f", account.balance),
+            text = if (hidden) "***" else Money.formatPlain(account.balanceMinor),
             fontSize = 20.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
@@ -539,7 +540,7 @@ private fun AccountActionsSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = String.format("%.2f", account.balance),
+                        text = Money.formatPlain(account.balanceMinor),
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -737,27 +738,27 @@ private fun RenameAccountDialog(
 @Composable
 private fun ReconcileDialog(
     account: Account,
-    onConfirm: (Double) -> Unit,
+    onConfirm: (Long) -> Unit,
     onDismiss: () -> Unit,
-    loadNet: suspend (Long) -> Double
+    loadNet: suspend (Long) -> Long
 ) {
-    val net by produceState<Double?>(initialValue = null, account.id) {
+    val net by produceState<Long?>(initialValue = null, account.id) {
         value = loadNet(account.id)
     }
     var offset by remember(account.id) { mutableStateOf("") }
 
-    val netVal = net ?: 0.0
-    val offsetVal = offset.toDoubleOrNull() ?: 0.0
-    val result = offsetVal + netVal
+    val netVal = net ?: 0L
+    val offsetMinor = Money.parseMinor(offset) ?: 0L
+    val result = offsetMinor + netVal
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("对账 · ${account.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                PreviewRow("当前余额", String.format("%.2f", account.balance))
+                PreviewRow("当前余额", Money.formatPlain(account.balanceMinor))
                 // 加载态：net 为 null 时显示「加载中…」而非误导性的 0.00。
-                PreviewRow("账单收支合计", if (net == null) "加载中…" else String.format("%.2f", netVal))
+                PreviewRow("账单收支合计", if (net == null) "加载中…" else Money.formatPlain(netVal))
                 OutlinedTextField(
                     value = offset,
                     onValueChange = { offset = it },
@@ -765,7 +766,7 @@ private fun ReconcileDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
-                PreviewRow("重算后余额", if (net == null) "—" else String.format("%.2f", result))
+                PreviewRow("重算后余额", if (net == null) "—" else Money.formatPlain(result))
                 Text(
                     text = "确认后将以「重算后余额」覆盖当前余额，并同步到云端。",
                     fontSize = 12.sp,
@@ -774,7 +775,7 @@ private fun ReconcileDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(offsetVal) }) { Text("覆盖") }
+            TextButton(onClick = { onConfirm(offsetMinor) }) { Text("覆盖") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
@@ -804,9 +805,9 @@ private fun ReconcileAllDialog(
     accounts: List<Account>,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    loadNet: suspend (Long) -> Double
+    loadNet: suspend (Long) -> Long
 ) {
-    val nets by produceState<Map<Long, Double>?>(initialValue = null, accounts) {
+    val nets by produceState<Map<Long, Long>?>(initialValue = null, accounts) {
         value = accounts.associate { it.id to loadNet(it.id) }
     }
     AlertDialog(
@@ -833,7 +834,7 @@ private fun ReconcileAllDialog(
                     )
                 } else {
                     accounts.forEach { account ->
-                        val net = nets!![account.id] ?: 0.0
+                        val net = nets!![account.id] ?: 0L
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -842,7 +843,7 @@ private fun ReconcileAllDialog(
                         ) {
                             Text(account.name, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                             Text(
-                                text = "${String.format("%.2f", account.balance)} → ${String.format("%.2f", net)}",
+                                text = "${Money.formatPlain(account.balanceMinor)} → ${Money.formatPlain(net)}",
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

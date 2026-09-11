@@ -223,7 +223,7 @@ fun BookkeepingScreen(
                 item(key = date) {
                     // 缓存该日合计，重组时不重复 sumOf。
                     val totalAmount = remember(date, bills) {
-                        bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amount else it.amount }
+                        bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amountMinor else it.amountMinor }
                     }
                     BillCard(
                         date = date,
@@ -321,7 +321,7 @@ fun BookkeepingScreen(
                 ) {
                     BillRowContent(
                         categoryName = dragged.subCategoryName ?: dragged.categoryName,
-                        amount = dragged.amount,
+                        amountMinor = dragged.amountMinor,
                         billType = dragged.billType.value,
                         remark = dragged.remark,
                         modifier = Modifier
@@ -501,7 +501,7 @@ private fun computeMonthHeatmap(bills: List<Bill>, offset: Int): MonthHeatmap {
         if (bill.billType == BillType.EXPENSE) {
             val d = Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate()
             if (!d.isBefore(firstDay) && !d.isAfter(lastDay)) {
-                dailyExpense.merge(d.dayOfMonth, bill.amount.toFloat(), Float::plus)
+                dailyExpense.merge(d.dayOfMonth, bill.amountMinor.toFloat(), Float::plus)
             }
         }
     }

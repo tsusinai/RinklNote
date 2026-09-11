@@ -56,17 +56,17 @@ internal class BillRepositoryImpl(
     override suspend fun countChatMessages(kind: String, since: Long): Long =
         chatDao.countSince(kind, since)
 
-    override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double =
-        billDao.getTotalExpense(monthStart, nextMonthStart) ?: 0.0
+    override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long =
+        billDao.getTotalExpense(monthStart, nextMonthStart) ?: 0L
 
-    override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double =
-        billDao.getTotalIncome(monthStart, nextMonthStart) ?: 0.0
-
-    override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> =
-        billDao.observeTotalExpense(monthStart, nextMonthStart).map { it ?: 0.0 }
-
-    override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> =
-        billDao.observeTotalIncome(monthStart, nextMonthStart).map { it ?: 0.0 }
+    override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long =
+        billDao.getTotalIncome(monthStart, nextMonthStart) ?: 0L
+
+    override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long> =
+        billDao.observeTotalExpense(monthStart, nextMonthStart).map { it ?: 0L }
+
+    override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long> =
+        billDao.observeTotalIncome(monthStart, nextMonthStart).map { it ?: 0L }
 
     override suspend fun addBill(bill: Bill): Long = db.withTransaction {
         val id = billDao.insert(bill)
@@ -94,29 +94,29 @@ internal class BillRepositoryImpl(
         // 反向回补删除的这笔对该账户余额的影响。
         nudgeAccount(bill.accountId, -balanceDelta(bill))
     }.also { onBillMutated() }
-
-
+
+
     override suspend fun reorderBills(bills: List<Bill>) = db.withTransaction {
         // 仅调序：金额/账户不变，无需触碰余额；VM 已统一盖章 dirty/updatedAt/sortOrder。
         bills.forEach { billDao.update(it) }
     }
 
     /** 记账对目标账户余额的增量：支出为负、收入为正。 */
-    private fun balanceDelta(bill: Bill): Double =
-        if (bill.billType == BillType.EXPENSE) -bill.amount else bill.amount
+    private fun balanceDelta(bill: Bill): Long =
+        if (bill.billType == BillType.EXPENSE) -bill.amountMinor else bill.amountMinor
 
     /** 把余额增量应用给账户并置 dirty，等待下次全量同步推送。 */
-    private suspend fun nudgeAccount(accountId: Long, delta: Double) {
-        if (delta == 0.0) return
+    private suspend fun nudgeAccount(accountId: Long, delta: Long) {
+        if (delta == 0L) return
         val account = accountDao.getById(accountId) ?: return
         accountDao.update(
             account.copy(
-                balance = account.balance + delta,
+                balanceMinor = account.balanceMinor + delta,
                 updatedAt = System.currentTimeMillis(),
                 dirty = true
             )
         )
-    }
+    }
 
     override suspend fun insertAccount(account: Account): Long = accountDao.insert(account)
     override suspend fun updateAccount(account: Account) = accountDao.update(account)
@@ -151,14 +151,14 @@ internal class BillRepositoryImpl(
         templateDao.deleteAll()
         chatDao.deleteAll()
         accountDao.deleteAll()
-    }
+    }
 
     override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport {
         val bills = billDao.getBillsByDay(dayStart, dayEnd)
         val expenseCats = billDao.getDailyExpenseSummary(dayStart, dayEnd)
         val incomeCats = billDao.getDailyIncomeSummary(dayStart, dayEnd)
-        val totalExpense = bills.filter { it.billType == BillType.EXPENSE }.sumOf { it.amount }
-        val totalIncome = bills.filter { it.billType == BillType.INCOME }.sumOf { it.amount }
+        val totalExpense = bills.filter { it.billType == BillType.EXPENSE }.sumOf { it.amountMinor }
+        val totalIncome = bills.filter { it.billType == BillType.INCOME }.sumOf { it.amountMinor }
         val date = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).toString()
         return DailyReport(
             date = date,
@@ -167,36 +167,36 @@ internal class BillRepositoryImpl(
             expenseCategories = expenseCats,
             incomeCategories = incomeCats,
             billCount = bills.size
-        )
-    }
-
+        )
+    }
+
     override suspend fun countUnsynced(): Long =
         billDao.countUnsynced() +
             accountDao.countUnsynced() +
             budgetDao.getUnsynced().size
 
-    override suspend fun getAccountNet(accountId: Long): Double =
-        billDao.getAccountNet(accountId) ?: 0.0
+    override suspend fun getAccountNet(accountId: Long): Long =
+        billDao.getAccountNet(accountId) ?: 0L
 
-    override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account {
+    override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account {
         // 期末余额 = 期初偏移(现实里有、账里没的资金) + 该账户账单收支合计。
         // 置 dirty 让下一步同步把校正后的余额推给服务端。
         val updated = account.copy(
-            balance = openingOffset + getAccountNet(account.id),
+            balanceMinor = openingOffset + getAccountNet(account.id),
             updatedAt = System.currentTimeMillis(),
             dirty = true
         )
         accountDao.update(updated)
         return updated
-    }
+    }
 
     override suspend fun reconcileAllAccounts(): List<Account> {
         val updated = mutableListOf<Account>()
         accountDao.getAllActive().forEach { account ->
-            updated += reconcileAccount(account, 0.0)
+            updated += reconcileAccount(account, 0L)
         }
         return updated
-    }
+    }
 
     override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
         categoryDao.getSubCategories(parentId)
@@ -205,7 +205,7 @@ internal class BillRepositoryImpl(
         _expenseCategories.value = categoryDao.getAllByType("EXPENSE")
         _incomeCategories.value = categoryDao.getAllByType("INCOME")
         // accounts 已改为 Room Flow 暴露（observeAll），无需再写 StateFlow。
-    }
+    }
 
     override suspend fun seedIfNeeded() {
         val catCount = categoryDao.count()
@@ -217,7 +217,7 @@ internal class BillRepositoryImpl(
         // 已有安装（类已存在、跳过 seedCategories）也在此补上缺失的二级分类。
         seedSubCategories()
         loadReferenceData()
-    }
+    }
 
     /** 确保存在「无账户」桶：全新安装由 seedAccounts 直接建；既有安装把种子「默认」改名为桶。
      *  幂等；找不到「默认」且无桶时静默跳过（默认记账仍回退到首个账户）。 */
@@ -231,7 +231,7 @@ internal class BillRepositoryImpl(
                 dirty = true
             )
         )
-    }
+    }
 
     private suspend fun seedCategories() {
         val expenseCategories = listOf(
@@ -252,7 +252,7 @@ internal class BillRepositoryImpl(
             Category(name = "其他", iconName = "other", billType = BillType.INCOME),
         )
         for (c in incomeCategories) categoryDao.insert(c)
-    }
+    }
 
     /** 完整二级分类（FEATURES.md「分类管理 · 首次启动 seed 数据」）。幂等：仅插入缺失项。 */
     private suspend fun seedSubCategories() {
@@ -278,7 +278,7 @@ internal class BillRepositoryImpl(
                 categoryDao.insertSubCategory(SubCategory(name = subName, parentCategoryId = catId))
             }
         }
-    }
+    }
 
     private suspend fun seedAccounts() {
         val accounts = listOf(
@@ -289,5 +289,5 @@ internal class BillRepositoryImpl(
         for (a in accounts) {
             accountDao.insert(a)
         }
-    }
+    }
 }

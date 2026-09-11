@@ -23,44 +23,49 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** 一级分类预算行；amount == 0 表示该分类未设预算（UI 显示「未设」）。 */
+/**
+ * 金额单位：分（minor unit）。预算与支出的求和 / 比较全程整数运算；
+ * 仅「进度百分比」这一步把分子分母转 Double 相除，避免整数相除截断为 0。
+ */
+
+/** 一级分类预算行；amountMinor == 0 表示该分类未设预算（UI 显示「未设」）。 */
 @androidx.compose.runtime.Immutable
 data class CategoryBudgetState(
     val categoryId: Long,
     val categoryName: String,
-    val amount: Double,
-    val expense: Double,
+    val amountMinor: Long,
+    val expenseMinor: Long,
     val subBudgets: List<SubCategoryBudgetState> = emptyList()
 ) {
     val progress: Float
-        get() = if (amount > 0) (expense / amount).toFloat().coerceIn(0f, 1f) else 0f
+        get() = if (amountMinor > 0) (expenseMinor.toDouble() / amountMinor).toFloat().coerceIn(0f, 1f) else 0f
 
     val isOverBudget: Boolean
-        get() = amount > 0 && expense > amount
+        get() = amountMinor > 0 && expenseMinor > amountMinor
 
-    /** 超支金额，未超支时为 0。 */
-    val overBudgetBy: Double
-        get() = (expense - amount).coerceAtLeast(0.0)
+    /** 超支金额（分），未超支时为 0。 */
+    val overBudgetBy: Long
+        get() = (expenseMinor - amountMinor).coerceAtLeast(0L)
 }
 
-/** 子分类预算行；amount == 0 表示该子分类未设预算。 */
+/** 子分类预算行；amountMinor == 0 表示该子分类未设预算。 */
 @androidx.compose.runtime.Immutable
 data class SubCategoryBudgetState(
     val subCategoryId: Long,
     val name: String,
     val parentCategoryId: Long,
-    val amount: Double,
-    val expense: Double
+    val amountMinor: Long,
+    val expenseMinor: Long
 ) {
     val progress: Float
-        get() = if (amount > 0) (expense / amount).toFloat().coerceIn(0f, 1f) else 0f
+        get() = if (amountMinor > 0) (expenseMinor.toDouble() / amountMinor).toFloat().coerceIn(0f, 1f) else 0f
 
     val isOverBudget: Boolean
-        get() = amount > 0 && expense > amount
+        get() = amountMinor > 0 && expenseMinor > amountMinor
 
-    /** 超支金额，未超支时为 0。 */
-    val overBudgetBy: Double
-        get() = (expense - amount).coerceAtLeast(0.0)
+    /** 超支金额（分），未超支时为 0。 */
+    val overBudgetBy: Long
+        get() = (expenseMinor - amountMinor).coerceAtLeast(0L)
 }
 
 /**
@@ -70,26 +75,27 @@ data class SubCategoryBudgetState(
 @androidx.compose.runtime.Immutable
 data class BudgetState(
     val totalBudget: Budget? = null,
-    val monthExpense: Double = 0.0,
+    val monthExpenseMinor: Long = 0L,
     val categoryBudgets: List<CategoryBudgetState> = emptyList(),
-    val lastMonthSurplus: Double? = null,
+    val lastMonthSurplusMinor: Long? = null,
     val monthStart: Long = getMonthStart(),
     val isLoading: Boolean = false
 ) {
     val totalProgress: Float
-        get() = if (totalBudget != null && totalBudget.amount > 0) (monthExpense / totalBudget.amount).toFloat().coerceIn(0f, 1f) else 0f
+        get() = if (totalBudget != null && totalBudget.amountMinor > 0)
+            (monthExpenseMinor.toDouble() / totalBudget.amountMinor).toFloat().coerceIn(0f, 1f) else 0f
 
     val isOverTotal: Boolean
-        get() = totalBudget != null && totalBudget.amount > 0 && monthExpense > totalBudget.amount
+        get() = totalBudget != null && totalBudget.amountMinor > 0 && monthExpenseMinor > totalBudget.amountMinor
 
-    /** 总额超支金额，未超支时为 0。 */
-    val overTotalBy: Double
-        get() = (monthExpense - (totalBudget?.amount ?: 0.0)).coerceAtLeast(0.0)
+    /** 总额超支金额（分），未超支时为 0。 */
+    val overTotalBy: Long
+        get() = (monthExpenseMinor - (totalBudget?.amountMinor ?: 0L)).coerceAtLeast(0L)
 
     /** 本月是否设过任意一层预算（总额/分类/子分类），供空态引导判断。 */
     val hasAnyBudget: Boolean
         get() = totalBudget != null ||
-            categoryBudgets.any { it.amount > 0 || it.subBudgets.any { sub -> sub.amount > 0 } }
+            categoryBudgets.any { it.amountMinor > 0 || it.subBudgets.any { sub -> sub.amountMinor > 0 } }
 
     // 本月剩余天数 = 当月总天数 - 今天已过天数 + 1（含今天），仍在计划页顶部展示。
     val remainingDays: Int
@@ -102,7 +108,7 @@ data class BudgetState(
 sealed interface BudgetEvent {
     /** categoryId / subCategoryId 均为 null = 设总额预算；仅 categoryId = 设分类预算；两者都在 = 设子分类预算。 */
     data class SetBudget(
-        val amount: Double,
+        val amountMinor: Long,
         val categoryId: Long? = null,
         val subCategoryId: Long? = null
     ) : BudgetEvent
@@ -111,7 +117,7 @@ sealed interface BudgetEvent {
 /** deriveMonthBudget 的纯派生结果。 */
 internal data class MonthBudgetDerivation(
     val totalBudget: Budget?,
-    val monthExpense: Double,
+    val monthExpenseMinor: Long,
     val categoryBudgets: List<CategoryBudgetState>
 )
 
@@ -122,10 +128,10 @@ internal data class MonthBudgetDerivation(
  * - 总行：periodType == "MONTHLY" && monthStart == 本月 && categoryId == null && subCategoryId == null
  * - 分类行：categoryId != null && subCategoryId == null
  * - 子分类行：subCategoryId != null
- * - 支出只计 BillType.EXPENSE：按 bill.categoryId 求和 → 分类行 expense；
- *   按 (categoryId, subCategoryName) 求和 → 子分类行 expense
+ * - 支出只计 BillType.EXPENSE：按 bill.categoryId 求和 → 分类行 expenseMinor；
+ *   按 (categoryId, subCategoryName) 求和 → 子分类行 expenseMinor
  * - 子分类预算按 parentCategoryId == categoryId && name == subCategoryName 名称匹配
- * - 未设分类预算但本月有支出或该分类下有子分类预算的分类，补全为分类行（amount = 0，UI 显示「未设」）
+ * - 未设分类预算但本月有支出或该分类下有子分类预算的分类，补全为分类行（amountMinor = 0，UI 显示「未设」）
  */
 internal fun deriveMonthBudget(
     budgets: List<Budget>,
@@ -142,14 +148,14 @@ internal fun deriveMonthBudget(
     val subRows = monthly.filter { it.subCategoryId != null }
 
     val expenseBills = bills.filter { it.billType == BillType.EXPENSE }
-    val monthExpense = expenseBills.sumOf { it.amount }
+    val monthExpense = expenseBills.sumOf { it.amountMinor }
     val categoryExpense = expenseBills
         .groupBy { it.categoryId }
-        .mapValues { (_, list) -> list.sumOf { it.amount } }
+        .mapValues { (_, list) -> list.sumOf { it.amountMinor } }
     val subCategoryExpense = expenseBills
         .filter { !it.subCategoryName.isNullOrBlank() }
         .groupBy { it.categoryId to it.subCategoryName!! }
-        .mapValues { (_, list) -> list.sumOf { it.amount } }
+        .mapValues { (_, list) -> list.sumOf { it.amountMinor } }
 
     val categoryNameById = expenseCategories.associateBy { it.id }
     val subCategoryNameById = subCategories.associateBy { it.id }
@@ -163,8 +169,8 @@ internal fun deriveMonthBudget(
                     subCategoryId = row.subCategoryId!!,
                     name = name,
                     parentCategoryId = parentId,
-                    amount = row.amount,
-                    expense = subCategoryExpense[parentId to name] ?: 0.0
+                    amountMinor = row.amountMinor,
+                    expenseMinor = subCategoryExpense[parentId to name] ?: 0L
                 )
             }
         }
@@ -174,8 +180,8 @@ internal fun deriveMonthBudget(
         CategoryBudgetState(
             categoryId = categoryId,
             categoryName = categoryNameById[categoryId]?.name ?: "",
-            amount = row.amount,
-            expense = categoryExpense[categoryId] ?: 0.0,
+            amountMinor = row.amountMinor,
+            expenseMinor = categoryExpense[categoryId] ?: 0L,
             subBudgets = subStatesByParent[categoryId] ?: emptyList()
         )
     }
@@ -189,15 +195,15 @@ internal fun deriveMonthBudget(
             CategoryBudgetState(
                 categoryId = category.id,
                 categoryName = category.name,
-                amount = 0.0,
-                expense = categoryExpense[category.id] ?: 0.0,
+                amountMinor = 0L,
+                expenseMinor = categoryExpense[category.id] ?: 0L,
                 subBudgets = subStatesByParent[category.id] ?: emptyList()
             )
         }
 
     return MonthBudgetDerivation(
         totalBudget = total,
-        monthExpense = monthExpense,
+        monthExpenseMinor = monthExpense,
         categoryBudgets = budgetedCategories + completedCategories
     )
 }
@@ -239,8 +245,8 @@ class BudgetViewModel(
                 }
             _state.update {
                 it.copy(
-                    lastMonthSurplus = if (lastTotalBudget != null) {
-                        lastTotalBudget.amount - lastMonthExpense
+                    lastMonthSurplusMinor = if (lastTotalBudget != null) {
+                        lastTotalBudget.amountMinor - lastMonthExpense
                     } else {
                         null
                     }
@@ -270,7 +276,7 @@ class BudgetViewModel(
                 _state.update {
                     it.copy(
                         totalBudget = derivation.totalBudget,
-                        monthExpense = derivation.monthExpense,
+                        monthExpenseMinor = derivation.monthExpenseMinor,
                         categoryBudgets = derivation.categoryBudgets,
                         isLoading = false
                     )
@@ -281,21 +287,21 @@ class BudgetViewModel(
 
     fun onEvent(event: BudgetEvent) {
         when (event) {
-            is BudgetEvent.SetBudget -> setBudget(event.amount, event.categoryId, event.subCategoryId)
+            is BudgetEvent.SetBudget -> setBudget(event.amountMinor, event.categoryId, event.subCategoryId)
         }
     }
 
-    private fun setBudget(amount: Double, categoryId: Long?, subCategoryId: Long?) {
+    private fun setBudget(amountMinor: Long, categoryId: Long?, subCategoryId: Long?) {
         val monthStart = getMonthStart()
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             // 按 (monthStart, categoryId, subCategoryId) 维度定位现有行：有则更新，无则新建。
             val existing = budgetRepository.findBudgetByScope(monthStart, categoryId, subCategoryId)
             val updated = existing
-                ?.copy(amount = amount, updatedAt = now, dirty = true)
+                ?.copy(amountMinor = amountMinor, updatedAt = now, dirty = true)
                 ?: Budget(
                     monthStart = monthStart,
-                    amount = amount,
+                    amountMinor = amountMinor,
                     periodType = "MONTHLY",
                     categoryId = categoryId,
                     subCategoryId = subCategoryId,

@@ -106,11 +106,11 @@ class RinklNoteAppWidgetReceiver : GlanceAppWidgetReceiver() {
 // ── Data ────────────────────────────────────────────
 
 private data class WidgetData(
-    val todayExpense: Double,
-    val todayIncome: Double,
-    val monthExpense: Double,
-    val budget: Double?,
-    val ranking: List<Pair<com.example.rinklnote.data.db.entity.Category, Double>>,
+    val todayExpense: Long,
+    val todayIncome: Long,
+    val monthExpense: Long,
+    val budget: Long?,
+    val ranking: List<Pair<com.example.rinklnote.data.db.entity.Category, Long>>,
     val masked: Boolean
 )
 
@@ -137,7 +137,7 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
     val todayExpense = repo.getTotalExpense(todayStart, todayEnd)
     val todayIncome = repo.getTotalIncome(todayStart, todayEnd)
     val monthExpense = repo.getTotalExpense(monthStart, nextMonthStart)
-    val budget = budgetRepo.getBudget(monthStart)?.amount
+    val budget = budgetRepo.getBudget(monthStart)?.amountMinor
 
     val bills = repo.observeBillsByMonth(monthStart, nextMonthStart).first()
     val ranking = bills
@@ -145,7 +145,7 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
         .groupBy { it.categoryId }
         .mapNotNull { (catId, list) ->
             val cat = catIdToCat[catId] ?: return@mapNotNull null
-            cat to list.sumOf { it.amount }
+            cat to list.sumOf { it.amountMinor }
     }
         .sortedByDescending { it.second }
         .take(4)
@@ -160,10 +160,13 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
     )
 }
 
-private fun fmtAmount(value: Double): String =
-    if (value == value.toLong().toDouble()) value.toLong().toString() else String.format("%.2f", value)
+private fun fmtAmount(minor: Long): String {
+    val absMinor = kotlin.math.abs(minor)
+    val plain = "${absMinor / 100}.${(absMinor % 100).toString().padStart(2, '0')}"
+    return if (plain.endsWith(".00")) plain.dropLast(3) else plain
+}
 
-private fun WidgetData.money(value: Double): String =
+private fun WidgetData.money(value: Long): String =
     if (masked) "¥••" else "¥${fmtAmount(value)}"
 
 // ── 1×2 (73×146) — Split pulse: expense | income ──

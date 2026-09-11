@@ -79,6 +79,7 @@ import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
@@ -342,7 +343,7 @@ private fun TemplatesSection(
             ) {
                 Text(template.label, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    "¥${template.amount.toBigDecimal().stripTrailingZeros().toPlainString()}",
+                    Money.format(template.amountMinor),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.tertiary
@@ -571,7 +572,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (hidden) "***" else String.format(Locale.US, "%.2f", account.balance), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (hidden) "***" else Money.format(account.balanceMinor), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier

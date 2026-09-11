@@ -56,6 +56,7 @@ import com.example.rinklnote.ui.viewmodel.BudgetState
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.CategoryBudgetState
 import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
+import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import kotlin.math.abs
@@ -136,9 +137,9 @@ fun PlanScreen(
             )
 
             // 上月结余（仅展示，不结转）
-            state.lastMonthSurplus?.let { surplus ->
+            state.lastMonthSurplusMinor?.let { surplus ->
                 Spacer(modifier = Modifier.height(10.dp))
-                LastMonthSurplusRow(surplus = surplus)
+                LastMonthSurplusRow(surplusMinor = surplus)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -260,17 +261,17 @@ private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: 
 /** 编辑目标当前金额（已有则预填，未设则为空）。 */
 private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): String {
     val amount = when (target) {
-        BudgetEditTarget.Total -> state.totalBudget?.amount
+        BudgetEditTarget.Total -> state.totalBudget?.amountMinor
         is BudgetEditTarget.Category ->
-            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }?.amount
+            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }?.amountMinor
         is BudgetEditTarget.SubCategory ->
             state.categoryBudgets
                 .firstOrNull { it.categoryId == target.parentCategoryId }
                 ?.subBudgets
                 ?.firstOrNull { it.subCategoryId == target.subCategoryId }
-                ?.amount
+                ?.amountMinor
     }
-    return amount?.toBigDecimal()?.stripTrailingZeros()?.toPlainString() ?: ""
+    return amount?.let { Money.toYuanInputString(it) } ?: ""
 }
 
 /**
@@ -304,7 +305,7 @@ private fun TotalBudgetCard(
                 Text("设置", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(
-                    text = "¥${budget.amount.toBigDecimal().stripTrailingZeros().toPlainString()}",
+                    text = Money.format(budget.amountMinor),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
@@ -319,9 +320,9 @@ private fun TotalBudgetCard(
         } else {
             val over = state.isOverTotal
             val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            val spentText = "¥${String.format("%.2f", state.monthExpense)}"
-            val budgetText = "¥${String.format("%.2f", budget.amount)}"
-            val percent = if (budget.amount > 0) (state.monthExpense / budget.amount * 100).toInt() else 0
+            val spentText = Money.format(state.monthExpenseMinor)
+            val budgetText = Money.format(budget.amountMinor)
+            val percent = if (budget.amountMinor > 0) (state.monthExpenseMinor.toDouble() / budget.amountMinor * 100).toInt() else 0
 
             LinearProgressIndicator(
                 progress = { state.totalProgress },
@@ -352,7 +353,7 @@ private fun TotalBudgetCard(
             if (over) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "已超预算 ¥${String.format("%.2f", state.overTotalBy)}",
+                    text = "已超预算 ${Money.format(state.overTotalBy)}",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.error
@@ -364,12 +365,12 @@ private fun TotalBudgetCard(
 
 /** 上月结余行（Last Month Surplus）：仅展示，不结转；正数 primary 色，负数 error 色。 */
 @Composable
-private fun LastMonthSurplusRow(surplus: Double) {
-    val sign = if (surplus >= 0) "+" else "-"
-    val color = if (surplus >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+private fun LastMonthSurplusRow(surplusMinor: Long) {
+    val sign = if (surplusMinor >= 0) "+" else "-"
+    val color = if (surplusMinor >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "上月结余 $sign¥${String.format("%.2f", abs(surplus))}（仅展示）",
+            text = "上月结余 $sign${Money.format(abs(surplusMinor))}（仅展示）",
             fontSize = 13.sp,
             color = color
         )
@@ -435,8 +436,8 @@ private fun CategoryBudgetCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 BudgetProgressBar(
-                    expense = category.expense,
-                    amount = category.amount,
+                    expenseMinor = category.expenseMinor,
+                    amountMinor = category.amountMinor,
                     progress = category.progress,
                     over = category.isOverBudget,
                     overBudgetBy = category.overBudgetBy
@@ -444,10 +445,10 @@ private fun CategoryBudgetCard(
             }
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = if (category.amount > 0) currencyText(category.amount) else "未设",
+                text = if (category.amountMinor > 0) currencyText(category.amountMinor) else "未设",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (category.amount > 0) {
+                color = if (category.amountMinor > 0) {
                     if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -491,8 +492,8 @@ private fun SubCategoryBudgetRow(
         )
         Spacer(modifier = Modifier.height(5.dp))
         BudgetProgressBar(
-            expense = sub.expense,
-            amount = sub.amount,
+            expenseMinor = sub.expenseMinor,
+            amountMinor = sub.amountMinor,
             progress = sub.progress,
             over = sub.isOverBudget,
             overBudgetBy = sub.overBudgetBy,
@@ -505,11 +506,11 @@ private fun SubCategoryBudgetRow(
 /** 行内金额/支出/进度/超支标红（分类与子分类行共用）。 */
 @Composable
 private fun BudgetProgressBar(
-    expense: Double,
-    amount: Double,
+    expenseMinor: Long,
+    amountMinor: Long,
     progress: Float,
     over: Boolean,
-    overBudgetBy: Double,
+    overBudgetBy: Long,
     barHeight: androidx.compose.ui.unit.Dp = 6.dp,
     compact: Boolean = false
 ) {
@@ -524,30 +525,30 @@ private fun BudgetProgressBar(
         trackColor = MaterialTheme.colorScheme.surfaceVariant
     )
     Spacer(modifier = Modifier.height(4.dp))
-    val spentText = "¥${String.format("%.2f", expense)}"
+    val spentText = Money.format(expenseMinor)
     if (over) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = "已花 $spentText / 预算 ${currencyText(amount)}",
+                text = "已花 $spentText / 预算 ${currencyText(amountMinor)}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "已超 ¥${String.format("%.2f", overBudgetBy)}",
+                text = "已超 ${Money.format(overBudgetBy)}",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.error
             )
         }
-    } else if (amount > 0) {
+    } else if (amountMinor > 0) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = "已花 $spentText / 预算 ${currencyText(amount)}",
+                text = "已花 $spentText / 预算 ${currencyText(amountMinor)}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "${(expense / amount * 100).toInt()}%",
+                text = "${(expenseMinor.toDouble() / amountMinor * 100).toInt()}%",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -562,8 +563,8 @@ private fun BudgetProgressBar(
 }
 
 /** Double → 去尾零的纯数字字符串（无货币符号），如 `12.50` → `"12.5"`。 */
-private fun currencyText(value: Double): String =
-    value.toBigDecimal().stripTrailingZeros().toPlainString()
+private fun currencyText(value: Long): String =
+    Money.toYuanInputString(value)
 
 /**
  * 预算键盘全屏 overlay（Budget Keypad Overlay）：上滑进入，编辑三级预算目标。
@@ -580,7 +581,7 @@ private fun BudgetKeypadOverlay(
     title: String,
     hint: String,
     initialAmount: String,
-    onConfirm: (Double) -> Unit,
+    onConfirm: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
@@ -588,8 +589,8 @@ private fun BudgetKeypadOverlay(
     var amount by remember { mutableStateOf(initialAmount) }
 
     fun confirmEdit() {
-        val value = amount.toDoubleOrNull() ?: return
-        onConfirm(value)
+        val minor = Money.parseMinor(amount) ?: return
+        onConfirm(minor)
     }
 
     Column(

@@ -9,6 +9,7 @@ import com.example.rinklnote.domain.MessageKind
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.QueryRequest
 import com.example.rinklnote.data.repository.ChatRepository
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
@@ -152,17 +153,17 @@ class AiViewModel(
                     if (r.spikeDays.isNotEmpty()) {
                         append("\n⚠️ 超标日")
                         r.spikeDays.take(5).forEach {
-                            append("\n- ").append(it.date).append(" ¥").append("%.2f".format(it.amount))
+                            append("\n- ").append(it.date).append(" ").append(Money.format(it.amountMinor))
                                 .append("（超日均").append(it.ratioPct).append("%）")
                         }
                     }
                     r.biggestSingle?.let {
                         append("\n🔍 最大单笔：").append(it.categoryName).append(" ¥")
-                            .append("%.2f".format(it.amount)).append("（").append(it.date).append("）")
+                            .append(Money.format(it.amountMinor)).append("（").append(it.date).append("）")
                     }
                     if (r.topCategories.isNotEmpty()) {
                         append("\n🧾 消费集中：")
-                        append(r.topCategories.joinToString("、") { it.name + " ¥" + "%.2f".format(it.amount) })
+                        append(r.topCategories.joinToString("、") { it.name + " " + Money.format(it.amountMinor) })
                     }
                 }
                 chatRepository.insertChatMessage(

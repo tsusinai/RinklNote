@@ -89,7 +89,7 @@ class BookkeepingViewModelTest {
         val vm = newVM()
         val day = getMonthStart(0) + 1
         fun bill(id: Long) = Bill(
-            id = id, amount = 10.0, categoryId = 1, categoryName = "测试",
+            id = id, amountMinor = 1000L, categoryId = 1, categoryName = "测试",
             accountId = 1, date = day, createdAt = id
         )
         // 新序：b3 在最上，b1 居中，b2 在最下
@@ -126,24 +126,24 @@ class BookkeepingViewModelTest {
             return flowOf(emptyList())
         }
 
-        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double {
+        override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long {
             totalRanges += monthStart to nextMonthStart
-            return 0.0
+            return 0L
         }
 
-        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double {
+        override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long {
             totalRanges += monthStart to nextMonthStart
-            return 0.0
+            return 0L
         }
 
-        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> {
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long> {
             totalRanges += monthStart to nextMonthStart
-            return flowOf(0.0)
+            return flowOf(0L)
         }
 
-        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> {
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long> {
             totalRanges += monthStart to nextMonthStart
-            return flowOf(0.0)
+            return flowOf(0L)
         }
 
         override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())
@@ -174,10 +174,10 @@ class BookkeepingViewModelTest {
         override suspend fun loadReferenceData() {}
         override suspend fun seedIfNeeded() {}
         override suspend fun getDailyReport(dayStart: Long, dayEnd: Long): DailyReport =
-            DailyReport("", 0.0, 0.0, emptyList(), emptyList(), 0)
+            DailyReport("", 0L, 0L, emptyList(), emptyList(), 0)
         override suspend fun countUnsynced(): Long = 0
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 
@@ -191,8 +191,8 @@ class BookkeepingViewModelTest {
         override suspend fun getUnsyncedAccounts(): List<Account> = emptyList()
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
-        override suspend fun getAccountNet(accountId: Long): Double = 0.0
-        override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account = account
+        override suspend fun getAccountNet(accountId: Long): Long = 0L
+        override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account = account
         override suspend fun reconcileAllAccounts(): List<Account> = emptyList()
     }
 }

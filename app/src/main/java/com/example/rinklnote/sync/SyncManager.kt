@@ -94,7 +94,7 @@ class SyncManager(
                     val local = billDao.getByServerId(dto.id)
                     if (local != null && local.dirty) continue
                     merged += Bill(
-                        amount = dto.amount,
+                        amountMinor = dto.resolvedAmountMinor,
                         billType = BillType.fromValue(dto.billType),
                         categoryId = dto.categoryId,
                         categoryName = dto.categoryName,
@@ -234,7 +234,7 @@ class SyncManager(
                 val dto = api.upsertBudget(
                     UpsertBudgetRequest(
                         monthStart = budget.monthStart,
-                        amount = budget.amount,
+                        amountMinor = budget.amountMinor,
                         periodType = budget.periodType,
                         categoryId = budget.categoryId,
                         subCategoryId = budget.subCategoryId
@@ -258,7 +258,7 @@ class SyncManager(
                     val dto = api.upsertBudget(
                         UpsertBudgetRequest(
                             monthStart = budget.monthStart,
-                            amount = budget.amount,
+                            amountMinor = budget.amountMinor,
                             periodType = budget.periodType,
                             categoryId = budget.categoryId,
                             subCategoryId = budget.subCategoryId
@@ -279,7 +279,7 @@ class SyncManager(
                         Budget(
                             serverId = dto.id,
                             monthStart = dto.monthStart,
-                            amount = dto.amount,
+                            amountMinor = dto.resolvedAmountMinor,
                             periodType = dto.periodType,
                             categoryId = dto.categoryId,
                             subCategoryId = dto.subCategoryId,
@@ -293,7 +293,7 @@ class SyncManager(
                     if (serverTime > localTime) {
                         dao.upsert(
                             local.copy(
-                                amount = dto.amount,
+                                amountMinor = dto.resolvedAmountMinor,
                                 monthStart = dto.monthStart,
                                 periodType = dto.periodType,
                                 categoryId = dto.categoryId,
@@ -344,14 +344,14 @@ class SyncManager(
                     val byName = dao.getByNameActive(dto.name)
                     local = if (byName != null && !byName.dirty) {
                         byName.copy(
-                            serverId = dto.id, name = dto.name, balance = dto.balance,
+                            serverId = dto.id, name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
                             iconColor = dto.iconColor, updatedAt = serverTime,
                             deleted = dto.deleted, dirty = false
                         ).also { dao.upsert(it) }
                     } else {
                         dao.upsert(
                             Account(
-                                serverId = dto.id, name = dto.name, balance = dto.balance,
+                                serverId = dto.id, name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
                                 iconColor = dto.iconColor, updatedAt = serverTime,
                                 deleted = dto.deleted, dirty = false
                             )
@@ -365,7 +365,7 @@ class SyncManager(
                 if (serverTime > localTime) {
                     dao.upsert(
                         local.copy(
-                            name = dto.name, balance = dto.balance,
+                            name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
                             iconColor = dto.iconColor, updatedAt = serverTime,
                             deleted = dto.deleted, dirty = false
                         )
@@ -397,14 +397,14 @@ class SyncManager(
             account.serverId != null -> {
                 val dto = api.updateAccount(
                     account.serverId,
-                    UpdateAccountRequest(name = account.name, iconColor = account.iconColor, balance = account.balance)
+                    UpdateAccountRequest(name = account.name, iconColor = account.iconColor, balanceMinor = account.balanceMinor)
                 )
                 dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
                 true
             }
             else -> {
                 val dto = api.createAccount(
-                    CreateAccountRequest(name = account.name, iconColor = account.iconColor, balance = account.balance)
+                    CreateAccountRequest(name = account.name, iconColor = account.iconColor, balanceMinor = account.balanceMinor)
                 )
                 dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
                 true
@@ -414,7 +414,7 @@ class SyncManager(
 }
 
 private fun Bill.toRequest() = CreateBillRequest(
-    amount = amount,
+    amountMinor = amountMinor,
     billType = billType.value,
     categoryId = categoryId,
     categoryName = categoryName,
@@ -426,7 +426,7 @@ private fun Bill.toRequest() = CreateBillRequest(
 )
 
 private fun TemplateDTO.toEntity() = BillTemplate(
-    serverId = this.id, label = this.label, amount = this.amount,
+    serverId = this.id, label = this.label, amountMinor = this.resolvedAmountMinor,
     categoryId = this.categoryId, categoryName = this.categoryName,
     subCategoryName = this.subCategoryName, accountId = this.accountId,
     sortOrder = this.sortOrder

@@ -23,17 +23,17 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :monthStart AND date < :nextMonthStart ORDER BY date DESC, COALESCE(sort_order, created_at) DESC, created_at DESC")
     fun observeByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>>
 
-    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
-    suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double?
+    @Query("SELECT SUM(amount_minor) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
+    suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long?
 
-    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
-    suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double?
+    @Query("SELECT SUM(amount_minor) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
+    suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Long?
 
-    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
-    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double?>
+    @Query("SELECT SUM(amount_minor) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
+    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Long?>
 
-    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
-    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double?>
+    @Query("SELECT SUM(amount_minor) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
+    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Long?>
 
     @androidx.room.Upsert
     suspend fun upsertAll(bills: List<Bill>)
@@ -56,10 +56,10 @@ interface BillDao {
     // Net effect of a single account's bills: income adds, expense subtracts. Used by the
     // account-level "对账" (reconcile) so a balance can be recomputed from its own records.
     @Query(
-        "SELECT SUM(CASE WHEN bill_type = 'EXPENSE' THEN -amount ELSE amount END) " +
+        "SELECT SUM(CASE WHEN bill_type = 'EXPENSE' THEN -amount_minor ELSE amount_minor END) " +
             "FROM bills WHERE deleted = 0 AND account_id = :accountId"
     )
-    suspend fun getAccountNet(accountId: Long): Double?
+    suspend fun getAccountNet(accountId: Long): Long?
 
     @Query("UPDATE bills SET dirty = 1, deleted = 1, updated_at = :updatedAt WHERE id = :id")
     suspend fun softDelete(id: Long, updatedAt: Long)
@@ -79,10 +79,10 @@ interface BillDao {
     @Query("SELECT * FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd ORDER BY date DESC, COALESCE(sort_order, created_at) DESC, created_at DESC")
     suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill>
 
-    @Query("SELECT category_name, SUM(amount) as total FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
+    @Query("SELECT category_name, SUM(amount_minor) as total FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
     suspend fun getDailyExpenseSummary(dayStart: Long, dayEnd: Long): List<DailyCategoryAmount>
 
-    @Query("SELECT category_name, SUM(amount) as total FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
+    @Query("SELECT category_name, SUM(amount_minor) as total FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :dayStart AND date < :dayEnd GROUP BY category_name ORDER BY total DESC")
     suspend fun getDailyIncomeSummary(dayStart: Long, dayEnd: Long): List<DailyCategoryAmount>
 
     @Query("SELECT COUNT(*) FROM bills WHERE deleted = 0 AND date >= :dayStart AND date < :dayEnd")

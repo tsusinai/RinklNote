@@ -1,5 +1,6 @@
 package com.example.rinklnote.data.network.dto
 
+import com.example.rinklnote.util.Money
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -40,7 +41,10 @@ data class AiDisabledRequest(val disabled: Boolean)
 @Serializable
 data class BillDTO(
     val id: Long,
-    val amount: Double,
+    // 金额（分，权威值）
+    val amountMinor: Long? = null,
+    // 旧字段（元）：服务端过渡期仍会下发，新客户端只读 amountMinor，勿使用。
+    val amount: Double? = null,
     val billType: String,
     val categoryId: Long,
     val categoryName: String,
@@ -54,7 +58,11 @@ data class BillDTO(
     val deleted: Boolean = false,
     // 同日内显式排序名次（拖动重排）；null = 未排序（查询端 COALESCE(created_at) 兜底）。
     val sortOrder: Long? = null
-)
+) {
+    /** 解析金额：优先取分；旧服务端只回 amount（元）时回退换算。 */
+    val resolvedAmountMinor: Long
+        get() = amountMinor ?: Money.yuanToMinor(amount ?: 0.0)
+}
 
 @Serializable
 data class SyncResponse(
@@ -67,7 +75,8 @@ data class SyncResponse(
 
 @Serializable
 data class CreateBillRequest(
-    val amount: Double,
+    // 只发「分」（服务端权威字段）。
+    val amountMinor: Long,
     val billType: String,
     val categoryId: Long,
     val categoryName: String,
@@ -83,25 +92,39 @@ data class CreateBillRequest(
 data class AccountDTO(
     val id: Long,
     val name: String,
-    val balance: Double,
+    // 余额（分，权威值）
+    val balanceMinor: Long? = null,
+    // 旧字段（元）：过渡期兼容，勿使用。
+    val balance: Double? = null,
     val iconColor: String,
     val updatedAt: Long? = null,
     val deleted: Boolean = false
-)
+) {
+    /** 解析余额：优先取分，旧服务端只回 balance（元）时回退换算。 */
+    val resolvedBalanceMinor: Long
+        get() = balanceMinor ?: Money.yuanToMinor(balance ?: 0.0)
+}
 
 @Serializable
-data class CreateAccountRequest(val name: String, val iconColor: String, val balance: Double = 0.0)
+data class CreateAccountRequest(val name: String, val iconColor: String, val balanceMinor: Long = 0L)
 
 @Serializable
-data class UpdateAccountRequest(val name: String? = null, val iconColor: String? = null, val balance: Double? = null)
+data class UpdateAccountRequest(val name: String? = null, val iconColor: String? = null, val balanceMinor: Long? = null)
 
 @Serializable
 data class TemplateDTO(
-    val id: Long = 0, val label: String, val amount: Double,
-    val categoryId: Long, val categoryName: String,
+    val id: Long = 0, val label: String,
+    // 金额（分，权威值）；旧字段 amount（元）仅在旧服务端回退时使用。
+    val amountMinor: Long? = null,
+    val amount: Double? = null,
+    val categoryId: Long,
+    val categoryName: String,
     val subCategoryName: String? = null, val accountId: Long,
     val sortOrder: Int = 0
-)
+) {
+    val resolvedAmountMinor: Long
+        get() = amountMinor ?: Money.yuanToMinor(amount ?: 0.0)
+}
 
 @Serializable
 data class ParseRequest(val text: String)
@@ -119,19 +142,25 @@ data class ParseResponse(
 data class BudgetDTO(
     val id: Long,
     val monthStart: Long,
-    val amount: Double,
+    // 金额（分，权威值）；旧字段 amount（元）仅回退用。
+    val amountMinor: Long? = null,
+    val amount: Double? = null,
     val periodType: String = "MONTHLY",
     val categoryId: Long? = null,
     val subCategoryId: Long? = null,
     val createdAt: Long,
     val updatedAt: Long? = null,
     val deleted: Boolean = false
-)
+) {
+    val resolvedAmountMinor: Long
+        get() = amountMinor ?: Money.yuanToMinor(amount ?: 0.0)
+}
 
 @Serializable
 data class UpsertBudgetRequest(
     val monthStart: Long,
-    val amount: Double,
+    // 只发「分」（服务端权威字段）。
+    val amountMinor: Long,
     val periodType: String = "MONTHLY",
     val categoryId: Long? = null,
     val subCategoryId: Long? = null
@@ -141,9 +170,11 @@ data class UpsertBudgetRequest(
 data class BudgetSummaryDTO(
     val periodStart: Long,
     val totalBudget: BudgetDTO? = null,
+    val totalExpenseMinor: Long = 0L,
     val totalExpense: Double = 0.0,
     val categoryBudgets: List<CategoryBudgetDTO>,
     val subCategoryBudgets: List<SubCategoryBudgetDTO>,
+    val lastMonthSurplusMinor: Long? = null,
     val lastMonthSurplus: Double? = null
 )
 
@@ -151,8 +182,10 @@ data class BudgetSummaryDTO(
 data class CategoryBudgetDTO(
     val categoryId: Long,
     val categoryName: String,
-    val amount: Double,
-    val expense: Double
+    val amountMinor: Long = 0L,
+    val expenseMinor: Long = 0L,
+    val amount: Double = 0.0,
+    val expense: Double = 0.0
 )
 
 @Serializable
@@ -160,8 +193,10 @@ data class SubCategoryBudgetDTO(
     val subCategoryId: Long,
     val name: String,
     val parentCategoryId: Long,
-    val amount: Double,
-    val expense: Double
+    val amountMinor: Long = 0L,
+    val expenseMinor: Long = 0L,
+    val amount: Double = 0.0,
+    val expense: Double = 0.0
 )
 
 @Serializable
@@ -195,23 +230,41 @@ data class AnomalyAlert(
     val type: String = ""
 )
 
+// 洞察相关金额同样以「分」为准：新字段 amountMinor / totalXxxMinor 优先，旧元字段仅回退。
 @Serializable
-data class CategoryAmount(val name: String = "", val amount: Double = 0.0)
+data class CategoryAmount(
+    val name: String = "",
+    val amountMinor: Long = 0L,
+    val amount: Double = 0.0
+)
 
 @Serializable
-data class MonthlySpike(val date: String = "", val amount: Double = 0.0, val ratioPct: Int = 0)
+data class MonthlySpike(
+    val date: String = "",
+    val amountMinor: Long = 0L,
+    val amount: Double = 0.0,
+    val ratioPct: Int = 0
+)
 
 @Serializable
-data class SingleBill(val amount: Double = 0.0, val categoryName: String = "", val date: String = "")
+data class SingleBill(
+    val amountMinor: Long = 0L,
+    val amount: Double = 0.0,
+    val categoryName: String = "",
+    val date: String = ""
+)
 
 @Serializable
 data class MonthlyReviewResponse(
     val month: String = "",
     val summary: String = "",
     val highlights: List<String> = emptyList(),
+    val totalExpenseMinor: Long = 0L,
     val totalExpense: Double = 0.0,
+    val totalIncomeMinor: Long = 0L,
     val totalIncome: Double = 0.0,
     val activeDays: Int = 0,
+    val avgDailyExpenseMinor: Long = 0L,
     val avgDailyExpense: Double = 0.0,
     val spikeDays: List<MonthlySpike> = emptyList(),
     val biggestSingle: SingleBill? = null,

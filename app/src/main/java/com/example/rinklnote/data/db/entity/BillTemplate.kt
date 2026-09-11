@@ -14,7 +14,8 @@ data class BillTemplate(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "server_id") val serverId: Long? = null,
     val label: String,
-    val amount: Double,
+    // 金额单位：分（minor unit）。
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
     @ColumnInfo(name = "category_id") val categoryId: Long,
     @ColumnInfo(name = "category_name") val categoryName: String,
     @ColumnInfo(name = "sub_category_name") val subCategoryName: String? = null,

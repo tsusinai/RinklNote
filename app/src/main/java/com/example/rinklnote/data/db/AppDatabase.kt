@@ -23,7 +23,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
     entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -141,13 +141,134 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v13：金额统一为整数分。SQLite 不能修改既有列的类型（且 Room 会校验列亲和性
+         * REAL ≠ INTEGER），因此按官方建议重建四张含金额的表。
+         *
+         * 顺序说明：bills 外键引用 accounts（categories / accounts）。若外键约束在迁移期间
+         * 处于开启状态，直接 DROP 被引用的 accounts 会失败；因此先把 bills 的数据搬到
+         * 一张无约束的中转表并删掉 bills，再重建 accounts（此时已无子表引用它），
+         * 最后带着外键重建 bills 并从中转表回填——该顺序在外键开与关两种状态下都安全。
+         */
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1) bills 数据先转移到无约束中转表（原样保存，金额换算放到最后一步）
+                db.execSQL("CREATE TABLE bills_migration_backup AS SELECT * FROM bills")
+                db.execSQL("DROP TABLE bills")
+
+                // 2) 重建 accounts：balance REAL → balance_minor INTEGER
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS accounts_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        name TEXT NOT NULL,
+                        balance_minor INTEGER NOT NULL,
+                        icon_color TEXT NOT NULL,
+                        server_id INTEGER,
+                        updated_at INTEGER,
+                        deleted INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO accounts_new (id, name, balance_minor, icon_color, server_id, updated_at, deleted, dirty)
+                    SELECT id, name, CAST(ROUND(balance * 100) AS INTEGER), icon_color, server_id, updated_at, deleted, dirty
+                    FROM accounts
+                """.trimIndent())
+                db.execSQL("DROP TABLE accounts")
+                db.execSQL("ALTER TABLE accounts_new RENAME TO accounts")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_accounts_server_id ON accounts(server_id)")
+
+                // 3) 重建 bills：amount REAL → amount_minor INTEGER（外键定义保持不变）
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS bills_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        bill_type TEXT NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        category_name TEXT NOT NULL,
+                        sub_category_name TEXT,
+                        account_id INTEGER NOT NULL,
+                        remark TEXT,
+                        date INTEGER NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        source TEXT NOT NULL,
+                        server_id INTEGER,
+                        updated_at INTEGER,
+                        base_updated_at INTEGER,
+                        sort_order INTEGER,
+                        deleted INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL,
+                        FOREIGN KEY(category_id) REFERENCES categories(id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+                        FOREIGN KEY(account_id) REFERENCES accounts(id) ON UPDATE NO ACTION ON DELETE NO ACTION
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO bills_new (id, amount_minor, bill_type, category_id, category_name, sub_category_name, account_id, remark, date, created_at, source, server_id, updated_at, base_updated_at, sort_order, deleted, dirty)
+                    SELECT id, CAST(ROUND(amount * 100) AS INTEGER), bill_type, category_id, category_name, sub_category_name, account_id, remark, date, created_at, source, server_id, updated_at, base_updated_at, sort_order, deleted, dirty
+                    FROM bills_migration_backup
+                """.trimIndent())
+                db.execSQL("DROP TABLE bills_migration_backup")
+                db.execSQL("ALTER TABLE bills_new RENAME TO bills")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bills_category_id ON bills(category_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bills_account_id ON bills(account_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_bills_date ON bills(date)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bills_server_id ON bills(server_id)")
+
+                // 4) budgets / bill_templates 无外键，直接重建
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS budgets_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        server_id INTEGER,
+                        month_start INTEGER NOT NULL,
+                        period_type TEXT NOT NULL DEFAULT 'MONTHLY',
+                        category_id INTEGER,
+                        sub_category_id INTEGER,
+                        amount_minor INTEGER NOT NULL,
+                        updated_at INTEGER,
+                        deleted INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO budgets_new (id, server_id, month_start, period_type, category_id, sub_category_id, amount_minor, updated_at, deleted, dirty)
+                    SELECT id, server_id, month_start, period_type, category_id, sub_category_id, CAST(ROUND(amount * 100) AS INTEGER), updated_at, deleted, dirty
+                    FROM budgets
+                """.trimIndent())
+                db.execSQL("DROP TABLE budgets")
+                db.execSQL("ALTER TABLE budgets_new RENAME TO budgets")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_budgets_server_id ON budgets(server_id)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS bill_templates_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        server_id INTEGER,
+                        label TEXT NOT NULL,
+                        amount_minor INTEGER NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        category_name TEXT NOT NULL,
+                        sub_category_name TEXT,
+                        account_id INTEGER NOT NULL,
+                        sort_order INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO bill_templates_new (id, server_id, label, amount_minor, category_id, category_name, sub_category_name, account_id, sort_order)
+                    SELECT id, server_id, label, CAST(ROUND(amount * 100) AS INTEGER), category_id, category_name, sub_category_name, account_id, sort_order
+                    FROM bill_templates
+                """.trimIndent())
+                db.execSQL("DROP TABLE bill_templates")
+                db.execSQL("ALTER TABLE bill_templates_new RENAME TO bill_templates")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_bill_templates_server_id ON bill_templates(server_id)")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .fallbackToDestructiveMigration()
                 .build()
         }

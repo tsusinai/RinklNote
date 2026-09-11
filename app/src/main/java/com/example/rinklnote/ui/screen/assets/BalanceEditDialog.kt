@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.util.Money
 
 @Composable
 fun BalanceEditDialog(
@@ -36,12 +37,12 @@ fun BalanceEditDialog(
     BackHandler { onDismiss() }
 
     var amount by remember(account.id) {
-        mutableStateOf(account.balance.toBigDecimal().stripTrailingZeros().toPlainString())
+        mutableStateOf(Money.toYuanInputString(account.balanceMinor))
     }
 
     fun confirmEdit() {
-        val value = amount.toDoubleOrNull() ?: return
-        onConfirm(account.copy(balance = value))
+        val minor = Money.parseMinor(amount) ?: return
+        onConfirm(account.copy(balanceMinor = minor))
     }
 
     Column(

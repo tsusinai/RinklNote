@@ -17,7 +17,8 @@ data class Budget(
     @ColumnInfo(name = "period_type", defaultValue = "MONTHLY") val periodType: String = "MONTHLY",
     @ColumnInfo(name = "category_id") val categoryId: Long? = null,
     @ColumnInfo(name = "sub_category_id") val subCategoryId: Long? = null,
-    val amount: Double,
+    // 金额单位：分（minor unit）。
+    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
     val deleted: Boolean = false,
     val dirty: Boolean = false

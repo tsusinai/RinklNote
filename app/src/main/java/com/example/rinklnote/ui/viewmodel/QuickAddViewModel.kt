@@ -11,6 +11,7 @@ import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.repository.AccountRepository
@@ -50,7 +51,7 @@ data class QuickAddState(
     val suggestion: SuggestionData? = null,
     val suggestionDismissed: Boolean = false
 ) {
-    data class SuggestionData(val label: String, val categoryName: String, val amount: Double)
+    data class SuggestionData(val label: String, val categoryName: String, val amount: Long)
 
     val categories: List<Category>
         get() = if (billType == BillType.EXPENSE) expenseCategories else incomeCategories
@@ -295,7 +296,7 @@ class QuickAddViewModel(
     private fun confirm() {
         // One-step: keypad confirm saves immediately (anti-misclick two-phase removed).
         val s = _state.value
-        if (s.amount.toDoubleOrNull() == null) return
+        if (Money.parseMinor(s.amount) == null) return
         if (s.selectedCategory == null) {
             _effects.trySend(QuickAddEffect.FinalConfirmFailed("请先选择分类"))
             return
@@ -428,7 +429,7 @@ class QuickAddViewModel(
             amountStr = trimVoice(parsed.amount)
             catName = parsed.categoryName
         }
-        val amount = amountStr.toDoubleOrNull() ?: return null
+        val amountMinor = Money.parseMinor(amountStr) ?: return null
         val s = _state.value
         val allCats = s.expenseCategories + s.incomeCategories
         val cat = catName?.let { n -> allCats.find { it.name == n } }
@@ -436,7 +437,7 @@ class QuickAddViewModel(
             ?: return null
         val acct = s.selectedAccount ?: defaultAccount(s.accounts) ?: return null
         val bill = Bill(
-            amount = amount,
+            amountMinor = amountMinor,
             billType = cat.billType,
             categoryId = cat.id,
             categoryName = cat.name,
@@ -446,7 +447,7 @@ class QuickAddViewModel(
         )
         val savedId = repository.addBill(bill)
         val saved = bill.copy(id = savedId)
-        return saved to "${cat.name} ¥${"%.2f".format(amount)}"
+        return saved to "${cat.name} ${Money.format(amountMinor)}"
     }
 
     private fun trimVoice(d: Double): String =
@@ -465,7 +466,7 @@ class QuickAddViewModel(
             val sub = template.subCategoryName?.let { name -> subs.find { it.name == name } }
             _state.update {
                 it.copy(
-                    amount = template.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
+                    amount = Money.toYuanInputString(template.amountMinor),
                     selectedCategory = cat,
                     billType = cat.billType,
                     selectedSubCategory = sub,
@@ -484,7 +485,7 @@ class QuickAddViewModel(
         val acct = defaultAccount(_state.value.accounts) ?: return
         _state.update {
             it.copy(
-                amount = s.amount.toBigDecimal().stripTrailingZeros().toPlainString(),
+                amount = Money.toYuanInputString(s.amount),
                 selectedCategory = cat,
                 billType = cat.billType,
                 selectedAccount = acct,
@@ -504,12 +505,13 @@ class QuickAddViewModel(
                 val catName = result["categoryName"]
                 val amount = result["amount"]
                 if (!catName.isNullOrBlank() && amount != null) {
-                    val amt = amount.toDoubleOrNull() ?: return@launch
+                    // 服务端给的是「元」字符串，转成分保存；解析失败（异常格式）直接放弃该建议。
+                    val amtMinor = Money.parseMinor(amount) ?: return@launch
                     _state.update {
                         it.copy(suggestion = QuickAddState.SuggestionData(
                             label = result["label"] ?: catName,
                             categoryName = catName,
-                            amount = amt
+                            amount = amtMinor
                         ))
                     }
                     kotlinx.coroutines.delay(5000)
@@ -524,10 +526,10 @@ class QuickAddViewModel(
     fun finalConfirm() {
         if (!confirming.compareAndSet(false, true)) return
         val s = _state.value
-        val amount = s.amount.toDoubleOrNull()
+        val amountMinor = Money.parseMinor(s.amount)
         val category = s.selectedCategory
         val account = s.selectedAccount
-        if (amount == null || category == null || account == null) {
+        if (amountMinor == null || category == null || account == null) {
             // Not a valid submission — release the guard so the user can retry.
             confirming.set(false)
             _effects.trySend(QuickAddEffect.FinalConfirmFailed("请完整填写金额、分类和账户"))
@@ -537,7 +539,7 @@ class QuickAddViewModel(
         viewModelScope.launch {
             try {
                 val bill = Bill(
-                    amount = amount,
+                    amountMinor = amountMinor,
                     billType = s.billType,
                     categoryId = category.id,
                     categoryName = category.name,

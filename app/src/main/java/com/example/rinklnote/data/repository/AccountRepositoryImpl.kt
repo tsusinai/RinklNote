@@ -38,12 +38,12 @@ internal class AccountRepositoryImpl(
 
     override suspend fun deleteAccountByServerId(serverId: Long) = accountDao.deleteByServerId(serverId)
 
-    override suspend fun getAccountNet(accountId: Long): Double = db.billDao().getAccountNet(accountId) ?: 0.0
+    override suspend fun getAccountNet(accountId: Long): Long = db.billDao().getAccountNet(accountId) ?: 0L
 
-    override suspend fun reconcileAccount(account: Account, openingOffset: Double): Account {
-        val net = db.billDao().getAccountNet(account.id) ?: 0.0
+    override suspend fun reconcileAccount(account: Account, openingOffset: Long): Account {
+        val net = db.billDao().getAccountNet(account.id) ?: 0L
         val updated = account.copy(
-            balance = openingOffset + net,
+            balanceMinor = openingOffset + net,
             updatedAt = System.currentTimeMillis(),
             dirty = true
         )
@@ -54,7 +54,7 @@ internal class AccountRepositoryImpl(
     override suspend fun reconcileAllAccounts(): List<Account> {
         val updated = mutableListOf<Account>()
         accountDao.getAllActive().forEach { account ->
-            updated += reconcileAccount(account, 0.0)
+            updated += reconcileAccount(account, 0L)
         }
         return updated
     }

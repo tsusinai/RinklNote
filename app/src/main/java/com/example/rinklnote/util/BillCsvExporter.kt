@@ -7,6 +7,14 @@ import androidx.core.content.FileProvider
 import com.example.rinklnote.data.db.entity.Bill
 import java.io.File
 import java.time.Instant
+import kotlin.math.abs
+
+/** CSV 里金额列的写法：分 → 「元」两位小数字符串（不带货币符号，便于表格阅读）。 */
+private fun csvAmount(minor: Long): String {
+    val sign = if (minor < 0) "-" else ""
+    val absMinor = abs(minor)
+    return "$sign${absMinor / 100}.${(absMinor % 100).toString().padStart(2, '0')}"
+}
 
 /**
  * 把全部账单导出为 CSV 并唤起系统分享。
@@ -24,7 +32,7 @@ fun exportBillsToCsv(context: Context, bills: List<Bill>) {
     bills.forEach { b ->
         val date = Instant.ofEpochMilli(b.date).atZone(zone).toLocalDate().toString()
         sb.appendLine(
-            listOf(date, b.billType, b.categoryName, b.subCategoryName ?: "", b.amount, b.remark ?: "", b.source)
+            listOf(date, b.billType, b.categoryName, b.subCategoryName ?: "", csvAmount(b.amountMinor), b.remark ?: "", b.source)
                 .joinToString(",") { "\"" + it.toString().replace("\"", "\"\"") + "\"" }
         )
     }

@@ -72,13 +72,13 @@ class SyncManagerTest {
     }
 
     private fun bill(id: Long, deleted: Boolean = false, serverId: Long? = null) = Bill(
-        id = id, amount = 10.0, billType = BillType.EXPENSE, categoryId = 1,
+        id = id, amountMinor = 1000L, billType = BillType.EXPENSE, categoryId = 1,
         categoryName = "三餐", accountId = 1, date = 100, createdAt = 100,
         deleted = deleted, serverId = serverId
     )
 
     private fun billDTO(id: Long, updatedAt: Long, deleted: Boolean = false) = BillDTO(
-        id = id, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+        id = id, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
         categoryName = "三餐", accountId = 1, date = 100, source = "APP",
         createdAt = 100, updatedAt = updatedAt, deleted = deleted
     )
@@ -113,10 +113,10 @@ class SyncManagerTest {
         val b = bill(id = 7, deleted = false, serverId = null)
         // Local account id=1 must resolve to a server id before upload.
         whenever(accountDao.getById(1L)).thenReturn(
-            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 99)
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 99)
         )
         whenever(api.uploadBill(any())).thenReturn(
-            BillDTO(id = 500, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+            BillDTO(id = 500, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
                 categoryName = "三餐", accountId = 1, date = 100, source = "APP",
                 createdAt = 100, updatedAt = 1000)
         )
@@ -179,15 +179,15 @@ class SyncManagerTest {
             .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
         whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.getBudgets()).thenReturn(
-            listOf(BudgetDTO(id = 10, monthStart = 100, amount = 200.0, createdAt = 1, updatedAt = 999))
+            listOf(BudgetDTO(id = 10, monthStart = 100, amountMinor = 20000L, createdAt = 1, updatedAt = 999))
         )
-        val local = Budget(serverId = 10, monthStart = 100, amount = 100.0, updatedAt = 500)
+        val local = Budget(serverId = 10, monthStart = 100, amountMinor = 10000L, updatedAt = 500)
         whenever(budgetDao.getByServerId(10)).thenReturn(local)
 
         manager.sync()
 
         verify(budgetDao).upsert(
-            Budget(serverId = 10, monthStart = 100, amount = 200.0, updatedAt = 999, deleted = false, dirty = false)
+            Budget(serverId = 10, monthStart = 100, amountMinor = 20000L, updatedAt = 999, deleted = false, dirty = false)
         )
     }
 
@@ -200,9 +200,9 @@ class SyncManagerTest {
             .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
         whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.getBudgets()).thenReturn(
-            listOf(BudgetDTO(id = 10, monthStart = 100, amount = 200.0, createdAt = 1, updatedAt = 500))
+            listOf(BudgetDTO(id = 10, monthStart = 100, amountMinor = 20000L, createdAt = 1, updatedAt = 500))
         )
-        val local = Budget(serverId = 10, monthStart = 100, amount = 100.0, updatedAt = 1000)
+        val local = Budget(serverId = 10, monthStart = 100, amountMinor = 10000L, updatedAt = 1000)
         whenever(budgetDao.getByServerId(10)).thenReturn(local)
 
         manager.sync()
@@ -213,10 +213,10 @@ class SyncManagerTest {
     @Test
     fun `account create pushes and stamps the returned server id`() = runTest {
         stubLoggedIn(true)
-        val newAcct = Account(id = 5, name = "招商", balance = 0.0, iconColor = "#123456")
+        val newAcct = Account(id = 5, name = "招商", balanceMinor = 0L, iconColor = "#123456")
         whenever(accountDao.getUnsynced()).thenReturn(listOf(newAcct))
         whenever(api.createAccount(any())).thenReturn(
-            AccountDTO(id = 500, name = "招商", balance = 0.0, iconColor = "#123456", updatedAt = 2000)
+            AccountDTO(id = 500, name = "招商", balanceMinor = 0L, iconColor = "#123456", updatedAt = 2000)
         )
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.syncBills(after = null, afterId = null, limit = 200))
@@ -228,7 +228,7 @@ class SyncManagerTest {
         val result = manager.sync()
         assertTrue("sync returned ${result}", result is SyncResult.Success)
 
-        verify(api).createAccount(CreateAccountRequest(name = "招商", iconColor = "#123456", balance = 0.0))
+        verify(api).createAccount(CreateAccountRequest(name = "招商", iconColor = "#123456", balanceMinor = 0L))
         verify(accountDao).updateServerId(5, 500, 2000)
     }
 
@@ -236,7 +236,7 @@ class SyncManagerTest {
     fun `account pull LWW never overwrites a local dirty row`() = runTest {
         stubLoggedIn(true)
         // Local account 501 is dirty (unsynced edit) and older than the server copy.
-        val dirtyLocal = Account(id = 6, serverId = 501, name = "余额宝", balance = 100.0, iconColor = "#000000", updatedAt = 3000, dirty = true)
+        val dirtyLocal = Account(id = 6, serverId = 501, name = "余额宝", balanceMinor = 10000L, iconColor = "#000000", updatedAt = 3000, dirty = true)
         whenever(accountDao.getUnsynced()).thenReturn(emptyList())
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.syncBills(any(), any(), any())).thenReturn(SyncResponse(emptyList(), serverTime = 0))
@@ -244,7 +244,7 @@ class SyncManagerTest {
         whenever(api.getBudgets()).thenReturn(emptyList())
         whenever(accountDao.getByServerId(501L)).thenReturn(dirtyLocal)
         whenever(api.getAccounts()).thenReturn(
-            listOf(AccountDTO(id = 501, name = "余额宝", balance = 999.0, iconColor = "#000000", updatedAt = 4000))
+            listOf(AccountDTO(id = 501, name = "余额宝", balanceMinor = 99900L, iconColor = "#000000", updatedAt = 4000))
         )
 
         manager.sync()
@@ -277,9 +277,9 @@ class SyncManagerTest {
     fun `bill update on 409 re-bases and replays exactly once`() = runTest {
         val b = bill(id = 7, deleted = false, serverId = 99).copy(baseUpdatedAt = 1000)
         whenever(accountDao.getById(1L)).thenReturn(
-            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 99)
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 99)
         )
-        val ok = BillDTO(id = 99, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+        val ok = BillDTO(id = 99, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
             categoryName = "三餐", accountId = 1, date = 100, source = "APP",
             createdAt = 100, updatedAt = 2000)
         val conflict = HttpException(Response.error<Any>(409, "conflict".toResponseBody()))
@@ -299,10 +299,10 @@ class SyncManagerTest {
         val b = bill(id = 7, deleted = false, serverId = null)
         // Local account id=1 maps to the server account id=214 (per-user global ids).
         whenever(accountDao.getById(1L)).thenReturn(
-            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = 214)
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 214)
         )
         whenever(api.uploadBill(any())).thenReturn(
-            BillDTO(id = 500, amount = 10.0, billType = "EXPENSE", categoryId = 1,
+            BillDTO(id = 500, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
                 categoryName = "三餐", accountId = 214, date = 100, source = "APP",
                 createdAt = 100, updatedAt = 1000)
         )
@@ -317,7 +317,7 @@ class SyncManagerTest {
         val b = bill(id = 7, deleted = false, serverId = null)
         // No server id for the account yet (unreconciled seed) → skip upload, keep it local.
         whenever(accountDao.getById(1L)).thenReturn(
-            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#000000", serverId = null)
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = null)
         )
         manager.pushBill(b)
         verify(api, never()).uploadBill(any())
@@ -333,7 +333,7 @@ class SyncManagerTest {
         whenever(api.getBudgets()).thenReturn(emptyList())
         // Server bill references the server account id=214; local account id=1 maps back.
         whenever(accountDao.getByServerId(214L)).thenReturn(
-            Account(id = 1, serverId = 214, name = "微信", balance = 0.0, iconColor = "#000000")
+            Account(id = 1, serverId = 214, name = "微信", balanceMinor = 0L, iconColor = "#000000")
         )
         val dto = billDTO(9, 900).copy(accountId = 214)
         whenever(api.syncBills(after = null, afterId = null, limit = 200))
@@ -356,10 +356,10 @@ class SyncManagerTest {
         // Local seed 微信 (id=1, no server id) matches server 微信 (id=214).
         whenever(accountDao.getByServerId(214L)).thenReturn(null)
         whenever(accountDao.getByNameActive("微信")).thenReturn(
-            Account(id = 1, name = "微信", balance = 0.0, iconColor = "#28C145", serverId = null, updatedAt = 0)
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#28C145", serverId = null, updatedAt = 0)
         )
         whenever(api.getAccounts()).thenReturn(
-            listOf(AccountDTO(id = 214, name = "微信", balance = 0.0, iconColor = "#28C145", updatedAt = 999))
+            listOf(AccountDTO(id = 214, name = "微信", balanceMinor = 0L, iconColor = "#28C145", updatedAt = 999))
         )
         manager.sync()
         // The seed row is reconciled (adopts the server id) rather than duplicated.
