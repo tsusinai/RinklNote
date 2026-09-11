@@ -97,7 +97,7 @@ class QuickAddViewModelTest {
 
     @Test
     fun `confirm without account saves nothing`() = runTest(dispatcher) {
-        repo.accounts.value = emptyList()
+        accountRepo.accounts.value = emptyList()
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Digit("20"))
         vm.onEvent(QuickAddEvent.Confirm)
@@ -240,7 +240,13 @@ class QuickAddViewModelTest {
     }
 
     private class FakeAccountRepository : AccountRepository {
-        override fun observeAccounts(): Flow<List<Account>> = flowOf(emptyList())
+        // VM 的默认账户（selectedAccount）来自 accountRepository.observeAccounts()，
+        // 必须与真实仓库一样返回非空账户列表，否则保存会因「未选账户」被静默拒绝。
+        val accounts = MutableStateFlow(
+            listOf(Account(1, "微信", 0L, "#28C145"))
+        )
+
+        override fun observeAccounts(): Flow<List<Account>> = accounts
         override suspend fun insertAccount(account: Account): Long = 0
         override suspend fun updateAccount(account: Account) {}
         override suspend fun updateAccountLocal(account: Account) {}

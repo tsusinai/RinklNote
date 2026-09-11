@@ -69,6 +69,9 @@ class SyncManagerTest {
     private suspend fun stubAccountSyncDefaults() {
         whenever(accountDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.getAccounts()).thenReturn(emptyList())
+        // resolveLocalAccountId 在 getByServerId 未命中时会兜底调 getAllActive()；
+        // Mockito 对未打桩的非空返回类型会给 null，导致 firstOrNull 抛「参数为 null」。
+        whenever(accountDao.getAllActive()).thenReturn(emptyList())
     }
 
     private fun bill(id: Long, deleted: Boolean = false, serverId: Long? = null) = Bill(

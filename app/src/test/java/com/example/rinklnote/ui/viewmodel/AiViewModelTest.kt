@@ -415,7 +415,12 @@ class AiViewModelTest {
     }
 
     private class FakeAccountRepository : AccountRepository {
-        override fun observeAccounts(): Flow<List<Account>> = flowOf(emptyList())
+        // QuickAddViewModel 的默认账户来自这里；返回空列表会让保存被静默拒绝。
+        val accounts = MutableStateFlow(
+            listOf(Account(1, "微信", 0L, "#28C145"))
+        )
+
+        override fun observeAccounts(): Flow<List<Account>> = accounts
         override suspend fun insertAccount(account: Account): Long = 0
         override suspend fun updateAccount(account: Account) {}
         override suspend fun updateAccountLocal(account: Account) {}
