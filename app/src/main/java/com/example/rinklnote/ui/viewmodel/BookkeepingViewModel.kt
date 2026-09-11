@@ -232,8 +232,9 @@ class BookkeepingViewModel(
         }
     }
 
-    /** app 启动后按固定周期刷新当月总结缓存。 */
+    /** app 启动后按固定周期刷新当月总结缓存。无 API（未接线/测试）时无需周期刷新。 */
     private fun startAiSummaryPeriodic() {
+        if (api == null) return
         viewModelScope.launch {
             while (isActive) {
                 delay(AI_SUMMARY_REFRESH_INTERVAL_MS)
