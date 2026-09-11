@@ -24,6 +24,12 @@ object QQMessageProcessor {
     private val logger = LoggerFactory.getLogger("QQMessageProcessor")
     private val LOGIN_CODE = Regex("登录|登录码|验证码|网页登录|扫码", RegexOption.IGNORE_CASE)
 
+    // 「每日推送」指令：在 QQ 里直接开/关/查日报主动推送（写的就是 App「我的」页那个字段）。
+    // 网关只认这三种句式——单独的「推送」两字不算，避免把「外卖推送20元」这类记账消息误当指令。
+    internal val PUSH_ON = Regex("开启(每日|日报|主动)?推送")
+    internal val PUSH_OFF = Regex("(关闭|取消|停止|停用)(每日|日报|主动)?推送")
+    internal val PUSH_STATUS = Regex("(每日|日报)?推送(状态|设置)|查询(每日|日报)?推送")
+
     suspend fun process(
         eventType: String,
         d: JsonObject,
@@ -98,6 +104,32 @@ object QQMessageProcessor {
             val isNew = existing == null
             val user = existing ?: userService.createByQqOpenid(openid)
             logger.info("QQ user resolved: id=${user.id} new=$isNew")
+
+            // 「每日推送」指令：开/关/查。必须放在问账路由之前，否则「开启每日推送」会被
+            // PhoneIntentRouter 当成记账/LLM 闲聊吞掉（用户 9/9 发「ai主动推送」只收到一段分析，正是这个缺口）。
+            if (PUSH_ON.containsMatchIn(content) || PUSH_OFF.containsMatchIn(content) || PUSH_STATUS.containsMatchIn(content)) {
+                val current = userService.findById(user.id)
+                val hour = current?.dailyReportHour ?: 9
+                val minute = current?.dailyReportMinute ?: 0
+                val reply = when {
+                    PUSH_OFF.containsMatchIn(content) -> {
+                        userService.setDailyReport(user.id, enabled = false, hour = hour, minute = minute)
+                        "✅ 已关闭每日推送。想再开启时发「开启每日推送」即可。"
+                    }
+                    PUSH_ON.containsMatchIn(content) -> {
+                        userService.setDailyReport(user.id, enabled = true, hour = hour, minute = minute)
+                        "✅ 已开启每日推送：每天 %02d:%02d 推送当日账单总结（当天没记账则不推）。调整时间请在 App「我的」页设置。".format(hour, minute)
+                    }
+                    else -> "📋 每日推送当前状态：${if (current?.dailyReportEnabled == true) "已开启" else "未开启"}，时间 %02d:%02d。\n发「开启每日推送」或「关闭每日推送」即可切换。".format(hour, minute)
+                }
+                if (groupOpenid != null) {
+                    qqBotService.sendGroupMessage(groupOpenid, reply, msgId)
+                } else {
+                    qqBotService.sendC2CMessage(openid, reply, msgId)
+                }
+                logger.info("QQ daily-push command for user ${user.id}: $reply")
+                return
+            }
 
             // 「登录码」指令：返回一次性 QQ 登录码供网页登录。
             if (LOGIN_CODE.containsMatchIn(content)) {
