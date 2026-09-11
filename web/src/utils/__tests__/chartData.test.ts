@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { inPeriod, dailyExpense, monthlyTrend, expenseByCategory } from '../chartData'
 import type { Bill } from '../../types'
 
-function bill(id: number, date: number, amount: number, billType: 'EXPENSE' | 'INCOME', categoryName = '三餐'): Bill {
-  return { id, amount, billType, categoryId: 1, categoryName, subCategoryName: null, accountId: 1, remark: null, date, source: 'WEB', createdAt: date, updatedAt: date, deleted: false }
+function bill(id: number, date: number, amountMinor: number, billType: 'EXPENSE' | 'INCOME', categoryName = '三餐'): Bill {
+  return { id, amountMinor, billType, categoryId: 1, categoryName, subCategoryName: null, accountId: 1, remark: null, date, source: 'WEB', createdAt: date, updatedAt: date, deleted: false }
 }
 
 describe('chartData', () => {
@@ -27,5 +27,15 @@ describe('chartData', () => {
     const e = expenseByCategory([bill(1, new Date(2026, 7, 10).getTime(), 20, 'EXPENSE', '三餐'), bill(2, new Date(2026, 7, 10).getTime(), 99, 'INCOME')], 'month', now)
     expect(e.find((x) => x.name === '三餐')?.value).toBe(20)
     expect(e.find((x) => x.name === '三餐')?.value).not.toBe(119)
+  })
+  it('聚合结果为整数分，累加不产生浮点漂移', () => {
+    // 0.1 + 0.2 元的经典场景：以「分」计算必须精确等于 30，而不是 30.000000000000004
+    const bills = [
+      bill(1, new Date(2026, 7, 10).getTime(), 10, 'EXPENSE'),
+      bill(2, new Date(2026, 7, 10).getTime(), 20, 'EXPENSE'),
+    ]
+    const total = expenseByCategory(bills, 'month', now).find((x) => x.name === '三餐')?.value
+    expect(total).toBe(30)
+    expect(Number.isInteger(total)).toBe(true)
   })
 })

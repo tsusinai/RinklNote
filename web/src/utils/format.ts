@@ -1,12 +1,3 @@
-export function formatMoney(n: number): string {
-  const neg = n < 0
-  const abs = Math.abs(n).toFixed(2)
-  const [int, dec] = abs.split('.')
-  const withSep = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return (neg ? '-' : '') + withSep + '.' + dec
-}
-
-export function formatSigned(n: number): string {
-  const s = formatMoney(Math.abs(n))
-  return n < 0 ? '-' + s : '+' + s
-}
+// 金额格式化现统一由 money.ts 提供（按「分」语义）。
+// 此处仅做兼容再导出，避免散落的调用点反复改动。
+export { formatMoney, formatMoneyPlain, formatSigned } from './money'

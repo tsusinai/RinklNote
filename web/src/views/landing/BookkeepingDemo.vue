@@ -2,13 +2,14 @@
 import { ref, onMounted } from 'vue'
 import { demoDays } from '../../mock/demo-data'
 import { countUp } from '../../utils/countUp'
-import { formatMoney } from '../../utils/format'
+import { formatMoney, formatMoneyPlain } from '../../utils/format'
 
 const totalEl = ref<HTMLSpanElement | null>(null)
 onMounted(() => {
-  // 演示动画：总支出 = 最近几天合计
-  const sum = demoDays.reduce((s, d) => s + d.total, 0)
-  if (totalEl.value) countUp(totalEl.value, sum, 'landing:exp', (n) => formatMoney(n), 800)
+  // 演示动画：总支出 = 最近几天合计（totalMinor 为「分」）
+  const sum = demoDays.reduce((s, d) => s + d.totalMinor, 0)
+  // 动画中间帧为「分」浮点；此处「¥」由模板单独渲染，故只输出数字部分
+  if (totalEl.value) countUp(totalEl.value, sum, 'landing:exp', (n) => formatMoneyPlain(n), 800)
 })
 </script>
 
@@ -40,11 +41,11 @@ onMounted(() => {
         </div>
         <div class="bill-list">
           <div v-for="d in demoDays" :key="d.date" class="day-group">
-            <div class="day-label"><span>{{ d.label }}</span><span class="day-total amount">¥{{ d.total.toFixed(2) }}</span></div>
+            <div class="day-label"><span>{{ d.label }}</span><span class="day-total amount">{{ formatMoney(d.totalMinor) }}</span></div>
             <div v-for="b in d.bills" :key="b.id" class="bill-row">
               <span class="bill-cat">{{ b.category }}</span>
               <span class="bill-remark">{{ b.remark ?? '' }}</span>
-              <span class="bill-amount amount" :class="b.kind === 'EXPENSE' ? 'exp' : 'inc'">{{ b.kind === 'EXPENSE' ? '-' : '+' }}¥{{ b.amount.toFixed(2) }}</span>
+              <span class="bill-amount amount" :class="b.kind === 'EXPENSE' ? 'exp' : 'inc'">{{ b.kind === 'EXPENSE' ? '-' : '+' }}{{ formatMoney(b.amountMinor) }}</span>
             </div>
           </div>
         </div>

@@ -9,6 +9,7 @@ import { useDataStore } from '../../stores/data'
 import { insights } from '../../api/insights'
 import { toMonthStr } from '../../utils/date'
 import { dailyExpense, monthlyTrend, expenseByCategory, type ChartPeriod } from '../../utils/chartData'
+import { formatMoney } from '../../utils/money'
 import type { MonthlyReview } from '../../types'
 
 use([CanvasRenderer, PieChart, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
@@ -26,7 +27,8 @@ const lineData = computed(() => monthlyTrend(data.bills))
 const barData = computed(() => dailyExpense(data.bills, period.value))
 
 const pieOption = computed(() => ({
-  tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}: ¥${Number(p.value).toFixed(2)} (${p.percent}%)` },
+  // 图表聚合值为「分」，展示统一走 formatMoney 转「元」
+  tooltip: { trigger: 'item', formatter: (p: any) => `${p.name}: ${formatMoney(Number(p.value))} (${p.percent}%)` },
   legend: { show: false },
   series: [{
     type: 'pie', radius: '62%', center: ['50%', '50%'], data: pieData.value,
@@ -36,7 +38,7 @@ const pieOption = computed(() => ({
 }))
 
 const lineOption = computed(() => ({
-  tooltip: { trigger: 'axis', valueFormatter: (v: number) => '¥' + Number(v).toFixed(2) },
+  tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatMoney(Number(v)) },
   legend: { top: 0 },
   grid: { left: 8, right: 8, top: 32, bottom: 8, containLabel: true },
   xAxis: { type: 'category', data: lineData.value.map((d) => d.name) },
@@ -48,7 +50,7 @@ const lineOption = computed(() => ({
 }))
 
 const barOption = computed(() => ({
-  tooltip: { trigger: 'axis', valueFormatter: (v: number) => '¥' + Number(v).toFixed(2) },
+  tooltip: { trigger: 'axis', valueFormatter: (v: number) => formatMoney(Number(v)) },
   grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
   xAxis: { type: 'category', data: barData.value.map((d) => d.name) },
   yAxis: { type: 'value' },
@@ -87,10 +89,10 @@ watch(revMonth, loadReview)
         <div v-for="(h, i) in review.highlights" :key="i" class="rev-hl">· {{ h }}</div>
         <div v-if="review.spikeDays?.length" class="rev-sec">
           <div class="rev-heading">⚠️ 超标日</div>
-          <div v-for="s in review.spikeDays.slice(0, 5)" :key="s.date" class="rev-line">- {{ s.date }} ¥{{ s.amount.toFixed(2) }}（超日均{{ s.ratioPct }}%）</div>
+          <div v-for="s in review.spikeDays.slice(0, 5)" :key="s.date" class="rev-line">- {{ s.date }} {{ formatMoney(s.amountMinor) }}（超日均{{ s.ratioPct }}%）</div>
         </div>
-        <div v-if="review.biggestSingle" class="rev-line">🔍 最大单笔：{{ review.biggestSingle.categoryName }} ¥{{ review.biggestSingle.amount.toFixed(2) }}（{{ review.biggestSingle.date }}）</div>
-        <div v-if="review.topCategories?.length" class="rev-line">🧾 消费集中：{{ review.topCategories.map((c) => c.name + ' ¥' + c.amount.toFixed(2)).join('、') }}</div>
+        <div v-if="review.biggestSingle" class="rev-line">🔍 最大单笔：{{ review.biggestSingle.categoryName }} {{ formatMoney(review.biggestSingle.amountMinor) }}（{{ review.biggestSingle.date }}）</div>
+        <div v-if="review.topCategories?.length" class="rev-line">🧾 消费集中：{{ review.topCategories.map((c) => c.name + ' ' + formatMoney(c.amountMinor)).join('、') }}</div>
       </div>
     </div>
 

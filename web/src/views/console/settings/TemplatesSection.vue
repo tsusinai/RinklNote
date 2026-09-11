@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { templates } from '../../../api/templates'
 import { useDataStore } from '../../../stores/data'
 import { useToast } from '../../../composables/useToast'
+import { formatMoney, parseMoneyToMinor } from '../../../utils/money'
 const data = useDataStore()
 const toast = useToast()
 const label = ref('')
@@ -11,13 +12,14 @@ const catVal = ref('')
 const acctId = ref('')
 const list = ref<any[]>([])
 
-function fmt(n: number) { return '¥' + n.toFixed(2) }
 async function load() { try { list.value = await templates.list() } catch { } }
 onMounted(load)
 async function add() {
   if (!catVal.value || !acctId.value) return
   const [id, name] = catVal.value.split('||')
-  try { await templates.create({ label: label.value || '未命名', amount: parseFloat(amount.value) || 0, categoryId: parseInt(id), categoryName: name || '', accountId: parseInt(acctId.value) }); toast.push('已添加'); label.value = ''; amount.value = ''; await load() }
+  // 用户输入的是「元」，解析为「分」再提交
+  const amountMinor = parseMoneyToMinor(amount.value) ?? 0
+  try { await templates.create({ label: label.value || '未命名', amountMinor, categoryId: parseInt(id), categoryName: name || '', accountId: parseInt(acctId.value) }); toast.push('已添加'); label.value = ''; amount.value = ''; await load() }
   catch (e: any) { toast.push(e?.message || '添加失败', 'err') }
 }
 async function remove(id: number) {
@@ -40,7 +42,7 @@ async function remove(id: number) {
     <button class="btn primary" @click="add">添加</button>
     <div class="tmpl-list">
       <div v-for="t in list" :key="t.id" class="tmpl-row">
-        <span>{{ t.label }} {{ fmt(t.amount) }} → {{ t.categoryName }}</span>
+        <span>{{ t.label }} {{ formatMoney(t.amountMinor) }} → {{ t.categoryName }}</span>
         <button class="link danger" @click="remove(t.id)">删</button>
       </div>
       <div v-if="!list.length" class="empty">暂无模板</div>

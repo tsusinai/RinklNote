@@ -2,7 +2,7 @@ import { api } from './http'
 import type { Bill, SyncResponse, MoneyStyle } from '../types'
 
 export interface CreateBillPayload {
-  amount: number; billType: MoneyStyle; categoryId: number; categoryName: string;
+  amountMinor: number; billType: MoneyStyle; categoryId: number; categoryName: string;
   subCategoryName?: string | null; accountId: number; remark?: string | null; date?: number
 }
 

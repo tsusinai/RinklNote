@@ -10,16 +10,16 @@ const debts = demoAccounts.filter((a) => a.kind === 'liability')
   <div class="feature-grid">
     <div class="demo-phone" v-reveal>
       <div class="phone-card">
-        <div class="phone-title"><span>资产管理</span><span class="pill">净资 ¥{{ formatMoney(demoNetAssets) }}</span></div>
+        <div class="phone-title"><span>资产管理</span><span class="pill">净资 {{ formatMoney(demoNetAssets) }}</span></div>
         <div class="net-card">
           <span class="net-label">总资产</span>
-          <span class="net-value amount">¥{{ formatMoney(demoAccounts.filter((a) => a.kind === 'asset').reduce((s, a) => s + a.balance, 0)) }}</span>
+          <span class="net-value amount">{{ formatMoney(assets.reduce((s, a) => s + a.balanceMinor, 0)) }}</span>
         </div>
         <div class="acct-list">
           <div v-for="a in assets" :key="a.id" class="acct-row">
             <span class="avatar" :style="{ background: a.iconColor }">{{ a.name[0] }}</span>
             <span class="acct-name">{{ a.name }}</span>
-            <span class="acct-bal amount">{{ formatMoney(a.balance) }}</span>
+            <span class="acct-bal amount">{{ formatMoney(a.balanceMinor) }}</span>
           </div>
         </div>
         <div class="liab-title">负债</div>
@@ -27,7 +27,7 @@ const debts = demoAccounts.filter((a) => a.kind === 'liability')
           <div v-for="a in debts" :key="a.id" class="acct-row">
             <span class="avatar liab" :style="{ background: a.iconColor }">{{ a.name[0] }}</span>
             <span class="acct-name">{{ a.name }}</span>
-            <span class="acct-bal liab amount">-{{ formatMoney(a.balance) }}</span>
+            <span class="acct-bal liab amount">-{{ formatMoney(a.balanceMinor) }}</span>
           </div>
         </div>
       </div>

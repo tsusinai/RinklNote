@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useDataStore } from '../../stores/data'
 import { bills } from '../../api/bills'
 import { fmtDateTime } from '../../utils/date'
+import { formatMoney } from '../../utils/money'
 import { countUp } from '../../utils/countUp'
 import { toCsv } from '../../utils/csv'
 import { useToast } from '../../composables/useToast'
@@ -43,12 +44,13 @@ async function load() { if (!data.bills.length) await data.loadData() }
 onMounted(load)
 
 function finalizeSummary() {
-  const exp = data.bills.filter((b) => b.billType === 'EXPENSE').reduce((s, b) => s + b.amount, 0)
-  const inc = data.bills.filter((b) => b.billType === 'INCOME').reduce((s, b) => s + b.amount, 0)
+  // 金额一律按「分」整数求和；countUp 的中间帧可能是小数，交给 formatMoney 取整展示。
+  const exp = data.bills.filter((b) => b.billType === 'EXPENSE').reduce((s, b) => s + b.amountMinor, 0)
+  const inc = data.bills.filter((b) => b.billType === 'INCOME').reduce((s, b) => s + b.amountMinor, 0)
   const bal = inc - exp
-  if (expEl.value) countUp(expEl.value, exp, 'bills:exp', (n) => '¥' + n.toFixed(2))
-  if (incEl.value) countUp(incEl.value, inc, 'bills:inc', (n) => '¥' + n.toFixed(2))
-  if (balEl.value) countUp(balEl.value, bal, 'bills:bal', (n) => '¥' + n.toFixed(2))
+  if (expEl.value) countUp(expEl.value, exp, 'bills:exp', (n) => formatMoney(n))
+  if (incEl.value) countUp(incEl.value, inc, 'bills:inc', (n) => formatMoney(n))
+  if (balEl.value) countUp(balEl.value, bal, 'bills:bal', (n) => formatMoney(n))
 }
 watch(() => data.bills, finalizeSummary, { deep: true })
 onMounted(finalizeSummary)
@@ -64,7 +66,7 @@ function downloadCsv() {
   for (const b of filtered.value) {
     rows.push([
       fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
-      b.subCategoryName || '', b.amount, b.remark || '', b.source,
+      b.subCategoryName || '', b.amountMinor / 100, b.remark || '', b.source, // 导出边界：分转元，便于用户在表格中阅读
     ])
   }
   const csv = '\uFEFF' + toCsv(rows)
@@ -106,7 +108,7 @@ function downloadCsv() {
             <td>{{ fmtDateTime(b.date) }}</td>
             <td>{{ b.categoryName }}{{ b.subCategoryName ? ' / ' + b.subCategoryName : '' }}</td>
             <td>{{ b.subCategoryName || '-' }}</td>
-            <td :class="['amount', b.billType === 'EXPENSE' ? 'expense' : 'income']">{{ b.billType === 'EXPENSE' ? '-' : '' }}¥{{ b.amount.toFixed(2) }}</td>
+            <td :class="['amount', b.billType === 'EXPENSE' ? 'expense' : 'income']">{{ b.billType === 'EXPENSE' ? '-' : '' }}{{ formatMoney(b.amountMinor) }}</td>
             <td>{{ b.remark || '-' }}</td>
             <td><span :class="['tag', 'tag-' + String(b.source).toLowerCase()]">{{ b.source }}</span></td>
             <td>

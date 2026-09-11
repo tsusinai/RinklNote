@@ -21,8 +21,8 @@ function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ be
     </div>
     <div class="hero-stats">
       <!-- 金额由 mock 派生，与 AiDemo 的 demoInsight「本月共支出 ¥3,520」一致；天数 +12 镜像 demoInsight.highlights 的「连续 12 天打卡」。 -->
-      <div class="stat"><span class="stat-num amount">¥{{ formatMoney(demoBudget.spent) }}</span><span class="stat-label">本月记账</span></div>
-      <div class="stat"><span class="stat-num amount">¥{{ formatMoney(demoNetAssets) }}</span><span class="stat-label">净资</span></div>
+      <div class="stat"><span class="stat-num amount">{{ formatMoney(demoBudget.spentMinor) }}</span><span class="stat-label">本月记账</span></div>
+      <div class="stat"><span class="stat-num amount">{{ formatMoney(demoNetAssets) }}</span><span class="stat-label">净资</span></div>
       <div class="stat"><span class="stat-num">+12</span><span class="stat-label">连续记账天数</span></div>
     </div>
   </section>

@@ -11,14 +11,14 @@ export interface Category {
 }
 
 export interface Account {
-  id: number; name: string; balance: number; iconColor: string;
+  id: number; name: string; balanceMinor: number; iconColor: string;
   updatedAt: number; deleted: boolean;
   // 资产 Plan（worktree 未合并）：将来 server 会补下列可选字段，先预留
-  type?: AccountType; isLiability?: boolean; openingBalance?: number;
+  type?: AccountType; isLiability?: boolean; openingBalanceMinor?: number;
 }
 
 export interface Bill {
-  id: number; amount: number; billType: MoneyStyle;
+  id: number; amountMinor: number; billType: MoneyStyle;
   categoryId: number; categoryName: string; subCategoryName: string | null;
   accountId: number; remark: string | null; date: number; source: BillSource | string;
   createdAt: number; updatedAt: number | null; deleted: boolean;
@@ -30,7 +30,7 @@ export interface SyncResponse {
 }
 
 export interface Budget {
-  id: number; monthStart: number; amount: number; createdAt: number;
+  id: number; monthStart: number; amountMinor: number; createdAt: number;
   updatedAt: number | null; deleted: boolean;
 }
 
@@ -43,13 +43,14 @@ export interface MeResponse {
 }
 
 // ── 控制台扩展类型（原 web 全量 1:1）──
+// 金额字段统一为「分」整数：amountMinor / balanceMinor / totalXxxMinor / expenseMinor …
 export interface Keyword { id: number; keyword: string; categoryName: string; priority: number }
-export interface Template { id: number; label: string; amount: number; categoryId: number; categoryName: string; accountId: number; sortOrder: number }
-export interface MonthlyReviewSpike { date: string; amount: number; ratioPct: number }
-export interface MonthlyReviewTopCategory { name: string; amount: number }
+export interface Template { id: number; label: string; amountMinor: number; categoryId: number; categoryName: string; accountId: number; sortOrder: number }
+export interface MonthlyReviewSpike { date: string; amountMinor: number; ratioPct: number }
+export interface MonthlyReviewTopCategory { name: string; amountMinor: number }
 export interface MonthlyReview {
-  summary: string; totalExpense: number; totalIncome: number; highlights: string[];
-  spikeDays: MonthlyReviewSpike[]; biggestSingle: { categoryName: string; amount: number; date: string } | null;
+  summary: string; totalExpenseMinor: number; totalIncomeMinor: number; highlights: string[];
+  spikeDays: MonthlyReviewSpike[]; biggestSingle: { categoryName: string; amountMinor: number; date: string } | null;
   topCategories: MonthlyReviewTopCategory[];
 }
 export interface SuggestConfig { enabled: boolean; lookbackDays: number; minOccurrences: number; displayDuration: number }

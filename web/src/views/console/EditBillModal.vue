@@ -3,6 +3,7 @@ import { reactive, ref, computed } from 'vue'
 import { bills } from '../../api/bills'
 import { useDataStore } from '../../stores/data'
 import { useToast } from '../../composables/useToast'
+import { parseMoneyToMinor } from '../../utils/money'
 import type { Bill } from '../../types'
 
 const props = defineProps<{ bill: Bill }>()
@@ -10,9 +11,9 @@ const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
 const data = useDataStore()
 const toast = useToast()
 
-// 以展示值初始化（rebase 可覆写）
+// 以展示值初始化（分 → 元字符串，便于 type=number 编辑）
 const st = reactive({
-  amount: String(props.bill.amount),
+  amount: (props.bill.amountMinor / 100).toFixed(2),
   billType: props.bill.billType,
   catId: String(props.bill.categoryId),
   subCatName: props.bill.subCategoryName ?? '',
@@ -27,14 +28,15 @@ const catSel = computed(() => data.cats.find((c) => c.id === Number(st.catId)) ?
 const subs = computed(() => catSel.value?.subCategories ?? [])
 
 async function save() {
-  const amt = parseFloat(st.amount)
-  if (!st.amount || isNaN(amt) || !st.catId || !st.acctId) { err.value = '请填写完整'; return }
+  // 用户输入的是「元」，解析为「分」整数后提交
+  const amountMinor = parseMoneyToMinor(st.amount)
+  if (amountMinor === null || !st.catId || !st.acctId) { err.value = '请填写完整或金额非法'; return }
   const cat = catSel.value
   if (!cat) { err.value = '分类已不存在'; return }
   busy.value = true
   try {
     await bills.update(props.bill.id, {
-      amount: amt, billType: st.billType, categoryId: cat.id, categoryName: cat.name,
+      amountMinor, billType: st.billType, categoryId: cat.id, categoryName: cat.name,
       subCategoryName: st.subCatName || null, accountId: Number(st.acctId),
       remark: st.remark || null, baseUpdatedAt: baseUpdatedAt.value,
     })
@@ -45,7 +47,7 @@ async function save() {
       // 条件 PUT 冲突：载入服务端最新行，提示确认后重存
       const fresh: Bill | undefined = e.data
       if (fresh) {
-        st.amount = String(fresh.amount)
+        st.amount = (fresh.amountMinor / 100).toFixed(2)
         st.billType = fresh.billType
         st.catId = String(fresh.categoryId)
         st.subCatName = fresh.subCategoryName ?? ''

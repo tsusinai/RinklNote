@@ -2,16 +2,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useDataStore } from '../../stores/data'
 import { accounts } from '../../api/accounts'
-import { formatMoney } from '../../utils/format'
+import { formatMoney, parseMoneyToMinor } from '../../utils/money'
 import { useToast } from '../../composables/useToast'
 
 const data = useDataStore()
 const toast = useToast()
 const reveal = ref(true)
 
-const total = computed(() => data.accts.reduce((s, a) => s + (a.balance || 0), 0))
+const total = computed(() => data.accts.reduce((s, a) => s + (a.balanceMinor || 0), 0))
 const palette = ['#28C145', '#06B4FD', '#F97D1D', '#8B5CF6', '#EF4444', '#64748B']
-const fmt = (n: number) => reveal.value ? '¥' + formatMoney(n) : '¥****'
 
 async function sync() { await data.loadData(); toast.push('同步完成') }
 
@@ -19,17 +18,22 @@ async function createAccount() {
   const name = window.prompt('请输入账户名称')
   if (!name) return
   const bal = window.prompt('请输入账户余额', '0')
-  const balance = parseFloat(bal ?? '0')
-  if (name && isFinite(balance) && balance >= 0 && !isNaN(balance)) {
-    try { await accounts.create(name, palette[data.accts.length % 6], balance); await data.refreshAccounts(); toast.push('已新建账户') }
-    catch (e: any) { toast.push(e?.message || '新建失败', 'err') }
+  // 用户输入的是「元」，解析为「分」整数后提交
+  const balanceMinor = parseMoneyToMinor(bal ?? '0')
+  if (balanceMinor === null || balanceMinor < 0) {
+    toast.push('余额格式不正确', 'err'); return
   }
+  try { await accounts.create(name, palette[data.accts.length % 6], balanceMinor); await data.refreshAccounts(); toast.push('已新建账户') }
+  catch (e: any) { toast.push(e?.message || '新建失败', 'err') }
 }
 async function editBalance(id: number, cur: number) {
-  const v = window.prompt('输入新余额', String(cur))
+  // cur 为分，prompt 展示为「元」便于阅读
+  const v = window.prompt('输入新余额', (cur / 100).toFixed(2))
   if (v == null) return
-  const n = parseFloat(v)
-  if (isFinite(n)) { try { await accounts.update(id, { balance: n }); await data.refreshAccounts(); toast.push('已更新余额') } catch (e: any) { toast.push(e?.message || '更新失败', 'err') } }
+  const n = parseMoneyToMinor(v)
+  if (n === null) { toast.push('余额格式不正确', 'err'); return }
+  try { await accounts.update(id, { balanceMinor: n }); await data.refreshAccounts(); toast.push('已更新余额') }
+  catch (e: any) { toast.push(e?.message || '更新失败', 'err') }
 }
 async function rename(id: number, cur: string) {
   const v = window.prompt('输入新名称', cur)
@@ -56,7 +60,7 @@ onMounted(() => { if (!data.accts.length) data.loadData() })
 
     <div class="net-card">
       <div class="net-label">总资产</div>
-      <div class="net-val amount">{{ reveal ? '¥' + formatMoney(total) : '¥****' }}</div>
+      <div class="net-val amount">{{ reveal ? formatMoney(total) : '¥****' }}</div>
     </div>
 
     <div class="acct-grid">
@@ -64,10 +68,10 @@ onMounted(() => { if (!data.accts.length) data.loadData() })
         <div class="acct-avatar" :style="{ background: a.iconColor }">{{ a.name[0] }}</div>
         <div class="acct-meta">
           <div class="acct-name">{{ a.name }}</div>
-          <div class="acct-bal amount">{{ reveal ? '¥' + formatMoney(a.balance || 0) : '¥***' }}</div>
+          <div class="acct-bal amount">{{ reveal ? formatMoney(a.balanceMinor || 0) : '¥***' }}</div>
         </div>
         <div class="acct-actions">
-          <button class="link" @click="editBalance(a.id, a.balance || 0)">编辑余额</button>
+          <button class="link" @click="editBalance(a.id, a.balanceMinor || 0)">编辑余额</button>
           <button class="link" @click="rename(a.id, a.name)">重命名</button>
           <button class="link danger" @click="remove(a.id, a.name)">删除</button>
         </div>

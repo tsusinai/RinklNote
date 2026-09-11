@@ -2,7 +2,7 @@
 import { demoBudget, demoInsight } from '../../mock/demo-data'
 import { formatMoney } from '../../utils/format'
 
-const pct = Math.round((demoBudget.spent / demoBudget.total) * 100)
+const pct = Math.round((demoBudget.spentMinor / demoBudget.totalMinor) * 100)
 const C = 2 * Math.PI * 40 // ring circumference (r=40)
 const dash = (C * pct) / 100
 </script>
@@ -43,7 +43,7 @@ const dash = (C * pct) / 100
           </svg>
           <div class="budget-text">
             <div class="budget-label">{{ demoBudget.monthLabel }}预算</div>
-            <div class="budget-val amount">¥{{ formatMoney(demoBudget.spent) }} / ¥{{ formatMoney(demoBudget.total) }}</div>
+            <div class="budget-val amount">{{ formatMoney(demoBudget.spentMinor) }} / {{ formatMoney(demoBudget.totalMinor) }}</div>
             <div class="budget-sub" :class="{ over: pct >= 100 }">已用 {{ pct }}%{{ pct >= 100 ? ' · 超支预警' : '' }}</div>
           </div>
         </div>

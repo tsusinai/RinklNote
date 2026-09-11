@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useDataStore } from '../../stores/data'
 import { bills } from '../../api/bills'
 import { useToast } from '../../composables/useToast'
+import { parseMoneyToMinor } from '../../utils/money'
 import type { MoneyStyle } from '../../types'
 
 const data = useDataStore()
@@ -32,13 +33,14 @@ function pickCat(id: number) { catId.value = id; subCatName.value = '' }
 function pickSub(name: string) { subCatName.value = name }
 
 async function submit() {
-  const amt = parseFloat(amount.value)
-  if (!amount.value || isNaN(amt) || !catId.value || !acctId.value) { msg.value = '请填写完整'; return }
+  // 用户输入的是「元」，解析为「分」整数后提交，避免 parseFloat(x)*100 浮点误差
+  const amountMinor = parseMoneyToMinor(amount.value)
+  if (amountMinor === null || !catId.value || !acctId.value) { msg.value = '请填写完整或金额非法'; return }
   const cat = selectedCat.value!
   busy.value = true
   try {
     await bills.create({
-      amount: amt, billType: billType.value, categoryId: cat.id, categoryName: cat.name,
+      amountMinor, billType: billType.value, categoryId: cat.id, categoryName: cat.name,
       subCategoryName: subCatName.value || null, accountId: acctId.value,
       remark: remark.value || null,
     })
