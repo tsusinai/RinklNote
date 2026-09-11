@@ -208,6 +208,8 @@ class QuickAddViewModelTest {
         override suspend fun countChatMessages(kind: String, since: Long): Long = 0
         override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double = 0.0
         override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double = 0.0
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> = flowOf(0.0)
         override suspend fun updateBill(bill: Bill) {}
         override suspend fun deleteBill(bill: Bill) {}
         override suspend fun updateAccount(account: Account) {}

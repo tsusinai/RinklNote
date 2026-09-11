@@ -37,6 +37,8 @@ interface BillRepository {
 
     suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Double
     suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double
+    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double>
+    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double>
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)

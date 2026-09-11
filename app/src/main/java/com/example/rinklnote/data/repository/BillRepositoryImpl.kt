@@ -16,7 +16,8 @@ import com.example.rinklnote.data.repository.DailyReport
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 
 internal class BillRepositoryImpl(
     private val db: AppDatabase,
@@ -59,7 +60,13 @@ internal class BillRepositoryImpl(
         billDao.getTotalExpense(monthStart, nextMonthStart) ?: 0.0
 
     override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double =
-        billDao.getTotalIncome(monthStart, nextMonthStart) ?: 0.0
+        billDao.getTotalIncome(monthStart, nextMonthStart) ?: 0.0
+
+    override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> =
+        billDao.observeTotalExpense(monthStart, nextMonthStart).map { it ?: 0.0 }
+
+    override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> =
+        billDao.observeTotalIncome(monthStart, nextMonthStart).map { it ?: 0.0 }
 
     override suspend fun addBill(bill: Bill): Long = db.withTransaction {
         val id = billDao.insert(bill)

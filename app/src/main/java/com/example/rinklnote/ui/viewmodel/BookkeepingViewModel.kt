@@ -23,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -52,7 +53,7 @@ enum class DayPart {
 private const val AI_SUMMARY_REFRESH_INTERVAL_MS = 10 * 60 * 1000L
 
 @androidx.compose.runtime.Immutable
-data class BookkeepingState(
+data class BookkeepingMonthState(
     val bills: List<Bill> = emptyList(),
     val totalExpense: Double = 0.0,
     val totalIncome: Double = 0.0,
@@ -62,10 +63,6 @@ data class BookkeepingState(
     // Offset of the month currently shown: 0 = current month, -1 = previous.
     // Drives the main list, the chart and the totals together.
     val selectedMonthOffset: Int = 0,
-    val editingBill: Bill? = null,
-    val expenseCategories: List<Category> = emptyList(),
-    val incomeCategories: List<Category> = emptyList(),
-    val accounts: List<Account> = emptyList(),
     // AI 对当月总结建议：月视图 SummaryBar 底部展示。null = 未加载/失败不展示。
     val aiSummary: String? = null,
     val aiSummaryLoading: Boolean = false,
@@ -73,6 +70,16 @@ data class BookkeepingState(
     val dayPart: DayPart = DayPart.current(),
     // 当月图表聚合数据：每日支出、分类占比、日序列。随当月账单算一次（不依赖 UI）。
     val monthDetail: MonthDetailData = MonthDetailData(emptyMap(), emptyList(), emptyList(), 1f)
+)
+
+/** 编辑抽屉所需的低频状态：编辑目标 + 分类/账户参考数据。
+ *  与月视图状态拆开，避免账单 Flow 每次发射都牵动编辑页重组。 */
+@androidx.compose.runtime.Immutable
+data class BookkeepingEditState(
+    val editingBill: Bill? = null,
+    val expenseCategories: List<Category> = emptyList(),
+    val incomeCategories: List<Category> = emptyList(),
+    val accounts: List<Account> = emptyList()
 ) {
     val categories: List<Category>
         get() = if (editingBill?.billType == BillType.INCOME) incomeCategories else expenseCategories
@@ -97,15 +104,17 @@ class BookkeepingViewModel(
     private val api: ApiService? = null
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(BookkeepingState())
-    val state: StateFlow<BookkeepingState> = _state.asStateFlow()
+    private val _monthState = MutableStateFlow(BookkeepingMonthState())
+    val monthState: StateFlow<BookkeepingMonthState> = _monthState.asStateFlow()
+
+    private val _editState = MutableStateFlow(BookkeepingEditState())
+    val editState: StateFlow<BookkeepingEditState> = _editState.asStateFlow()
 
     private var billCollectorJob: Job? = null
 
     init {
         // Single long-lived bill collector — never leaks
         collectBills()
-        refreshTotals()
 
         // AI 当月总结：app 启动即拉取一次，并周期性刷新缓存（与切换月份无关，跨月时总结栏关闭）
         refreshAiSummary()
@@ -114,47 +123,55 @@ class BookkeepingViewModel(
         // Reference data for the edit overlay
         viewModelScope.launch {
             repository.expenseCategories.collect { cats ->
-                _state.update { it.copy(expenseCategories = cats) }
+                _editState.update { it.copy(expenseCategories = cats) }
             }
         }
         viewModelScope.launch {
             repository.incomeCategories.collect { cats ->
-                _state.update { it.copy(incomeCategories = cats) }
+                _editState.update { it.copy(incomeCategories = cats) }
             }
         }
         viewModelScope.launch {
             accountRepository.observeAccounts().collect { accts ->
-                _state.update { it.copy(accounts = accts) }
+                _editState.update { it.copy(accounts = accts) }
             }
         }
     }
 
     fun onEvent(event: BookkeepingEvent) {
         when (event) {
-            is BookkeepingEvent.Refresh -> refreshTotals()
+            is BookkeepingEvent.Refresh -> collectBills()
             is BookkeepingEvent.PullRefresh -> pullRefresh()
-            is BookkeepingEvent.EditBill -> _state.update { it.copy(editingBill = event.bill) }
-            is BookkeepingEvent.CancelEdit -> _state.update { it.copy(editingBill = null) }
+            is BookkeepingEvent.EditBill -> _editState.update { it.copy(editingBill = event.bill) }
+            is BookkeepingEvent.CancelEdit -> _editState.update { it.copy(editingBill = null) }
             is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
             is BookkeepingEvent.DeleteBill -> deleteBill(event.bill)
             is BookkeepingEvent.SelectMonth -> selectMonth(event.offset)
         }
     }
 
+    /** 合并账单列表 + 收支合计，一次订阅同时驱动 list / chart / totals。
+     *  三者都来自 Room 响应式 Flow，账单变更时自动重算，无需手动 refreshTotals。 */
     private fun collectBills() {
         billCollectorJob?.cancel()
-        val offset = _state.value.selectedMonthOffset
+        val offset = _monthState.value.selectedMonthOffset
         billCollectorJob = viewModelScope.launch {
             val monthStart = getMonthStart(offset)
             val nextMonthStart = getNextMonthStart(offset)
             val daysInMonth = Instant.ofEpochMilli(monthStart)
                 .atZone(bookkeepingZone()).toLocalDate().lengthOfMonth()
-            repository.observeBillsByMonth(monthStart, nextMonthStart)
+            combine(
+                repository.observeBillsByMonth(monthStart, nextMonthStart),
+                repository.observeTotalExpense(monthStart, nextMonthStart),
+                repository.observeTotalIncome(monthStart, nextMonthStart)
+            ) { bills, expense, income -> Triple(bills, expense, income) }
                 .distinctUntilChanged()
-                .collect { bills ->
-                    _state.update {
+                .collect { (bills, expense, income) ->
+                    _monthState.update {
                         it.copy(
                             bills = bills,
+                            totalExpense = expense,
+                            totalIncome = income,
                             isLoading = false,
                             monthDetail = buildMonthDetail(bills, daysInMonth)
                         )
@@ -165,26 +182,23 @@ class BookkeepingViewModel(
 
     /** Switches every month-scoped view (list/chart/totals) to a different month. */
     fun selectMonth(offset: Int) {
-        if (_state.value.selectedMonthOffset == offset) return
-        _state.update { it.copy(selectedMonthOffset = offset) }
+        if (_monthState.value.selectedMonthOffset == offset) return
+        _monthState.update { it.copy(selectedMonthOffset = offset) }
         collectBills()
-        refreshTotals()
     }
 
-    /** 首页下拉刷新：先拉一次服务端同步（账单经 syncManager 落库，Room 响应式自动刷新列表），
-     *  再重算当月合计（合计是一次性查询，非响应式，需显式刷新）。 */
+    /** 首页下拉刷新：先拉一次服务端同步（账单经 syncManager 落库，Room 响应式自动刷新列表与合计）。 */
     private fun pullRefresh() {
-        if (_state.value.isRefreshing) return
-        _state.update { it.copy(isRefreshing = true) }
+        if (_monthState.value.isRefreshing) return
+        _monthState.update { it.copy(isRefreshing = true) }
         viewModelScope.launch {
             try {
                 syncManager?.sync()
             } catch (_: Exception) {
                 // 同步失败不阻断刷新——本地数据保持原样，仅供下次重试
             }
-            refreshTotals()
             refreshAiSummary()
-            _state.update { it.copy(isRefreshing = false) }
+            _monthState.update { it.copy(isRefreshing = false) }
         }
     }
 
@@ -197,7 +211,7 @@ class BookkeepingViewModel(
      *  失败/未登录不阻断——仅清空缓存内容。 */
     private suspend fun fetchAiSummary() {
         val api = api ?: return
-        _state.update { it.copy(aiSummaryLoading = true) }
+        _monthState.update { it.copy(aiSummaryLoading = true) }
         try {
             // 始终缓存当月：与 selectedMonthOffset 无关
             val d = LocalDate.now()
@@ -210,11 +224,11 @@ class BookkeepingViewModel(
                     append("- ").append(it)
                 }
             }.trim()
-            _state.update { it.copy(aiSummary = text.ifBlank { null }, aiSummaryLoading = false) }
+            _monthState.update { it.copy(aiSummary = text.ifBlank { null }, aiSummaryLoading = false) }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            _state.update { it.copy(aiSummary = null, aiSummaryLoading = false) }
+            _monthState.update { it.copy(aiSummary = null, aiSummaryLoading = false) }
         }
     }
 
@@ -228,24 +242,12 @@ class BookkeepingViewModel(
         }
     }
 
-    private fun refreshTotals() {
-        viewModelScope.launch {
-            val offset = _state.value.selectedMonthOffset
-            _state.update { it.copy(isLoading = true) }
-            val monthStart = getMonthStart(offset)
-            val nextMonthStart = getNextMonthStart(offset)
-            val expense = repository.getTotalExpense(monthStart, nextMonthStart)
-            val income = repository.getTotalIncome(monthStart, nextMonthStart)
-            _state.update { it.copy(totalExpense = expense, totalIncome = income, isLoading = false) }
-        }
-    }
-
     private fun confirmEdit(bill: Bill) {
         val dirtyBill = bill.copy(dirty = true, updatedAt = System.currentTimeMillis())
         viewModelScope.launch {
             repository.updateBill(dirtyBill)
             syncManager?.let { launch { it.pushBill(dirtyBill) } }
-            _state.update { it.copy(editingBill = null) }
+            _editState.update { it.copy(editingBill = null) }
         }
     }
 

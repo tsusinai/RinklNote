@@ -392,7 +392,7 @@ fun AppNavigation(app: RinklNoteApp) {
 
                 }
                 composable("bill-edit") {
-                    val state by bookkeepingVM.state.collectAsStateWithLifecycle()
+                    val state by bookkeepingVM.editState.collectAsStateWithLifecycle()
                     state.editingBill?.let { bill ->
                         BillEditOverlay(
                             bill = bill,
@@ -412,7 +412,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     }
                 }
                 composable("month-detail") {
-                    val state by bookkeepingVM.state.collectAsStateWithLifecycle()
+                    val state by bookkeepingVM.monthState.collectAsStateWithLifecycle()
                     val monthLabel = remember(state.selectedMonthOffset) {
                         val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
                         "${d.year}年${d.monthValue}月"

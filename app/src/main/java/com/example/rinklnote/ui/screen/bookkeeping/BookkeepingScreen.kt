@@ -87,7 +87,7 @@ fun BookkeepingScreen(
 ) {
     val horizonalPadding = 10.dp
 
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state by viewModel.monthState.collectAsStateWithLifecycle()
 
     val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {

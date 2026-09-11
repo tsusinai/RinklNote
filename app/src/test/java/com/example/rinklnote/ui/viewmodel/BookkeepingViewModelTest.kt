@@ -71,7 +71,7 @@ class BookkeepingViewModelTest {
         advanceUntilIdle()
         assertEquals(getMonthStart(-1) to getNextMonthStart(-1), repo.billRanges.last())
         assertEquals(getMonthStart(-1) to getNextMonthStart(-1), repo.totalRanges.last())
-        assertEquals(-1, vm.state.value.selectedMonthOffset)
+        assertEquals(-1, vm.monthState.value.selectedMonthOffset)
     }
 
     @Test
@@ -105,6 +105,16 @@ class BookkeepingViewModelTest {
         override suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double {
             totalRanges += monthStart to nextMonthStart
             return 0.0
+        }
+
+        override fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double> {
+            totalRanges += monthStart to nextMonthStart
+            return flowOf(0.0)
+        }
+
+        override fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double> {
+            totalRanges += monthStart to nextMonthStart
+            return flowOf(0.0)
         }
 
         override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())

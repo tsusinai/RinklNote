@@ -28,6 +28,12 @@ interface BillDao {
     @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
     suspend fun getTotalIncome(monthStart: Long, nextMonthStart: Long): Double?
 
+    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :monthStart AND date < :nextMonthStart")
+    fun observeTotalExpense(monthStart: Long, nextMonthStart: Long): Flow<Double?>
+
+    @Query("SELECT SUM(amount) FROM bills WHERE deleted = 0 AND bill_type = 'INCOME' AND date >= :monthStart AND date < :nextMonthStart")
+    fun observeTotalIncome(monthStart: Long, nextMonthStart: Long): Flow<Double?>
+
     @androidx.room.Upsert
     suspend fun upsertAll(bills: List<Bill>)
 
