@@ -69,7 +69,6 @@ import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.component.DefaultHazeBackground
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
@@ -406,15 +405,7 @@ private fun TotalAssetsCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .then(
-                if (backgroundUri != null) {
-                    // 有自选背景：白雾毛玻璃
-                    Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
-                } else {
-                    // 无自选背景：白色实心卡片（首个组件）
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                }
-            )
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(16.dp)))
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically

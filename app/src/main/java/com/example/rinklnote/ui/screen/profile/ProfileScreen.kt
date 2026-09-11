@@ -58,7 +58,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
@@ -86,7 +85,6 @@ import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -489,15 +487,7 @@ private fun ProfileHeader(state: AuthState, onLogin: () -> Unit, hazeState: Haze
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .then(
-                if (backgroundUri != null) {
-                    // 有自选背景：透明 + 白色描边
-                    Modifier.border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
-                } else {
-                    // 无自选背景：白色实心卡片（我的页首个组件）
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                }
-            )
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(16.dp)))
             .padding(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

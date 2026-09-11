@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.Blue40
 import com.example.rinklnote.util.bookkeepingZone
+import com.example.rinklnote.ui.component.applyCardGlass
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import java.time.LocalDate
@@ -100,15 +101,7 @@ fun HeatmapBox(
         modifier = modifier
             .padding(horizontal = 14.dp)
             .clip(RoundedCornerShape(15.dp))
-            .then(
-                if (backgroundUri != null) {
-                    // 有自选背景：透明 + 白色描边
-                    Modifier.border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(15.dp))
-                } else {
-                    // 无自选背景：白色实心卡片（首页首个组件之一）
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                }
-            )
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
             .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
         // 标题行：左侧标题+chevron 可点（切换展开/收起），右侧「明细」独立打开汇总。

@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.Motion
@@ -57,7 +56,6 @@ import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.CategoryBudgetState
 import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import kotlin.math.abs
 
@@ -298,15 +296,7 @@ private fun TotalBudgetCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(15.dp))
-            .then(
-                if (backgroundUri != null) {
-                    // 有自选背景：白雾毛玻璃
-                    Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
-                } else {
-                    // 无自选背景：白色实心卡片（首个组件）
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                }
-            )
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
             .clickable { onClick() }
             .padding(16.dp)
     ) {

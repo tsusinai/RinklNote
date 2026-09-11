@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
@@ -32,9 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
+import com.example.rinklnote.ui.component.applyCardGlass
 
 @SuppressLint("DefaultLocale")
 @OptIn(ExperimentalHazeMaterialsApi::class)
@@ -71,15 +69,7 @@ fun SummaryBar(
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
             .clip(RoundedCornerShape(size = 15.dp))
-            .then(
-                if (backgroundUri != null) {
-                    // 有自选背景：白雾毛玻璃，采样照片背景
-                    Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
-                } else {
-                    // 无自选背景：白色实心卡片（顶栏白色卡）
-                    Modifier.background(MaterialTheme.colorScheme.surface)
-                }
-            )
+            .then(applyCardGlass(hazeState, backgroundUri, RoundedCornerShape(15.dp)))
             .then(clickModifier)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

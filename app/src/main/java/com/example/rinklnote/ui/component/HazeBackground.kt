@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 
 /**
@@ -55,27 +54,24 @@ val RinklCardFrostedStyle: HazeStyle = HazeStyle(
  */
 
 /**
- * 普通卡片的「玻璃修饰」：根据是否铺了自选背景返回带/不带 `hazeEffect` 的 [Modifier]。
+ * 卡片的「统一透明框」修饰：全 App 除底部导航（毛玻璃）和加账单/新建账户 FAB 外，
+ * 所有卡片统一走这里——完全透明、只靠边框勾勒边界。
  *
- * - 有背景 → 返回**白色描边**（`border(1.dp, 白 0.55)`），卡片完全透明、靠白边勾勒边界
- * - 无背景 → 返回 `.hazeEffect(hazeState, RinklCardFrostedStyle)`（白雾玻璃）+ **很浅灰边**（`border(1.dp, 黑 0.08)`），
- *   让白雾卡在纯白背景上也能看出卡片轮廓（不糊成一片）
+ * - 有自选背景 → **白色描边**（`border(1.dp, 白 0.55)`），背景照片透过卡片清晰可见
+ * - 无背景（纯白页）→ **很浅灰边**（`border(1.dp, 黑 0.08)`），透明框在纯白底上以线条呈现
  *
- * 重点卡片（首支总览/总资产/本月预算/nav 栏）始终用 [RinklCardFrostedStyle]，
- * 不到此函数。调用方式：`Modifier.then(applyCardGlass(hazeState, backgroundUri, shape))`。
+ * 调用方式：`Modifier.clip(shape).then(applyCardGlass(hazeState, backgroundUri, shape))`。
  *
- * @param shape 卡片圆角（与调用方 `clip` 用同一 shape，保证白边贴合圆角）
+ * @param shape 卡片圆角（与调用方 `clip` 用同一 shape，保证边框贴合圆角）
  */
 @Composable
 fun applyCardGlass(hazeState: HazeState, backgroundUri: String?, shape: Shape): Modifier {
     return if (backgroundUri != null) {
-        // 透明玻璃：加白色描边勾勒卡片边界（照片背景上纯透明无边框会糊成一团）。
+        // 透明框：白色描边（照片背景上纯透明无边框会糊成一团）。
         Modifier.border(width = 1.dp, color = Color.White.copy(alpha = 0.55f), shape = shape)
     } else {
-        // 白雾玻璃：白雾 + 很浅灰边（纯白背景上也能看清卡片轮廓）。
-        Modifier
-            .hazeEffect(hazeState, RinklCardFrostedStyle)
-            .border(width = 1.dp, color = Color.Black.copy(alpha = 0.08f), shape = shape)
+        // 透明框：很浅灰边（纯白背景上以线条勾勒卡片轮廓）。
+        Modifier.border(width = 1.dp, color = Color.Black.copy(alpha = 0.08f), shape = shape)
     }
 }
 
