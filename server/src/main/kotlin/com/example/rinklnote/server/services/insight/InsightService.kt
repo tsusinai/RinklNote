@@ -5,6 +5,8 @@ import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.tables.BotConfigTable
+import com.example.rinklnote.server.tables.BudgetsTable
+import com.example.rinklnote.server.tables.PushLogTable
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -165,6 +167,118 @@ class InsightService(
             summary = summary.toString()
         )
     }
+
+    /**
+     * 日报推送文案（QQ 主动推送专用，人话化）。
+     * 结构：标题 → LLM 一句话点评（失败回退省略）→ 支出/收入行 → 大头分类 →
+     * 连续记账 🔥 → 克制报喜 👍 → 预算进度 📊（有预算才出现）。
+     * 隐私 NFR：喂给 LLM 的只有聚合数字，无明细/备注。
+     */
+    suspend fun dailyPushCopy(userId: Long, dayStart: Long, dayEnd: Long): String? {
+        val stats = billService.monthlyStats(userId, dayStart, dayEnd)
+        if (stats.totalExpenseMinor <= 0 && stats.totalIncomeMinor <= 0) return null
+
+        val bills = billService.allBills(userId)
+        val reportDate = Instant.ofEpochMilli(dayStart).atZone(SHANGHAI).toLocalDate()
+
+        // 前 7 天日均支出（不含统计日），用于对比与「克制」判定。
+        val prev7Start = dayStart - 7L * DAY_MS
+        val prev7 = bills.filter { it.billType == "EXPENSE" && it.date >= prev7Start && it.date < dayStart }
+        val prev7AvgMinor = if (prev7.isNotEmpty()) prev7.sumOf { it.amountMinor } / 7.0 else 0.0
+
+        // 连续记账天数：从统计日往回数有账的日子（日期按「当日 0 点」桶分组，中国无夏令时，整除安全）。
+        val streak = run {
+            val days = bills.map { it.date / DAY_MS }.toHashSet()
+            var s = 0
+            var cursor = dayStart / DAY_MS
+            while (days.contains(cursor)) { s++; cursor-- }
+            s
+        }
+
+        // 当月总预算（无分类的 MONTHLY 预算）与本月截至统计日的支出。
+        val budgetMinor = transaction {
+            BudgetsTable.selectAll().where {
+                (BudgetsTable.userId eq userId) and
+                    (BudgetsTable.categoryId.isNull()) and
+                    (BudgetsTable.deleted eq false) and
+                    (BudgetsTable.monthStart eq monthStartOf(reportDate))
+            }.firstOrNull()?.get(BudgetsTable.amountMinor)
+        } ?: 0L
+        val monthExpenseMinor = if (budgetMinor > 0) {
+            bills.filter { it.billType == "EXPENSE" && it.date >= monthStartOf(reportDate) && it.date < dayEnd }
+                .sumOf { it.amountMinor }
+        } else 0L
+
+        // 一句话点评：只喂聚合；失败（网络/解析）静默省略该行，模板兜底。
+        val verdict = try {
+            val prompt = buildString {
+                appendLine("昨日记账聚合（无任何明细/备注）:")
+                appendLine("- 支出总额: ¥${Money.format(stats.totalExpenseMinor)}（${stats.billCount} 笔）")
+                if (stats.totalIncomeMinor > 0) appendLine("- 收入总额: ¥${Money.format(stats.totalIncomeMinor)}")
+                if (prev7AvgMinor > 0) appendLine("- 前7天日均支出: ¥${Money.format(prev7AvgMinor.toLong())}")
+                if (stats.topExpenseCategories.isNotEmpty()) {
+                    append("- 支出大头: ")
+                    append(stats.topExpenseCategories.take(2).joinToString("、") { "${it.first} ¥${Money.format(it.second)}" })
+                    appendLine()
+                }
+                appendLine()
+                append("请用一句不超过 25 字的中文点评昨天，亲切自然、不说教、不堆感叹号，例如「昨天花得不算多，餐饮依旧是大头」。")
+                append("返回JSON: {\"answer\": \"...\"}")
+            }
+            llmParser.chat("你是用户的记账助手，说话简短自然。必须返回 JSON 对象。", prompt)
+                ?.let { Json { ignoreUnknownKeys = true; isLenient = true }.decodeFromString<QueryResponse>(it) }
+                ?.answer?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+
+        return buildDailyPushMessage(
+            reportDate = reportDate,
+            verdict = verdict,
+            expenseMinor = stats.totalExpenseMinor,
+            incomeMinor = stats.totalIncomeMinor,
+            billCount = stats.billCount.toInt(),
+            topCategories = stats.topExpenseCategories.take(3),
+            prev7AvgMinor = prev7AvgMinor,
+            streak = streak,
+            budgetMinor = budgetMinor,
+            monthExpenseMinor = monthExpenseMinor
+        )
+    }
+
+    /** 日报消息拼装（纯函数，可单测）。 */
+    fun buildDailyPushMessage(
+        reportDate: LocalDate,
+        verdict: String?,
+        expenseMinor: Long,
+        incomeMinor: Long,
+        billCount: Int,
+        topCategories: List<Pair<String, Long>>,
+        prev7AvgMinor: Double,
+        streak: Int,
+        budgetMinor: Long,
+        monthExpenseMinor: Long
+    ): String = buildString {
+        appendLine("✅ ${reportDate} 账单总结")
+        verdict?.let { appendLine(it) }
+        val expenseLine = "支出 ¥${Money.format(expenseMinor)} · $billCount 笔"
+        appendLine(if (incomeMinor > 0) "$expenseLine（收入 ¥${Money.format(incomeMinor)}）" else expenseLine)
+        if (topCategories.isNotEmpty()) {
+            append("大头：")
+            appendLine(topCategories.joinToString("、") { "${it.first} ¥${Money.format(it.second)}" })
+        }
+        if (streak >= 2) appendLine("🔥 已连续记账 $streak 天")
+        if (prev7AvgMinor > 0 && expenseMinor < prev7AvgMinor * 0.5) {
+            appendLine("👍 只花了平时的一半不到，克制的一天")
+        }
+        if (budgetMinor > 0) {
+            val pct = (monthExpenseMinor * 100 / budgetMinor).toInt()
+            appendLine("📊 本月 ¥${Money.format(monthExpenseMinor)} / 预算 ¥${Money.format(budgetMinor)}（$pct%）")
+        }
+    }.trimEnd()
+
+    private fun monthStartOf(date: LocalDate): Long =
+        date.withDayOfMonth(1).atStartOfDay(SHANGHAI).toInstant().toEpochMilli()
 
     suspend fun monthlySummary(userId: Long, month: String): MonthlySummaryResponse {
         // Validate month format
@@ -398,11 +512,20 @@ data class MonthlyFacts(
 
         val alerts = mutableListOf<AnomalyAlert>()
 
-        if (dailyAvg > 0 && todayExpense > dailyAvg * anomalyThreshold) {
-            val pct = ((todayExpense.toDouble() / dailyAvg - 1) * 100).toInt()
+        if (dailyAvg > 0 && todayExpense > dailyAvg * 2.5) {
+            // 重度超标：语气直接一些。
+            val multiple = (todayExpense / dailyAvg * 10).toInt() / 10.0
             alerts.add(AnomalyAlert(
                 level = "WARN",
-                message = "今天花了 ¥${Money.format(todayExpense)}，比平时日均 ¥${"%.2f".format(dailyAvg)} 高 $pct%，留意一下哦",
+                message = "今天已花 ¥${Money.format(todayExpense)}，是平时日均（¥${Money.format(dailyAvg.toLong())}）的 $multiple 倍，接下来收着点花",
+                type = "DAILY_SPIKE"
+            ))
+        } else if (dailyAvg > 0 && todayExpense > dailyAvg * anomalyThreshold) {
+            // 轻度超标：温和提醒，不说教。
+            val pct = ((todayExpense.toDouble() / dailyAvg - 1) * 100).toInt()
+            alerts.add(AnomalyAlert(
+                level = "INFO",
+                message = "今天已花 ¥${Money.format(todayExpense)}，比日均 ¥${Money.format(dailyAvg.toLong())} 高 $pct%，正常波动范围内不用太在意",
                 type = "DAILY_SPIKE"
             ))
         }
@@ -556,6 +679,25 @@ data class MonthlyFacts(
         // 今日已记该分类则不提醒
         if (bills.any { it.billType == "EXPENSE" && it.date >= todayStart && it.categoryName == best.key.first }) return null
 
+        // 防唠叨降频：近 7 天已推 ≥3 次习惯提醒、且最近 3 天（不含今天）用户仍未记该分类
+        // → 提了也没响应，进入冷却，今天不推（省 QQ 主动消息配额）。
+        val nowMs = now.toInstant().toEpochMilli()
+        val habitPushCount = transaction {
+            PushLogTable.selectAll().where {
+                (PushLogTable.userId eq userId) and
+                    (PushLogTable.type eq "HABIT") and
+                    (PushLogTable.pushedAt greaterEq nowMs - 7L * DAY_MS)
+            }.count()
+        }
+        if (habitPushCount >= 3) {
+            val cat3Start = nowMs - 3L * DAY_MS
+            val recordedRecently = bills.any {
+                it.billType == "EXPENSE" && it.categoryName == best.key.first &&
+                    it.date >= cat3Start && it.date < todayStart
+            }
+            if (!recordedRecently) return null
+        }
+
         return HabitReminder(window.label, best.key.first, best.key.second)
     }
 
@@ -589,6 +731,7 @@ data class MonthlyFacts(
 
     companion object {
         val SHANGHAI: ZoneId = ZoneId.of("Asia/Shanghai")
+        private const val DAY_MS = 86_400_000L
 
         private val CN_MONTH = mapOf(
             "一" to 1, "二" to 2, "三" to 3, "四" to 4, "五" to 5, "六" to 6,

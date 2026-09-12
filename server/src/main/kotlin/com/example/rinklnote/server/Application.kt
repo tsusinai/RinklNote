@@ -125,14 +125,12 @@ fun Application.module() {
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
-            // 日报统计「昨天」：推送发生在用户设定时刻（默认 09:00），当天刚开始、
-            // 几乎必然还没有账单——按今天算会让日报永远推不出来（2026-09-12 实测修复）。
+            // 日报推「昨天」（已完结的一天）：人话化文案 —— LLM 一句话点评 + 连续记账/预算锚点，
+            // 失败回退模板；昨天没账则不发。窗口改成昨天是 2026-09-12 修复，勿改回今天。
             val zone = java.time.ZoneId.of("Asia/Shanghai")
             val now = java.time.ZonedDateTime.now(zone)
             val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
-            val report = insightService.dailyReport(userId, dayStart - 86_400_000L, dayStart)
-            if (report.totalExpense <= 0 && report.totalIncome <= 0) null
-            else report.summary
+            insightService.dailyPushCopy(userId, dayStart - 86_400_000L, dayStart)
         },
         // 主动推送：msg_id 传空串 → QQ 会省略该字段（随机 UUID 会被拒 40034024）。
         // 被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
@@ -169,9 +167,13 @@ fun Application.module() {
             }
         },
         anomalyProvider = { userId ->
-            val alerts = insightService.anomalyCheck(userId).alerts
-            if (alerts.isEmpty()) null
-            else alerts.joinToString("\n") { "⚠️ " + it.message }
+            // 只在 18 点后评估当天异常：清晨推「今天花超了」既不准也打扰；
+            // 每天最多一条（push_log 按 dayKey 去重）。
+            val hour = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Shanghai")).hour
+            if (hour < 18) null
+            else insightService.anomalyCheck(userId).alerts
+                .joinToString("\n") { "⚠️ " + it.message }
+                .ifEmpty { null }
         },
         habitProvider = { userId ->
             val habit = insightService.habitReminder(userId)

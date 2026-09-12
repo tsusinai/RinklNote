@@ -11,6 +11,7 @@ import com.example.rinklnote.server.tables.BillsTable
 import com.example.rinklnote.server.tables.BotConfigTable
 import com.example.rinklnote.server.tables.CategoriesTable
 import com.example.rinklnote.server.tables.SubCategoriesTable
+import com.example.rinklnote.server.tables.PushLogTable
 import com.example.rinklnote.server.tables.UsersTable
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.deleteAll
@@ -25,6 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.ZoneId
+import java.time.LocalDate
 import java.time.ZonedDateTime
 
 class InsightServiceTest {
@@ -41,9 +43,10 @@ class InsightServiceTest {
     fun setup() {
         TestDatabase.connect("insighttest")
         transaction {
-            SchemaUtils.create(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, BotConfigTable)
+            SchemaUtils.create(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, BotConfigTable, PushLogTable)
             BillsTable.deleteAll(); SubCategoriesTable.deleteAll()
             AccountsTable.deleteAll(); CategoriesTable.deleteAll(); UsersTable.deleteAll(); BotConfigTable.deleteAll()
+            PushLogTable.deleteAll()
         }
         billService.seedIfNeeded()
         insertUser(1L, "13800000021")
@@ -196,5 +199,112 @@ class InsightServiceTest {
         val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
         val r = runBlocking { insight.habitForApp(1L, now) }
         assertNull(r.content)
+    }
+
+    // ── 日报推送文案（buildDailyPushMessage 纯函数）──
+
+    @Test
+    fun `dailyPushMessage full layout with verdict streak praise budget`() {
+        val d = LocalDate.parse("2026-09-11")
+        val msg = insight.buildDailyPushMessage(
+            reportDate = d,
+            verdict = "昨天花得不算多，餐饮依旧是大头",
+            expenseMinor = Money.toMinor(93.48),
+            incomeMinor = Money.toMinor(100.0),
+            billCount = 4,
+            topCategories = listOf("餐饮" to Money.toMinor(45.63), "日用" to Money.toMinor(32.63)),
+            prev7AvgMinor = Money.toMinor(200.0).toDouble(),
+            streak = 23,
+            budgetMinor = Money.toMinor(3000.0),
+            monthExpenseMinor = Money.toMinor(1234.0)
+        )
+        assertTrue(msg.contains("✅ 2026-09-11 账单总结"))
+        assertTrue(msg.contains("昨天花得不算多"))
+        assertTrue(msg.contains("支出 ¥93.48 · 4 笔（收入 ¥100.00）"))
+        assertTrue(msg.contains("大头：餐饮 ¥45.63、日用 ¥32.63"))
+        assertTrue(msg.contains("🔥 已连续记账 23 天"))
+        assertTrue(msg.contains("👍 只花了平时的一半不到"))  // 93.48 < 200*0.5=100
+        assertTrue(msg.contains("📊 本月 ¥1234.00 / 预算 ¥3000.00（41%）"))
+    }
+
+    @Test
+    fun `dailyPushMessage minimal layout omits optional lines`() {
+        val d = LocalDate.parse("2026-09-11")
+        val msg = insight.buildDailyPushMessage(
+            reportDate = d,
+            verdict = null,
+            expenseMinor = Money.toMinor(93.48),
+            incomeMinor = 0L,
+            billCount = 4,
+            topCategories = listOf("餐饮" to Money.toMinor(45.63)),
+            prev7AvgMinor = Money.toMinor(100.0).toDouble(),  // 93.48 未过半 → 无报喜
+            streak = 1,                                        // <2 → 无连续行
+            budgetMinor = 0L,                                  // 无预算 → 无进度行
+            monthExpenseMinor = 0L
+        )
+        assertFalse(msg.contains("\n👍"))
+        assertFalse(msg.contains("🔥"))
+        assertFalse(msg.contains("📊"))
+        assertFalse(msg.contains("收入"))
+        assertFalse(msg.contains("（收入"))
+        assertEquals(3, msg.split("\n").size)  // 标题 + 支出行 + 大头行 = 3 行
+    }
+
+    // ── 习惯提醒防唠叨 ──
+
+    private fun insertHabitPush(userId: Long, dayKey: String, pushedAt: Long) {
+        transaction {
+            PushLogTable.insert {
+                it[PushLogTable.userId] = userId
+                it[PushLogTable.type] = "HABIT"
+                it[PushLogTable.dayKey] = dayKey
+                it[PushLogTable.pushedAt] = pushedAt
+            }
+        }
+    }
+
+    @Test
+    fun `habitReminder cooldown after 3 pushes without response`() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
+        val nowMs = now.toInstant().toEpochMilli()
+        // 习惯底数：回看窗口内 3 笔三餐
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 25))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 26))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 27))
+        // 近 7 天推了 3 次，最近 3 天（8/28 起）没再记三餐 → 冷却
+        insertHabitPush(1L, "2026-08-25", nowMs - 6L * 86_400_000L)
+        insertHabitPush(1L, "2026-08-27", nowMs - 4L * 86_400_000L)
+        insertHabitPush(1L, "2026-08-29", nowMs - 2L * 86_400_000L)
+        assertNull(insight.habitReminder(1L, now))
+    }
+
+    @Test
+    fun `habitReminder no cooldown when user recorded category recently`() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
+        val nowMs = now.toInstant().toEpochMilli()
+        // 习惯底数：回看窗口内 3 笔三餐
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 25))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 26))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 27))
+        insertHabitPush(1L, "2026-08-25", nowMs - 6L * 86_400_000L)
+        insertHabitPush(1L, "2026-08-27", nowMs - 4L * 86_400_000L)
+        insertHabitPush(1L, "2026-08-29", nowMs - 2L * 86_400_000L)
+        // 8/30（昨天）记过三餐 → 有响应，继续提醒
+        insertBill(1L, 12.0, "三餐", startOfDay(2026, 8, 30))
+        assertNotNull(insight.habitReminder(1L, now))
+    }
+
+    @Test
+    fun `habitReminder no cooldown below 3 pushes`() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, shanghai)
+        val nowMs = now.toInstant().toEpochMilli()
+        // 习惯底数：回看窗口内 3 笔三餐
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 25))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 26))
+        insertBill(1L, 28.0, "三餐", startOfDay(2026, 8, 27))
+        insertHabitPush(1L, "2026-08-27", nowMs - 4L * 86_400_000L)
+        insertHabitPush(1L, "2026-08-29", nowMs - 2L * 86_400_000L)
+        // 仅 2 次推送 < 3 → 未触发冷却
+        assertNotNull(insight.habitReminder(1L, now))
     }
 }
