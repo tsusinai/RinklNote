@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
@@ -62,6 +63,7 @@ fun NumericKeypad(
     confirmEnabled: Boolean = true,
     contextItems: List<KeypadContextItem> = emptyList(),
     hazeState: HazeState? = null,
+    bottomPadding: Dp = 16.dp,
     modifier: Modifier = Modifier
 ) {
     val isExpense = billType == "EXPENSE"
@@ -79,7 +81,7 @@ fun NumericKeypad(
             .fillMaxWidth()
             .clip(panelShape)
             .then(panelSurface)
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = bottomPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(

@@ -433,7 +433,14 @@ fun AppNavigation(app: RinklNoteApp) {
                             expenseCategories = state.expenseCategories,
                             incomeCategories = state.incomeCategories,
                             accounts = state.accounts,
+                            backgroundUri = appBackgroundUri,
+                            hazeState = hazeState.takeIf { appBackgroundUri != null },
                             onCancel = {
+                                bookkeepingVM.onEvent(BookkeepingEvent.CancelEdit)
+                                navController.popBackStack()
+                            },
+                            onDelete = {
+                                bookkeepingVM.onEvent(BookkeepingEvent.DeleteBill(bill))
                                 bookkeepingVM.onEvent(BookkeepingEvent.CancelEdit)
                                 navController.popBackStack()
                             },

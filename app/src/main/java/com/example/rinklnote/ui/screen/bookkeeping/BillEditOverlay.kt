@@ -1,20 +1,14 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,14 +17,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,54 +41,54 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.util.accountIconRes
+import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.bookkeepingZone
+import dev.chrisbanes.haze.HazeState
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private fun categoryIconRes(name: String): Int = when (name) {
-    "三餐" -> R.drawable.ic_category_meals
-    "日用" -> R.drawable.ic_category_daily
-    "交通" -> R.drawable.ic_category_transport
-    "学习" -> R.drawable.ic_category_study
-    "运动" -> R.drawable.ic_category_sports
-    "娱乐" -> R.drawable.ic_category_entertainment
-    "网购" -> R.drawable.ic_category_shopping
-    else -> R.drawable.ic_category_meals
-}
+private val editDateFormatter = DateTimeFormatter.ofPattern("M月d日 EEE", Locale.CHINESE)
 
-private fun accountIconRes(name: String): Int = when (name) {
-    "微信" -> R.drawable.ic_wechat
-    "支付宝" -> R.drawable.ic_alipay
-    "默认" -> R.drawable.ic_default_account
-    else -> R.drawable.ic_default_account
-}
-
-/** 编辑账单：全屏单页，风格对齐快捷记账抽屉。一级分类为行，点击展开其下方二级分类；二级分类单个圆点可选。
- *  两张独立卡（分类 / 账户）+ 底部数字键盘。切换收支类型时重置分类并收起二级。 */
+/**
+ * 编辑账单：与快捷记账共享视觉和输入方式，但用完整页面承载更多字段。
+ *
+ * 页面结构：顶部操作栏 → 一级标签横向滚动 → 二级标签流式布局 → 日期 / 账户 →
+ * 底部内联备注数字键盘。自定义背景直接透传，卡片只在有背景时保持透明描边。
+ */
 @Composable
 fun BillEditOverlay(
     bill: Bill,
     expenseCategories: List<Category>,
     incomeCategories: List<Category>,
     accounts: List<Account>,
+    backgroundUri: String?,
+    hazeState: HazeState?,
     onCancel: () -> Unit,
+    onDelete: () -> Unit,
     onConfirm: (Bill) -> Unit,
     onLoadSubCategories: suspend (Long) -> List<SubCategory>
 ) {
-    BackHandler { onCancel() }
-
+    val hasCustomBackground = backgroundUri != null
     val initialCategories = if (bill.billType == BillType.EXPENSE) expenseCategories else incomeCategories
 
     var amount by remember(bill.id) { mutableStateOf(Money.toYuanInputString(bill.amountMinor)) }
@@ -98,184 +99,472 @@ fun BillEditOverlay(
     var selectedAccount by remember(bill.id) {
         mutableStateOf(accounts.firstOrNull { it.id == bill.accountId } ?: accounts.firstOrNull())
     }
-    var remark by remember(bill.id) { mutableStateOf(bill.remark ?: "") }
-    // 二级分类：当前展开的一级分类 id、其下的列表、用户选中的二级分类。
-    // 编辑已有带二级分类的账单时，预展开其所属一级分类，并在加载后按名字预选中对应二级。
-    var expandedCategoryId by remember(bill.id) { mutableStateOf(if (bill.subCategoryName != null) bill.categoryId else null) }
+    var remark by remember(bill.id) { mutableStateOf(bill.remark.orEmpty()) }
+    var selectedDate by remember(bill.id) { mutableStateOf(bill.date.toBillLocalDate()) }
     var subCategories by remember(bill.id) { mutableStateOf(emptyList<SubCategory>()) }
     var selectedSubCategory by remember(bill.id) { mutableStateOf<SubCategory?>(null) }
     var pendingSubName by remember(bill.id) { mutableStateOf(bill.subCategoryName) }
-
-    LaunchedEffect(expandedCategoryId) {
-        val id = expandedCategoryId
-        if (id != null) {
-            val subs = onLoadSubCategories(id)
-            subCategories = subs
-            pendingSubName?.let { name ->
-                selectedSubCategory = subs.find { it.name == name }
-                pendingSubName = null
-            }
-        } else {
-            subCategories = emptyList()
-        }
-    }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val visibleCategories = if (billType == BillType.EXPENSE.value) expenseCategories else incomeCategories
 
-    fun updateType(newType: String) {
-        billType = newType
-        selectedCategory = (if (newType == "EXPENSE") expenseCategories else incomeCategories).firstOrNull()
-        expandedCategoryId = null
+    LaunchedEffect(visibleCategories, bill.categoryId) {
+        if (selectedCategory == null || visibleCategories.none { it.id == selectedCategory?.id }) {
+            selectedCategory = visibleCategories.firstOrNull { it.id == bill.categoryId }
+                ?: visibleCategories.firstOrNull()
+        }
+    }
+
+    LaunchedEffect(accounts, bill.accountId) {
+        if (selectedAccount == null || accounts.none { it.id == selectedAccount?.id }) {
+            selectedAccount = accounts.firstOrNull { it.id == bill.accountId } ?: accounts.firstOrNull()
+        }
+    }
+
+    LaunchedEffect(selectedCategory?.id) {
+        val categoryId = selectedCategory?.id
+        if (categoryId == null) {
+            subCategories = emptyList()
+            selectedSubCategory = null
+            return@LaunchedEffect
+        }
+
+        val loaded = onLoadSubCategories(categoryId)
+        subCategories = loaded
+        selectedSubCategory = pendingSubName?.let { name -> loaded.firstOrNull { it.name == name } }
+        pendingSubName = null
+    }
+
+    fun updateType(newType: BillType) {
+        if (newType.value == billType) return
+        billType = newType.value
+        val nextCategories = if (newType == BillType.EXPENSE) expenseCategories else incomeCategories
+        selectedCategory = nextCategories.firstOrNull()
+        selectedSubCategory = null
+        pendingSubName = null
         subCategories = emptyList()
-        selectedSubCategory = null
     }
 
-    fun onCategoryClick(cat: Category) {
-        selectedCategory = cat
+    fun selectCategory(category: Category) {
+        selectedCategory = category
         selectedSubCategory = null
-        expandedCategoryId = if (expandedCategoryId == cat.id) null else cat.id
+        pendingSubName = null
     }
 
-    fun confirmEdit() {
-        val amountMinorVal = Money.parseMinor(amount) ?: return
-        val cat = selectedCategory ?: return
-        val acct = selectedAccount ?: return
-        onConfirm(
-            bill.copy(
-                amountMinor = amountMinorVal,
-                billType = BillType.fromValue(billType),
-                categoryId = cat.id,
-                categoryName = cat.name,
-                subCategoryName = selectedSubCategory?.name,
-                accountId = acct.id,
-                remark = remark.ifBlank { null }
-            )
-        )
+    fun buildEditedBill(): Bill = bill.copy(
+        amountMinor = Money.parseMinor(amount) ?: bill.amountMinor,
+        billType = BillType.fromValue(billType),
+        categoryId = selectedCategory?.id ?: bill.categoryId,
+        categoryName = selectedCategory?.name ?: bill.categoryName,
+        subCategoryName = selectedSubCategory?.name,
+        accountId = selectedAccount?.id ?: bill.accountId,
+        remark = remark.trim().ifBlank { null },
+        date = selectedDate.toBillTimestamp()
+    )
+
+    val amountMinor = Money.parseMinor(amount)
+    val canSave = amountMinor != null &&
+        amountMinor > 0 &&
+        selectedCategory != null &&
+        selectedAccount != null
+    val editedBill = buildEditedBill()
+    val hasChanges = editedBill != bill
+
+    fun requestCancel() {
+        if (hasChanges) showDiscardConfirm = true else onCancel()
     }
+
+    BackHandler(onBack = ::requestCancel)
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .statusBarsPadding()
-        ) {
-            // Title bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("编辑账单", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                TextButton(onClick = onCancel) {
-                    Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            EditTopBar(
+                canSave = canSave,
+                onBack = ::requestCancel,
+                onDelete = { showDeleteConfirm = true },
+                onSave = { if (canSave) onConfirm(editedBill) }
+            )
 
-            // Scrollable pickers
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 10.dp)
             ) {
-                CategoryCard(
+                CategoryEditor(
                     categories = visibleCategories,
                     selectedCategory = selectedCategory,
-                    expandedCategoryId = expandedCategoryId,
                     subCategories = subCategories,
                     selectedSubCategory = selectedSubCategory,
-                    onCategoryClick = ::onCategoryClick,
+                    hasCustomBackground = hasCustomBackground,
+                    onCategoryClick = ::selectCategory,
                     onSubCategoryClick = { selectedSubCategory = it }
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                AccountCard(
+                Spacer(modifier = Modifier.height(6.dp))
+                DateEditor(
+                    selectedDate = selectedDate,
+                    hasCustomBackground = hasCustomBackground,
+                    onDateClick = { showDatePicker = true },
+                    onQuickDateClick = { selectedDate = it }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                AccountEditor(
                     accounts = accounts,
                     selectedAccount = selectedAccount,
+                    hasCustomBackground = hasCustomBackground,
                     onAccountClick = { selectedAccount = it }
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // Numeric keypad (amount / type toggle / remark / confirm)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
-                    .padding(top = 12.dp, bottom = 16.dp)
-            ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 NumericKeypad(
                     amount = amount,
                     billType = billType,
                     remark = remark,
                     onDigit = { digit ->
-                        val newAmount = if (digit == "." && amount.contains(".")) amount else amount + digit
-                        amount = newAmount
+                        if (digit != "." || !amount.contains(".")) {
+                            amount += digit
+                        }
                     },
                     onClear = { amount = "" },
                     onBackspace = { amount = amount.dropLast(1) },
-                    onToggleType = { updateType(if (billType == BillType.EXPENSE.value) "INCOME" else "EXPENSE") },
+                    onToggleType = {
+                        updateType(
+                            if (billType == BillType.EXPENSE.value) BillType.INCOME else BillType.EXPENSE
+                        )
+                    },
                     onRemarkChange = { remark = it },
-                    onConfirm = ::confirmEdit
+                    confirmEnabled = canSave,
+                    onConfirm = { if (canSave) onConfirm(editedBill) },
+                    hazeState = hazeState,
+                    bottomPadding = 16.dp
+                )
+            }
+        }
+
+        if (showDatePicker) {
+            BillDatePickerDialog(
+                initialDate = selectedDate,
+                onConfirm = {
+                    selectedDate = it
+                    showDatePicker = false
+                },
+                onDismiss = { showDatePicker = false }
+            )
+        }
+
+        if (showDeleteConfirm) {
+            DeleteBillDialog(
+                onConfirm = {
+                    showDeleteConfirm = false
+                    onDelete()
+                },
+                onDismiss = { showDeleteConfirm = false }
+            )
+        }
+
+        if (showDiscardConfirm) {
+            DiscardChangesDialog(
+                onConfirm = {
+                    showDiscardConfirm = false
+                    onCancel()
+                },
+                onDismiss = { showDiscardConfirm = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditTopBar(
+    canSave: Boolean,
+    onBack: () -> Unit,
+    onDelete: () -> Unit,
+    onSave: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(
+            onClick = onBack,
+            modifier = Modifier.semantics { contentDescription = "返回" }
+        ) {
+            Text("返回", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Text(
+            text = "编辑账单",
+            modifier = Modifier.weight(1f),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        TextButton(onClick = onDelete) {
+            Text("删除", color = MaterialTheme.colorScheme.error)
+        }
+        TextButton(enabled = canSave, onClick = onSave) {
+            Text("保存")
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoryEditor(
+    categories: List<Category>,
+    selectedCategory: Category?,
+    subCategories: List<SubCategory>,
+    selectedSubCategory: SubCategory?,
+    hasCustomBackground: Boolean,
+    onCategoryClick: (Category) -> Unit,
+    onSubCategoryClick: (SubCategory?) -> Unit
+) {
+    SectionCard(hasCustomBackground = hasCustomBackground) {
+        SectionHeader(title = "一级标签", hint = "左右滑动")
+        Spacer(modifier = Modifier.height(4.dp))
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(categories, key = { it.id }) { category ->
+                PrimaryCategoryChip(
+                    category = category,
+                    selected = selectedCategory?.id == category.id,
+                    onClick = { onCategoryClick(category) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        SectionHeader(
+            title = "二级标签",
+            hint = selectedCategory?.name ?: "先选择一级标签"
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SecondaryCategoryChip(
+                label = "不限",
+                selected = selectedSubCategory == null,
+                onClick = { onSubCategoryClick(null) }
+            )
+            subCategories.forEach { subCategory ->
+                SecondaryCategoryChip(
+                    label = subCategory.name,
+                    selected = selectedSubCategory?.id == subCategory.id,
+                    onClick = { onSubCategoryClick(subCategory) }
+                )
+            }
+        }
+
+        if (subCategories.isEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "该标签暂无二级分类，可直接保存",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun PrimaryCategoryChip(
+    category: Category,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                shape
+            )
+            .then(if (selected) Modifier else applyCardGlass(shape))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(categoryIconRes(category.name)),
+            contentDescription = category.name,
+            modifier = Modifier.size(22.dp),
+            tint = Color.Unspecified
+        )
+        Text(
+            text = category.name,
+            fontSize = 14.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+        )
+    }
+}
+
+@Composable
+private fun SecondaryCategoryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+                shape
+            )
+            .then(if (selected) Modifier else applyCardGlass(shape))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DateEditor(
+    selectedDate: LocalDate,
+    hasCustomBackground: Boolean,
+    onDateClick: () -> Unit,
+    onQuickDateClick: (LocalDate) -> Unit
+) {
+    val today = LocalDate.now(bookkeepingZone())
+    val quickDates = listOf(
+        "今天" to today,
+        "昨天" to today.minusDays(1),
+        "前天" to today.minusDays(2)
+    )
+
+    SectionCard(hasCustomBackground = hasCustomBackground) {
+        SectionHeader(title = "日期", hint = "业务时区 Asia/Shanghai")
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
+                .clickable(onClick = onDateClick)
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = selectedDate.format(editDateFormatter),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (selectedDate == today) "今天" else "点击打开日历",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text("选择日期", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            quickDates.forEach { (label, date) ->
+                SecondaryCategoryChip(
+                    label = label,
+                    selected = selectedDate == date,
+                    onClick = { onQuickDateClick(date) }
                 )
             }
         }
     }
 }
 
-/** 分类卡：一级分类为行（图标+名+圆点），点击选中并展开其下方二级分类（32dp 缩进、圆点单选）。 */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CategoryCard(
-    categories: List<Category>,
-    selectedCategory: Category?,
-    expandedCategoryId: Long?,
-    subCategories: List<SubCategory>,
-    selectedSubCategory: SubCategory?,
-    onCategoryClick: (Category) -> Unit,
-    onSubCategoryClick: (SubCategory) -> Unit
+private fun AccountEditor(
+    accounts: List<Account>,
+    selectedAccount: Account?,
+    hasCustomBackground: Boolean,
+    onAccountClick: (Account) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp)
-    ) {
-        Row(
+    SectionCard(hasCustomBackground = hasCustomBackground) {
+        SectionHeader(title = "账户", hint = "选择资金账户")
+        Spacer(modifier = Modifier.height(4.dp))
+
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("分类", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-            Text("点击展开二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        categories.forEach { category ->
-            SelectRow(
-                icon = { Icon(categoryIconRes(category.name), category.name, size = 24.dp) },
-                label = category.name,
-                isSelected = selectedCategory?.id == category.id,
-                onClick = { onCategoryClick(category) }
-            )
-            AnimatedVisibility(
-                visible = expandedCategoryId == category.id && subCategories.isNotEmpty(),
-                enter = expandVertically(
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
-                ) + fadeIn(tween(200)),
-                exit = shrinkVertically(
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
-                ) + fadeOut(tween(150))
-            ) {
-                Column(modifier = Modifier.padding(start = 32.dp, top = 2.dp, end = 10.dp).fillMaxWidth().padding(vertical = 4.dp)) {
-                    subCategories.forEach { sub ->
-                        SubCategoryRow(
-                            name = sub.name,
-                            isSelected = selectedSubCategory?.id == sub.id,
-                            onClick = { onSubCategoryClick(sub) }
+            accounts.forEach { account ->
+                val selected = selectedAccount?.id == account.id
+                val shape = RoundedCornerShape(10.dp)
+                Row(
+                    modifier = Modifier
+                        .clip(shape)
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+                            shape
+                        )
+                        .then(if (selected) Modifier else applyCardGlass(shape))
+                        .clickable { onAccountClick(account) }
+                        .padding(horizontal = 11.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(accountIconRes(account.name)),
+                        contentDescription = account.name,
+                        modifier = Modifier.size(21.dp),
+                        tint = Color.Unspecified
+                    )
+                    Text(
+                        text = account.name,
+                        fontSize = 14.sp,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    if (selected) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
                         )
                     }
                 }
@@ -285,112 +574,139 @@ private fun CategoryCard(
 }
 
 @Composable
-private fun SubCategoryRow(name: String, isSelected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-        SelectDot(isSelected)
-    }
-}
-
-/** 账户卡：图标+名+余额+圆点。 */
-@Composable
-private fun AccountCard(
-    accounts: List<Account>,
-    selectedAccount: Account?,
-    onAccountClick: (Account) -> Unit
+private fun SectionCard(
+    hasCustomBackground: Boolean,
+    content: @Composable ColumnScope.() -> Unit
 ) {
+    val shape = RoundedCornerShape(10.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("账户", fontSize = 20.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        accounts.forEach { account ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onAccountClick(account) }
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(accountIconRes(account.name), account.name, size = 23.dp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(Money.format(account.balanceMinor), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SelectDot(selectedAccount?.id == account.id)
-                }
-            }
-        }
-    }
+            .clip(shape)
+            .then(sectionSurface(hasCustomBackground, shape))
+            .padding(10.dp),
+        content = content
+    )
 }
 
-/** 一级分类行：图标 + 名 + 单选圆点。 */
 @Composable
-private fun SelectRow(
-    icon: @Composable () -> Unit,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
+private fun sectionSurface(hasCustomBackground: Boolean, shape: Shape): Modifier =
+    if (hasCustomBackground) {
+        applyCardGlass(shape)
+    } else {
+        Modifier
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .then(applyCardGlass(shape))
+    }
+
+@Composable
+private fun SectionHeader(title: String, hint: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            icon()
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(label, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = title,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = hint,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BillDatePickerDialog(
+    initialDate: LocalDate,
+    onConfirm: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initialDate.toPickerMillis()
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    state.selectedDateMillis?.let { onConfirm(it.toPickerLocalDate()) }
+                }
+            ) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
         }
-        SelectDot(isSelected)
+    ) {
+        DatePicker(
+            state = state,
+            showModeToggle = false
+        )
     }
 }
 
 @Composable
-private fun SelectDot(isSelected: Boolean) {
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .clip(CircleShape)
-            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-            .then(
-                if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
-                else Modifier
-            )
+private fun DeleteBillDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("删除这笔账单？") },
+        text = { Text("删除后会从本地和云端同步移除，此操作不可撤销。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("删除", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
     )
 }
 
 @Composable
-private fun Icon(res: Int, desc: String, size: androidx.compose.ui.unit.Dp) {
-    androidx.compose.material3.Icon(
-        painter = painterResource(res),
-        contentDescription = desc,
-        modifier = Modifier.size(size),
-        tint = Color.Unspecified
+private fun DiscardChangesDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("放弃未保存的修改？") },
+        text = { Text("返回后本次修改不会保存。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("放弃修改", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("继续编辑")
+            }
+        }
     )
 }
+
+private fun Long.toBillLocalDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(bookkeepingZone()).toLocalDate()
+
+private fun LocalDate.toBillTimestamp(): Long =
+    atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+
+private fun LocalDate.toPickerMillis(): Long =
+    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+private fun Long.toPickerLocalDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
