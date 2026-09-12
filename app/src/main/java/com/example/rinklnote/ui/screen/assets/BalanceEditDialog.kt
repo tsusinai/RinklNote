@@ -96,7 +96,7 @@ fun BalanceEditDialog(
                 onClear = { amount = "" },
                 onBackspace = { amount = amount.dropLast(1) },
                 onToggleType = {},
-                onRemarkClick = {},
+                showTypeToggle = false,
                 onConfirm = ::confirmEdit
             )
         }

@@ -73,8 +73,8 @@ import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.AppBackground
+import com.example.rinklnote.ui.component.KeypadContextItem
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
@@ -90,6 +90,8 @@ import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.util.accountIconRes
+import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
@@ -99,6 +101,7 @@ import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -147,14 +150,12 @@ fun AppNavigation(app: RinklNoteApp) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    var showDrawer by remember { mutableStateOf(false) }
-    var showKeypad by remember { mutableStateOf(false) }
+    var quickAddSurface by remember { mutableStateOf(QuickAddSurface.Closed) }
     var showLogin by remember { mutableStateOf(false) }
     var showBindQQ by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
     var showQqBotGuide by remember { mutableStateOf(false) }
-    var showRemarkSheet by remember { mutableStateOf(false) }
     // 语音连续多笔：累计笔数 + 最近一笔的短暂确认提示。
     var voiceBookedCount by remember { mutableStateOf(0) }
     var voiceConfirm by remember { mutableStateOf<String?>(null) }
@@ -167,8 +168,29 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
+    // 抽屉与输入法严格串行：退出动画结束后才展示下一层，避免同时叠在记账页上。
+    LaunchedEffect(quickAddSurface) {
+        when (quickAddSurface) {
+            QuickAddSurface.DrawerToKeypad -> {
+                delay(Motion.DurationDrawer.toLong())
+                quickAddSurface = quickAddSurface.onTransitionFinished()
+            }
+            QuickAddSurface.KeypadToDrawer -> {
+                delay(Motion.DurationSheet.toLong())
+                quickAddSurface = quickAddSurface.onTransitionFinished()
+            }
+            else -> Unit
+        }
+    }
+
     val openDrawer: () -> Unit = {
-        showDrawer = true
+        quickAddSurface = quickAddSurface.openDrawer()
+    }
+    val requestKeypad: () -> Unit = {
+        quickAddSurface = quickAddSurface.onAmountTap()
+    }
+    val dismissKeypad: () -> Unit = {
+        quickAddSurface = quickAddSurface.onKeypadDismissed()
     }
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -220,8 +242,7 @@ fun AppNavigation(app: RinklNoteApp) {
     // currentRoute 只在真实导航后变化，不必像 pager 那样再靠 currentPage 补齐预组合副作用。)
     LaunchedEffect(currentRoute) {
         if (currentRoute != "bookkeeping") {
-            showDrawer = false
-            showKeypad = false
+            quickAddSurface = QuickAddSurface.Closed
             voiceActive = false
             voiceBookedCount = 0
             voiceConfirm = null
@@ -239,7 +260,7 @@ fun AppNavigation(app: RinklNoteApp) {
     LaunchedEffect(pendingQuickAdd) {
         val pending = pendingQuickAdd ?: return@LaunchedEffect
         navController.navigate("bookkeeping") { launchSingleTop = true }
-        showDrawer = true
+        quickAddSurface = QuickAddSurface.Drawer
         if (pending.categoryId != null) {
             // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
             quickAddVM.preselectCategory(pending.categoryId)
@@ -284,8 +305,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     }
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
-                    showDrawer = false
-                    showKeypad = false
+                    quickAddSurface = QuickAddSurface.Closed
                 }
                 is QuickAddEffect.FinalConfirmFailed -> {
                     Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
@@ -301,9 +321,16 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    // Back handler: dismiss drawer or keypad first
-    BackHandler(enabled = showDrawer) { showDrawer = false }
-    BackHandler(enabled = showKeypad) { showKeypad = false }
+    // Back handler：输入法返回抽屉；抽屉或过渡态直接关闭/回退。
+    BackHandler(enabled = quickAddSurface != QuickAddSurface.Closed) {
+        quickAddSurface = when (quickAddSurface) {
+            QuickAddSurface.Drawer -> QuickAddSurface.Closed
+            QuickAddSurface.Keypad -> QuickAddSurface.Keypad.onKeypadDismissed()
+            QuickAddSurface.DrawerToKeypad -> QuickAddSurface.Drawer
+            QuickAddSurface.KeypadToDrawer -> QuickAddSurface.Keypad
+            QuickAddSurface.Closed -> QuickAddSurface.Closed
+        }
+    }
 
     // 返回交给 NavHost 的返回栈处理：在 AI 或非首页 tab 按返回会 pop 回记账(start)，
     // 在记账页按返回交给系统默认。页面内的弹窗（预算键盘/月明细/余额弹窗等）
@@ -315,7 +342,7 @@ fun AppNavigation(app: RinklNoteApp) {
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            showKeypad = false
+            quickAddSurface = QuickAddSurface.Closed
             voiceActive = true
         } else {
             Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
@@ -327,7 +354,7 @@ fun AppNavigation(app: RinklNoteApp) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            showKeypad = false
+            quickAddSurface = QuickAddSurface.Closed
             voiceActive = true
         } else {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -338,7 +365,7 @@ fun AppNavigation(app: RinklNoteApp) {
     val endVoiceSession: () -> Unit = {
         voiceActive = false
         voiceTarget = VoiceTarget.QUICK_ADD
-        showDrawer = false
+        quickAddSurface = QuickAddSurface.Closed
         voiceBookedCount = 0
         voiceConfirm = null
         quickAddVM.reset()
@@ -515,28 +542,28 @@ fun AppNavigation(app: RinklNoteApp) {
 
         // QuickAdd Drawer overlay
         QuickAddDrawer(
-            isVisible = showDrawer,
+            isVisible = quickAddSurface.drawerVisible,
             viewModel = quickAddVM,
             // 有自选背景才给毛玻璃采样源：无背景时抽屉保持纯白实心（同 CustomBottomBar 的开关逻辑）。
             backgroundUri = appBackgroundUri,
             hazeState = hazeState.takeIf { appBackgroundUri != null },
             onDismiss = {
-                showDrawer = false
+                quickAddSurface = QuickAddSurface.Closed
                 voiceActive = false
                 quickAddVM.reset()
             },
             onBillAdded = { bookkeepingVM.onEvent(BookkeepingEvent.Refresh) },
             onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
             onAmountTap = {
-                showKeypad = true
                 quickAddVM.resetConfirming()
+                requestKeypad()
             }
         )
 
-        // Numeric keypad overlay — slides up from bottom
+        // Numeric keypad overlay — 抽屉退出后再从底部接棒。
         val quickAddState by quickAddVM.state.collectAsStateWithLifecycle()
         AnimatedVisibility(
-            visible = showKeypad,
+            visible = quickAddSurface.keypadVisible,
             enter = slideInVertically(
                 animationSpec = Motion.SheetEnter,
                 initialOffsetY = { it }
@@ -549,42 +576,36 @@ fun AppNavigation(app: RinklNoteApp) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable { showKeypad = false },
+                    .clickable { dismissKeypad() },
                 contentAlignment = Alignment.BottomCenter
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f), RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                        .padding(top = 20.dp, bottom = 16.dp)
-                        .clickable(enabled = false) {}
-                ) {
-                    NumericKeypad(
-                        amount = quickAddState.amount,
-                        billType = quickAddState.billType.value,
-                        remark = quickAddState.remark,
-                        onDigit = { quickAddVM.onEvent(QuickAddEvent.Digit(it)) },
-                        onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },
-                        onBackspace = { quickAddVM.onEvent(QuickAddEvent.Backspace) },
-                        onToggleType = { quickAddVM.onEvent(QuickAddEvent.ToggleType) },
-                        onRemarkClick = { showRemarkSheet = true },
-                        onConfirm = { quickAddVM.onEvent(QuickAddEvent.Confirm) }
-                    )
-                }
+                NumericKeypad(
+                    amount = quickAddState.amount,
+                    billType = quickAddState.billType.value,
+                    remark = quickAddState.remark,
+                    onDigit = { quickAddVM.onEvent(QuickAddEvent.Digit(it)) },
+                    onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },
+                    onBackspace = { quickAddVM.onEvent(QuickAddEvent.Backspace) },
+                    onToggleType = { quickAddVM.onEvent(QuickAddEvent.ToggleType) },
+                    onRemarkChange = {
+                        quickAddVM.onEvent(QuickAddEvent.RemarkChanged(it))
+                    },
+                    onConfirm = { quickAddVM.onEvent(QuickAddEvent.Confirm) },
+                    showTypeToggle = false,
+                    confirmEnabled = Money.parseMinor(quickAddState.amount) != null &&
+                        quickAddState.selectedCategory != null &&
+                        quickAddState.selectedAccount != null,
+                    contextItems = listOfNotNull(
+                        quickAddState.selectedCategory?.let {
+                            KeypadContextItem(it.name, categoryIconRes(it.name))
+                        },
+                        quickAddState.selectedAccount?.let {
+                            KeypadContextItem(it.name, accountIconRes(it.name))
+                        }
+                    ),
+                    hazeState = hazeState.takeIf { appBackgroundUri != null }
+                )
             }
-        }
-
-        // Remark bottom sheet — overlaid on top of the keypad so users can type a
-        // remark instead of (or in addition to) voice input.
-        if (showRemarkSheet) {
-            RemarkInputSheet(
-                initialText = quickAddState.remark,
-                onConfirm = { text ->
-                    showRemarkSheet = false
-                    quickAddVM.onEvent(QuickAddEvent.RemarkChanged(text))
-                },
-                onDismiss = { showRemarkSheet = false }
-            )
         }
 
         // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav

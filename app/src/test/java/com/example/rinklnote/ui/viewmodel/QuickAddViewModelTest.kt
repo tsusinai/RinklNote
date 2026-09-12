@@ -62,6 +62,22 @@ class QuickAddViewModelTest {
         return vm
     }
 
+    /** 手动记账必须由用户显式选择标签和账户，测试保存路径时先补齐两项。 */
+    private fun TestScope.newReadyVM(): QuickAddViewModel {
+        val vm = newVM()
+        vm.onEvent(QuickAddEvent.SelectCategory(repo.expenseCategories.value.first()))
+        vm.onEvent(QuickAddEvent.SelectAccount(accountRepo.accounts.value.first()))
+        return vm
+    }
+
+    @Test
+    fun `manual quick add starts without default category or account`() = runTest(dispatcher) {
+        val vm = newVM()
+
+        assertNull(vm.state.value.selectedCategory)
+        assertNull(vm.state.value.selectedAccount)
+    }
+
     @Test
     fun `digit backspace clear builds the amount string`() = runTest(dispatcher) {
         val vm = newVM()
@@ -84,7 +100,7 @@ class QuickAddViewModelTest {
 
     @Test
     fun `confirm saves the bill directly`() = runTest(dispatcher) {
-        val vm = newVM()
+        val vm = newReadyVM()
         vm.onEvent(QuickAddEvent.Digit("20"))
         vm.onEvent(QuickAddEvent.Confirm)
         advanceUntilIdle()
@@ -99,11 +115,30 @@ class QuickAddViewModelTest {
     fun `confirm without account saves nothing`() = runTest(dispatcher) {
         accountRepo.accounts.value = emptyList()
         val vm = newVM()
+        vm.onEvent(QuickAddEvent.SelectCategory(repo.expenseCategories.value.first()))
         vm.onEvent(QuickAddEvent.Digit("20"))
         vm.onEvent(QuickAddEvent.Confirm)
         advanceUntilIdle()
 
         assertEquals(0, repo.addedBills.size)
+        assertEquals(
+            QuickAddEffect.FinalConfirmFailed("请先选择账户"),
+            vm.effects.first()
+        )
+    }
+
+    @Test
+    fun `confirm without tag or account reports both missing`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEvent(QuickAddEvent.Digit("20"))
+        vm.onEvent(QuickAddEvent.Confirm)
+        advanceUntilIdle()
+
+        assertEquals(0, repo.addedBills.size)
+        assertEquals(
+            QuickAddEffect.FinalConfirmFailed("请先选择标签和账户"),
+            vm.effects.first()
+        )
     }
 
     @Test
@@ -117,7 +152,7 @@ class QuickAddViewModelTest {
 
     @Test
     fun `nlp local parse fills amount and category and saves`() = runTest(dispatcher) {
-        val vm = newVM() // api = null → local VoiceParser fallback
+        val vm = newReadyVM() // api = null → local VoiceParser fallback
         vm.onEvent(QuickAddEvent.NlpInput("午餐20元"))
         vm.onEvent(QuickAddEvent.NlpSubmit)
         advanceUntilIdle()
@@ -140,13 +175,13 @@ class QuickAddViewModelTest {
 
         val s = vm.state.value
         assertEquals("30", s.amount)
-        assertEquals("三餐", s.selectedCategory?.name)
+        assertNull(s.selectedCategory)
         assertEquals(0, repo.addedBills.size)
     }
 
     @Test
     fun `finalConfirm saves exactly one bill and releases the guard`() = runTest(dispatcher) {
-        val vm = newVM()
+        val vm = newReadyVM()
         vm.onEvent(QuickAddEvent.Digit("25"))
 
         vm.finalConfirm()
@@ -167,7 +202,7 @@ class QuickAddViewModelTest {
 
     @Test
     fun `resetConfirming clears a pending guard`() = runTest(dispatcher) {
-        val vm = newVM()
+        val vm = newReadyVM()
         vm.onEvent(QuickAddEvent.Digit("9"))
         vm.finalConfirm() // guard set, async save queued
         vm.resetConfirming() // Phase 1 fix: release before async completes

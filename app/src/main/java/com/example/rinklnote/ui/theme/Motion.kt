@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.IntOffset
 object Motion {
     // Durations (ms)
     const val DurationSheet = 250        // keypad & slide-up overlays
+    const val DurationDrawer = 240       // quick-add drawer enter / exit
     const val DurationIndicator = 300    // bottom bar indicator
     const val DurationChartDraw = 1000
     const val DurationChartUpdate = 500
@@ -25,15 +26,11 @@ object Motion {
 
     // Sheets / keypad: smooth tween in and out (no spring overshoot / bounce)
     val SheetEnter: FiniteAnimationSpec<IntOffset> = tween(DurationSheet, easing = IndicatorEasing)
-    val SheetExit: FiniteAnimationSpec<IntOffset> = tween(DurationSheet)
+    val SheetExit: FiniteAnimationSpec<IntOffset> = tween(DurationSheet, easing = IndicatorEasing)
 
-    // QuickAdd drawer (horizontal)
-    val DrawerEnter: FiniteAnimationSpec<IntOffset> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow
-    )
-    val DrawerExit: FiniteAnimationSpec<IntOffset> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow
-    )
+    // QuickAdd drawer (horizontal)：与输入法串行切换，固定时长便于精准接棒。
+    val DrawerEnter: FiniteAnimationSpec<IntOffset> = tween(DurationDrawer, easing = IndicatorEasing)
+    val DrawerExit: FiniteAnimationSpec<IntOffset> = tween(DurationDrawer, easing = IndicatorEasing)
 
     // Bottom nav indicator
     val Indicator: FiniteAnimationSpec<Dp> = tween(DurationIndicator, easing = IndicatorEasing)

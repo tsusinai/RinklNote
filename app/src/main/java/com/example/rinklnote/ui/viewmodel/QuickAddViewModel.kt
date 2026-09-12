@@ -116,7 +116,7 @@ class QuickAddViewModel(
                     val target = pending?.let { pid -> cats.firstOrNull { c -> c.id == pid } }
                     it.copy(
                         expenseCategories = cats,
-                        selectedCategory = target ?: it.selectedCategory ?: cats.firstOrNull()
+                        selectedCategory = target ?: it.selectedCategory
                     )
                 }
                 pendingPreselectId = null
@@ -132,7 +132,10 @@ class QuickAddViewModel(
         viewModelScope.launch {
             accountRepository.observeAccounts().collect { accounts ->
                 _state.update {
-                    it.copy(accounts = accounts, selectedAccount = defaultAccount(accounts))
+                    val selected = it.selectedAccount?.let { current ->
+                        accounts.firstOrNull { account -> account.id == current.id }
+                    }
+                    it.copy(accounts = accounts, selectedAccount = selected)
                 }
             }
         }
@@ -261,7 +264,7 @@ class QuickAddViewModel(
                 amount = p.amount ?: "",
                 billType = BillType.fromValue(type),
                 remark = p.remark ?: "",
-                selectedCategory = target ?: expectedCats.firstOrNull(),
+                selectedCategory = target,
                 selectedSubCategory = null,
                 showSubCategories = false,
                 expandedParentId = null,
@@ -296,7 +299,14 @@ class QuickAddViewModel(
     private fun confirm() {
         // One-step: keypad confirm saves immediately (anti-misclick two-phase removed).
         val s = _state.value
-        if (Money.parseMinor(s.amount) == null) return
+        if (Money.parseMinor(s.amount) == null) {
+            _effects.trySend(QuickAddEffect.FinalConfirmFailed("请输入金额"))
+            return
+        }
+        if (s.selectedCategory == null && s.selectedAccount == null) {
+            _effects.trySend(QuickAddEffect.FinalConfirmFailed("请先选择标签和账户"))
+            return
+        }
         if (s.selectedCategory == null) {
             _effects.trySend(QuickAddEffect.FinalConfirmFailed("请先选择分类"))
             return
@@ -580,8 +590,8 @@ class QuickAddViewModel(
             s.copy(
                 amount = "",
                 billType = BillType.EXPENSE,
-                selectedCategory = s.expenseCategories.firstOrNull(),
-                selectedAccount = defaultAccount(s.accounts),
+                selectedCategory = null,
+                selectedAccount = null,
                 remark = "",
                 showSubCategories = false,
                 expandedParentId = null,

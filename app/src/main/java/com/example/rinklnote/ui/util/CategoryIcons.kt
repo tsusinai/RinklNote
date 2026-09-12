@@ -16,3 +16,11 @@ fun categoryIconRes(name: String): Int = when (name) {
     "网购" -> R.drawable.ic_category_shopping
     else -> R.drawable.ic_category_meals
 }
+
+/** 账户名 → 图标 drawable resId，记账抽屉与输入法上下文共用。 */
+fun accountIconRes(name: String): Int = when (name) {
+    "微信" -> R.drawable.ic_wechat
+    "支付宝" -> R.drawable.ic_alipay
+    "默认" -> R.drawable.ic_default_account
+    else -> R.drawable.ic_default_account
+}

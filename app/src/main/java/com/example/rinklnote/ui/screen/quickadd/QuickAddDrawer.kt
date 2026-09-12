@@ -51,7 +51,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -78,18 +77,13 @@ import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
+import com.example.rinklnote.ui.util.accountIconRes
 import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.ui.util.rememberPressHaptics
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
-
-private fun accountIconRes(name: String): Int = when (name) {
-    "微信" -> R.drawable.ic_wechat
-    "支付宝" -> R.drawable.ic_alipay
-    "默认" -> R.drawable.ic_default_account
-    else -> R.drawable.ic_default_account
-}
 
 @Composable
 fun QuickAddDrawer(
@@ -108,10 +102,11 @@ fun QuickAddDrawer(
 
     // 面板材质：有自选背景 → 底部导航同款白雾毛玻璃（采样 AppBackground 的照片）；
     // 无背景 → 纯白实心（毛玻璃无从采样，会露灰调兜底色）。
+    val panelShape = RoundedCornerShape(18.dp)
     val panelSurface = if (hazeState != null) {
         Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
     } else {
-        Modifier.background(Color.White)
+        Modifier.background(MaterialTheme.colorScheme.surface)
     }
 
     AnimatedVisibility(
@@ -138,11 +133,12 @@ fun QuickAddDrawer(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
+                    .fillMaxHeight(0.88f)
                     .width(200.dp)
-                    .rinkShadow()
-                    .clip(RoundedCornerShape(topStart = 15.dp, bottomStart = 15.dp))
+                    .padding(vertical = 8.dp)
+                    .clip(panelShape)
                     .then(panelSurface)
+                    .then(applyCardGlass(panelShape))
                     .clickable(enabled = false) {} // consume click
                     .pointerInput(Unit) {
                         var dragOffset = 0f
@@ -164,7 +160,10 @@ fun QuickAddDrawer(
                     onDismiss = onDismiss,
                     onBillAdded = onBillAdded,
                     onVoiceInput = onVoiceInput,
-                    onAmountTap = onAmountTap
+                    onAmountTap = onAmountTap,
+                    onToggleType = {
+                        viewModel.onEvent(QuickAddEvent.ToggleType)
+                    }
                 )
             }
         }
@@ -177,7 +176,8 @@ private fun DrawerContent(
     onDismiss: () -> Unit,
     onBillAdded: () -> Unit,
     onVoiceInput: () -> Unit,
-    onAmountTap: () -> Unit
+    onAmountTap: () -> Unit,
+    onToggleType: () -> Unit
 ) {
     // Collect state once — children read from snapshot, no duplicate subscriptions
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -194,7 +194,7 @@ private fun DrawerContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         // 可滚动内容区
         Column(
@@ -205,11 +205,11 @@ private fun DrawerContent(
         ) {
             // Top bar
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 30.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("快捷记账", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Icon(
                     painter = painterResource(R.drawable.ic_register),
                     contentDescription = "登记",
@@ -246,22 +246,22 @@ private fun DrawerContent(
             Spacer(modifier = Modifier.height(17.dp))
 
             // Count area — single-step amount box
-            CountBefore(state, onAmountTap)
+            CountBefore(state, onAmountTap, onToggleType)
         }
 
         // AI Voice button — 固定在抽屉底部上方，不随内容滚动，避开底部手势区
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 34.dp),
+                .padding(top = 6.dp, bottom = 18.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .rinkShadow(CircleShape)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .then(applyCardGlass(CircleShape))
                     .clickable { onVoiceInput() },
                 contentAlignment = Alignment.Center
             ) {
@@ -282,12 +282,13 @@ private fun SuggestionSection(
     onUse: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
+            .clip(shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
+            .then(applyCardGlass(shape))
             .clickable { onUse() }
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -315,13 +316,13 @@ private fun TemplatesSection(
     templates: List<BillTemplate>,
     onTemplateClick: (BillTemplate) -> Unit
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(12.dp)
+            .clip(shape)
+            .then(applyCardGlass(shape))
+            .padding(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -337,7 +338,7 @@ private fun TemplatesSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onTemplateClick(template) }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -363,13 +364,13 @@ private fun CategorySection(
     selectedSubCategory: SubCategory?,
     viewModel: QuickAddViewModel
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(12.dp)
+            .clip(shape)
+            .then(applyCardGlass(shape))
+            .padding(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -433,7 +434,7 @@ private fun CategoryRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(vertical = 3.dp),
+            .padding(vertical = 1.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -513,13 +514,13 @@ private fun AccountSection(
     hidden: Boolean,
     viewModel: QuickAddViewModel
 ) {
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(12.dp)
+            .clip(shape)
+            .then(applyCardGlass(shape))
+            .padding(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -557,7 +558,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -588,9 +589,15 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
+private fun CountBefore(
+    state: QuickAddState,
+    onAmountTap: () -> Unit,
+    onToggleType: () -> Unit
+) {
     val isExpense = state.billType == BillType.EXPENSE
+    val haptics = rememberPressHaptics()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -600,10 +607,17 @@ private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
                 .height(36.dp)
-                .rinkShadow(RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
-                .then(applyCardGlass(RoundedCornerShape(15.dp)))
-                .clickable { onAmountTap() },
+                .clip(RoundedCornerShape(14.dp))
+                .then(applyCardGlass(RoundedCornerShape(14.dp)))
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onAmountTap,
+                    onLongClick = {
+                        haptics.longPress()
+                        onToggleType()
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             // 固定宽度 + 居中：金额位数增减时文本占位不变，数字不会横向跳动。
@@ -621,6 +635,12 @@ private fun CountBefore(state: QuickAddState, onAmountTap: () -> Unit) {
 
         Spacer(modifier = Modifier.height(4.dp))
         Text("点击输入金额", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "长按金额切换收支",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+        )
     }
 }
 

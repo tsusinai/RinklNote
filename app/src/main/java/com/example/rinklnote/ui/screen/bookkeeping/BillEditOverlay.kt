@@ -53,7 +53,6 @@ import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.component.RemarkInputSheet
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 
@@ -100,8 +99,6 @@ fun BillEditOverlay(
         mutableStateOf(accounts.firstOrNull { it.id == bill.accountId } ?: accounts.firstOrNull())
     }
     var remark by remember(bill.id) { mutableStateOf(bill.remark ?: "") }
-    var showRemark by remember { mutableStateOf(false) }
-
     // 二级分类：当前展开的一级分类 id、其下的列表、用户选中的二级分类。
     // 编辑已有带二级分类的账单时，预展开其所属一级分类，并在加载后按名字预选中对应二级。
     var expandedCategoryId by remember(bill.id) { mutableStateOf(if (bill.subCategoryName != null) bill.categoryId else null) }
@@ -221,21 +218,10 @@ fun BillEditOverlay(
                     onClear = { amount = "" },
                     onBackspace = { amount = amount.dropLast(1) },
                     onToggleType = { updateType(if (billType == BillType.EXPENSE.value) "INCOME" else "EXPENSE") },
-                    onRemarkClick = { showRemark = true },
+                    onRemarkChange = { remark = it },
                     onConfirm = ::confirmEdit
                 )
             }
-        }
-
-        if (showRemark) {
-            RemarkInputSheet(
-                initialText = remark,
-                onConfirm = { text ->
-                    showRemark = false
-                    remark = text
-                },
-                onDismiss = { showRemark = false }
-            )
         }
     }
 }
