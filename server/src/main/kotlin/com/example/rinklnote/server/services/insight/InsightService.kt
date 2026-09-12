@@ -137,9 +137,14 @@ class InsightService(
 ) {
     suspend fun dailyReport(userId: Long, dayStart: Long, dayEnd: Long): DailyReportResponse {
         val stats = billService.monthlyStats(userId, dayStart, dayEnd)
-        val today = java.time.LocalDate.now(SHANGHAI).toString()
+        // 报表标题跟随统计窗口的起始日：窗口是今天就叫「今日」，是别的日子直接报日期
+        // （调度器在早上推的是「昨天」的日报，标题不能写死「今日」）。
+        val reportDate = java.time.Instant.ofEpochMilli(dayStart).atZone(SHANGHAI).toLocalDate()
+        val isToday = reportDate == java.time.LocalDate.now(SHANGHAI)
+        val date = reportDate.toString()
+        val title = if (isToday) "✅ 今日账单总结" else "✅ $date 账单总结"
         val summary = buildString {
-            appendLine("✅ 今日账单总结")
+            appendLine(title)
             appendLine("支出: ￥${Money.format(stats.totalExpenseMinor)}")
             if (stats.totalIncomeMinor > 0) appendLine("收入: ￥${Money.format(stats.totalIncomeMinor)}")
             appendLine("共 ${stats.billCount} 笔")
@@ -151,7 +156,7 @@ class InsightService(
             }
         }
         return DailyReportResponse(
-            date = today,
+            date = date,
             totalExpenseMinor = stats.totalExpenseMinor,
             totalIncomeMinor = stats.totalIncomeMinor,
             expenseCategories = stats.topExpenseCategories.map { CategoryAmount(it.first, it.second) },

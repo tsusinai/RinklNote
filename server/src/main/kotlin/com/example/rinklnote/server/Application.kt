@@ -125,11 +125,12 @@ fun Application.module() {
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
+            // 日报统计「昨天」：推送发生在用户设定时刻（默认 09:00），当天刚开始、
+            // 几乎必然还没有账单——按今天算会让日报永远推不出来（2026-09-12 实测修复）。
             val zone = java.time.ZoneId.of("Asia/Shanghai")
             val now = java.time.ZonedDateTime.now(zone)
             val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
-            val dayEnd = now.toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val report = insightService.dailyReport(userId, dayStart, dayEnd)
+            val report = insightService.dailyReport(userId, dayStart - 86_400_000L, dayStart)
             if (report.totalExpense <= 0 && report.totalIncome <= 0) null
             else report.summary
         },
