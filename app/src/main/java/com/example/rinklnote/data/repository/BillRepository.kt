@@ -59,6 +59,7 @@ interface BillRepository {
     suspend fun deleteAccountByServerId(serverId: Long)
 
     suspend fun getSubCategories(parentId: Long): List<SubCategory>
+    suspend fun getAllSubCategories(): List<SubCategory>
     suspend fun getBudget(monthStart: Long): Budget?
     suspend fun upsertBudget(budget: Budget)
     suspend fun getUnsyncedBudgets(): List<Budget>

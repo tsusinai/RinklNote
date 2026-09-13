@@ -606,6 +606,7 @@ class BudgetViewModelTest {
         override suspend fun deleteAccountByServerId(serverId: Long) {}
         override suspend fun getSubCategories(parentId: Long): List<SubCategory> =
             subCategoriesByParent[parentId] ?: emptyList()
+        override suspend fun getAllSubCategories(): List<SubCategory> = emptyList()
 
         // 预算方法已迁至 BudgetRepository，此处保持旧接口兼容的空实现。
         override suspend fun getBudget(monthStart: Long): Budget? = null

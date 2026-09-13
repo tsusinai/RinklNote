@@ -473,18 +473,23 @@ class BillService {
 
     fun seedIfNeeded() {
         transaction {
-            if (CategoriesTable.selectAll().empty()) {
-                seedCategories()
-            }
+            // 幂等补齐一级分类：按 (name, bill_type) 查存在再插入，已存在的自动跳过。
+            // 既有库升级后在此补上新增分类，id 按列表顺序追加续排，与 App 端 seed 顺序逐字一致。
+            seedCategories()
             if (AccountsTable.selectAll().empty()) {
                 seedAccounts()
             }
-            // 幂等补齐二级分类：每次启动检查缺失项；既有库（子分类表非空时旧逻辑会跳过）也补全
+            // 幂等补齐二级分类：每次启动检查缺失项；既有库也补全（含老分类追加的新子项）
             seedSubCategories()
         }
     }
 
+    /** 完整一级分类。顺序即 id 顺序，必须与 App 端 BillRepositoryImpl.seedCategories() 逐字一致；
+     *  只允许追加，不许重排。 */
     private fun seedCategories() {
+        val existing = CategoriesTable.selectAll()
+            .map { it[CategoriesTable.name] to it[CategoriesTable.billType] }
+            .toSet()
         val expenseCategories = listOf(
             "三餐" to "meals",
             "日用" to "daily",
@@ -492,9 +497,21 @@ class BillService {
             "学习" to "study",
             "运动" to "sports",
             "娱乐" to "entertainment",
-            "网购" to "shopping"
+            "网购" to "shopping",
+            "医疗" to "medical",
+            "居家" to "home",
+            "人情" to "social",
+            "宠物" to "pet",
+            "美妆个护" to "beauty",
+            "服饰" to "clothing",
+            "母婴" to "baby",
+            "汽车" to "car",
+            "数码" to "digital",
+            "保险" to "insurance",
+            "旅行" to "travel"
         )
         expenseCategories.forEach { (name, icon) ->
+            if (name to "EXPENSE" in existing) return@forEach
             CategoriesTable.insert {
                 it[CategoriesTable.name] = name
                 it[CategoriesTable.iconName] = icon
@@ -506,9 +523,13 @@ class BillService {
             "工资" to "salary",
             "兼职" to "parttime",
             "理财" to "finance",
-            "其他" to "other"
+            "其他" to "other",
+            "报销" to "reimburse",
+            "二手转卖" to "resale",
+            "红包礼金" to "redpacket"
         )
         incomeCategories.forEach { (name, icon) ->
+            if (name to "INCOME" in existing) return@forEach
             CategoriesTable.insert {
                 it[CategoriesTable.name] = name
                 it[CategoriesTable.iconName] = icon
@@ -517,19 +538,35 @@ class BillService {
         }
     }
 
+    /** 完整二级分类。顺序即 id 顺序，必须与 App 端 seedSubCategories() 逐字一致；
+     *  只允许追加，不许重排（budgets.sub_category_id 引用此 id）。 */
     private fun seedSubCategories() {
         val subMap = mapOf(
-            "三餐" to listOf("早餐", "午餐", "晚餐", "零食"),
-            "交通" to listOf("公交", "地铁", "打车", "加油"),
-            "日用" to listOf("洗衣", "洗漱", "家居"),
-            "学习" to listOf("书籍", "文具", "培训"),
+            "三餐" to listOf("早餐", "午餐", "晚餐", "零食", "外卖", "饮品"),
+            "交通" to listOf("公交", "地铁", "打车", "加油", "停车费", "火车机票", "共享单车"),
+            "日用" to listOf("洗衣", "洗漱", "家居", "纸品清洁"),
+            "学习" to listOf("书籍", "文具", "培训", "考试", "课程"),
             "运动" to listOf("健身", "跑步", "球类"),
-            "娱乐" to listOf("电影", "游戏", "旅游"),
+            "娱乐" to listOf("电影", "游戏", "旅游", "演出", "KTV"),
             "网购" to listOf("淘宝", "京东", "快递"),
+            "医疗" to listOf("门诊", "药品", "体检", "口腔", "眼镜"),
+            "居家" to listOf("房租", "房贷", "物业", "水电燃气", "宽带"),
+            "人情" to listOf("红包礼金", "礼物", "请客", "随礼"),
+            "宠物" to listOf("粮食", "医疗", "用品", "洗护"),
+            "美妆个护" to listOf("护肤彩妆", "理发美发", "美容"),
+            "服饰" to listOf("衣裤", "鞋帽", "配饰"),
+            "母婴" to listOf("奶粉尿布", "玩具", "早教"),
+            "汽车" to listOf("加油", "保养维修", "保险", "洗车"),
+            "数码" to listOf("手机电脑", "配件", "软件会员"),
+            "保险" to listOf("社保商保", "车险"),
+            "旅行" to listOf("机票火车", "酒店", "景点门票"),
             "工资" to listOf("基本工资", "奖金", "补贴"),
             "兼职" to listOf("劳务", "项目", "其他"),
             "理财" to listOf("利息", "基金", "股票"),
-            "其他" to listOf("红包", "返还", "其他收入")
+            "其他" to listOf("红包", "返还", "其他收入"),
+            "报销" to listOf("差旅报销", "日常报销"),
+            "二手转卖" to listOf("闲置出售", "回款"),
+            "红包礼金" to listOf("收红包", "压岁钱", "礼金")
         )
         val existing = SubCategoriesTable.selectAll()
             .map { it[SubCategoriesTable.parentCategoryId] to it[SubCategoriesTable.name] }

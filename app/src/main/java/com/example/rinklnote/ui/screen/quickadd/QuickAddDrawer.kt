@@ -237,7 +237,7 @@ private fun DrawerContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.expandedParentId, state.subCategories, state.selectedSubCategory, viewModel)
+            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.expandedParentId, state.subCategories, state.selectedSubCategory, state.parentIdsWithSubs, viewModel)
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -362,6 +362,7 @@ private fun CategorySection(
     expandedParentId: Long?,
     subCategories: List<SubCategory>,
     selectedSubCategory: SubCategory?,
+    parentIdsWithSubs: Set<Long>,
     viewModel: QuickAddViewModel
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -391,6 +392,7 @@ private fun CategorySection(
             CategoryRow(
                 category = category,
                 isSelected = selectedCategory?.id == category.id,
+                hasSubCategories = category.id in parentIdsWithSubs,
                 onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
                 onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
             )
@@ -427,6 +429,7 @@ private fun CategorySection(
 private fun CategoryRow(
     category: Category,
     isSelected: Boolean,
+    hasSubCategories: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -447,6 +450,16 @@ private fun CategoryRow(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(category.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            // 有二级分类的行尾提示标记：长按呼出二级标签
+            if (hasSubCategories) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "···",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         }
         // Radio dot
         Box(

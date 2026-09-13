@@ -45,6 +45,7 @@ data class QuickAddState(
     val remark: String = "",
     val showSubCategories: Boolean = false,
     val expandedParentId: Long? = null,
+    val parentIdsWithSubs: Set<Long> = emptySet(),
     val templates: List<BillTemplate> = emptyList(),
     val nlpInput: String = "",
     val isParsing: Boolean = false,
@@ -143,6 +144,11 @@ class QuickAddViewModel(
             repository.observeTemplates().collect { templates ->
                 _state.update { it.copy(templates = templates) }
             }
+        }
+        viewModelScope.launch {
+            // 有二级分类的一级分类 id 集合：一次性加载，用于抽屉行尾「···」提示标记
+            val parentIds = repository.getAllSubCategories().mapTo(mutableSetOf()) { it.parentCategoryId }
+            _state.update { it.copy(parentIdsWithSubs = parentIds) }
         }
     }
 

@@ -204,27 +204,40 @@ class BillServiceTest {
     @Test
     fun `seed creates the full sub category set for all categories and is idempotent`() {
         val byName = service.getCategories().associateBy { it.name }
-        assertEquals(11, byName.size)
+        assertEquals(25, byName.size)
         fun subs(cat: String): List<String> =
             (byName[cat]?.subCategories ?: emptyList()).map { it.name }
 
-        assertEquals(listOf("早餐", "午餐", "晚餐", "零食"), subs("三餐"))
-        assertEquals(listOf("公交", "地铁", "打车", "加油"), subs("交通"))
-        assertEquals(listOf("洗衣", "洗漱", "家居"), subs("日用"))
-        assertEquals(listOf("书籍", "文具", "培训"), subs("学习"))
+        assertEquals(listOf("早餐", "午餐", "晚餐", "零食", "外卖", "饮品"), subs("三餐"))
+        assertEquals(listOf("公交", "地铁", "打车", "加油", "停车费", "火车机票", "共享单车"), subs("交通"))
+        assertEquals(listOf("洗衣", "洗漱", "家居", "纸品清洁"), subs("日用"))
+        assertEquals(listOf("书籍", "文具", "培训", "考试", "课程"), subs("学习"))
         assertEquals(listOf("健身", "跑步", "球类"), subs("运动"))
-        assertEquals(listOf("电影", "游戏", "旅游"), subs("娱乐"))
+        assertEquals(listOf("电影", "游戏", "旅游", "演出", "KTV"), subs("娱乐"))
         assertEquals(listOf("淘宝", "京东", "快递"), subs("网购"))
+        assertEquals(listOf("门诊", "药品", "体检", "口腔", "眼镜"), subs("医疗"))
+        assertEquals(listOf("房租", "房贷", "物业", "水电燃气", "宽带"), subs("居家"))
+        assertEquals(listOf("红包礼金", "礼物", "请客", "随礼"), subs("人情"))
+        assertEquals(listOf("粮食", "医疗", "用品", "洗护"), subs("宠物"))
+        assertEquals(listOf("护肤彩妆", "理发美发", "美容"), subs("美妆个护"))
+        assertEquals(listOf("衣裤", "鞋帽", "配饰"), subs("服饰"))
+        assertEquals(listOf("奶粉尿布", "玩具", "早教"), subs("母婴"))
+        assertEquals(listOf("加油", "保养维修", "保险", "洗车"), subs("汽车"))
+        assertEquals(listOf("手机电脑", "配件", "软件会员"), subs("数码"))
+        assertEquals(listOf("社保商保", "车险"), subs("保险"))
+        assertEquals(listOf("机票火车", "酒店", "景点门票"), subs("旅行"))
         assertEquals(listOf("基本工资", "奖金", "补贴"), subs("工资"))
         assertEquals(listOf("劳务", "项目", "其他"), subs("兼职"))
         assertEquals(listOf("利息", "基金", "股票"), subs("理财"))
         assertEquals(listOf("红包", "返还", "其他收入"), subs("其他"))
+        assertEquals(listOf("差旅报销", "日常报销"), subs("报销"))
+        assertEquals(listOf("闲置出售", "回款"), subs("二手转卖"))
+        assertEquals(listOf("收红包", "压岁钱", "礼金"), subs("红包礼金"))
 
         // Idempotent: a second seed pass must not duplicate any sub-category.
         service.seedIfNeeded()
         val again = service.getCategories().associateBy { it.name }
         fun subCount(cat: String): Int = (again[cat]?.subCategories ?: emptyList()).size
-        listOf("三餐", "交通", "日用", "学习", "运动", "娱乐", "网购", "工资", "兼职", "理财", "其他")
-            .forEach { assertEquals(subs(it).size, subCount(it)) }
+        byName.keys.forEach { assertEquals(subs(it).size, subCount(it)) }
     }
 }

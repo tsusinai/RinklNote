@@ -165,6 +165,7 @@ class BookkeepingViewModelTest {
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
         override suspend fun getSubCategories(parentId: Long): List<SubCategory> = emptyList()
+        override suspend fun getAllSubCategories(): List<SubCategory> = emptyList()
         override suspend fun getBudget(monthStart: Long): Budget? = null
         override suspend fun upsertBudget(budget: Budget) {}
         override suspend fun getUnsyncedBudgets(): List<Budget> = emptyList()

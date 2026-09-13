@@ -79,6 +79,18 @@ class QuickAddViewModelTest {
     }
 
     @Test
+    fun `parentIdsWithSubs loads for the subcategory hint marker`() = runTest(dispatcher) {
+        repo.allSubCategories = listOf(
+            SubCategory(name = "早餐", parentCategoryId = 1L),
+            SubCategory(name = "午餐", parentCategoryId = 1L),
+            SubCategory(name = "基本工资", parentCategoryId = 11L)
+        )
+        val vm = newVM()
+
+        assertEquals(setOf(1L, 11L), vm.state.value.parentIdsWithSubs)
+    }
+
+    @Test
     fun `digit backspace clear builds the amount string`() = runTest(dispatcher) {
         val vm = newVM()
         vm.onEvent(QuickAddEvent.Digit("1"))
@@ -258,6 +270,8 @@ class QuickAddViewModelTest {
         override suspend fun getAccountByServerId(serverId: Long): Account? = null
         override suspend fun deleteAccountByServerId(serverId: Long) {}
         override suspend fun getSubCategories(parentId: Long): List<SubCategory> = emptyList()
+        var allSubCategories: List<SubCategory> = emptyList()
+        override suspend fun getAllSubCategories(): List<SubCategory> = allSubCategories
         override suspend fun getBudget(monthStart: Long): Budget? = null
         override suspend fun upsertBudget(budget: Budget) {}
         override suspend fun getUnsyncedBudgets(): List<Budget> = emptyList()

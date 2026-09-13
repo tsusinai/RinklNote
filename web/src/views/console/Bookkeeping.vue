@@ -53,9 +53,15 @@ async function submit() {
   } finally { busy.value = false }
 }
 
-// 图标映射：iconName 字符串 → 简单首字符或 emoji；原 web 用 emoji 分类图标。保持轻量。
+// 图标映射：iconName 字符串 → emoji。键与服务端/App 端 seed 的 iconName 一致，未命中回退首字符。
 function icon(name: string): string {
-  const map: Record<string, string> = { food: '🍚', transport: '🚌', shop: '🛒', fun: '🎬', travel: '✈️', bill: '🧾', other: '📦' }
+  const map: Record<string, string> = {
+    meals: '🍚', daily: '🧴', transport: '🚌', study: '📚', sports: '🏋️',
+    entertainment: '🎬', shopping: '🛒', medical: '💊', home: '🏠', social: '🎁',
+    pet: '🐱', beauty: '💄', clothing: '👗', baby: '🍼', car: '🚗',
+    digital: '📱', insurance: '🛡️', travel: '✈️', salary: '💰', parttime: '💼',
+    finance: '📈', other: '📦', reimburse: '🧾', resale: '♻️', redpacket: '🧧',
+  }
   return map[name] ?? name[0] ?? '●'
 }
 function msgClass(m: string): string {

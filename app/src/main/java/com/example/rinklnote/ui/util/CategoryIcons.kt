@@ -21,6 +21,24 @@ fun categoryIconRes(name: String): Int = when (name) {
     "运动" -> R.drawable.ic_category_sports
     "娱乐" -> R.drawable.ic_category_entertainment
     "网购" -> R.drawable.ic_category_shopping
+    "医疗" -> R.drawable.ic_category_medical
+    "居家" -> R.drawable.ic_category_home
+    "人情" -> R.drawable.ic_category_social
+    "宠物" -> R.drawable.ic_category_pet
+    "美妆个护" -> R.drawable.ic_category_beauty
+    "服饰" -> R.drawable.ic_category_clothing
+    "母婴" -> R.drawable.ic_category_baby
+    "汽车" -> R.drawable.ic_category_car
+    "数码" -> R.drawable.ic_category_digital
+    "保险" -> R.drawable.ic_category_insurance
+    "旅行" -> R.drawable.ic_category_travel
+    "工资" -> R.drawable.ic_category_salary
+    "兼职" -> R.drawable.ic_category_parttime
+    "理财" -> R.drawable.ic_category_finance
+    "其他" -> R.drawable.ic_category_other
+    "报销" -> R.drawable.ic_category_reimburse
+    "二手转卖" -> R.drawable.ic_category_resale
+    "红包礼金" -> R.drawable.ic_category_redpacket
     else -> R.drawable.ic_category_meals
 }
 
