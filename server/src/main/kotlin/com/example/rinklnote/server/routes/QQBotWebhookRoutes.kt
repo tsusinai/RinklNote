@@ -2,6 +2,7 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
+import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQMessageProcessor
 import com.example.rinklnote.server.services.UserService
@@ -28,6 +29,8 @@ fun Route.qqBotWebhookRoutes(
 ) {
     val logger = LoggerFactory.getLogger("QQBotWebhook")
     val scope = CoroutineScope(Dispatchers.Default)
+    // op=13 可对任意输入产出合法 Ed25519 签名（签名预言机），按 IP 限流缩小可滥用窗口。
+    val urlVerifyLimiter = InMemoryRateLimiter(maxAttempts = 10, windowSeconds = 600)
 
     route("/api/qq/bot") {
         post("/webhook") {
@@ -41,6 +44,17 @@ fun Route.qqBotWebhookRoutes(
                 when (op) {
                     // URL verification
                     13 -> {
+                        val ip = call.request.local.remoteHost
+                        if (urlVerifyLimiter.isBlocked(ip)) {
+                            return@post call.respondText("""{"message":"too many requests"}""",
+                                ContentType.Application.Json, status = HttpStatusCode.TooManyRequests)
+                        }
+                        // 未配置 Bot 时 secret 不存在，验签/签名均无意义，直接拒绝而非抛异常落 409。
+                        if (!qqBotService.isConfigured()) {
+                            return@post call.respondText("""{"message":"bot not configured"}""",
+                                ContentType.Application.Json, status = HttpStatusCode.Forbidden)
+                        }
+
                         val d = json["d"]?.jsonObject
                             ?: return@post call.respondText("""{"message":"missing d"}""",
                                 ContentType.Application.Json)
@@ -52,11 +66,14 @@ fun Route.qqBotWebhookRoutes(
                             ?: return@post call.respondText("""{"message":"missing event_ts"}""",
                                 ContentType.Application.Json)
 
+                        urlVerifyLimiter.recordFailure(ip)
+
                         val toSign = (eventTs + plainToken).toByteArray(Charsets.UTF_8)
                         val signature = qqBotService.sign(toSign)
                         val signatureHex = signature.joinToString("") { "%02x".format(it) }
 
-                        logger.info("Webhook URL verification: plain_token=$plainToken, signature=$signatureHex")
+                        // plain_token 与签名不在日志中回显，避免日志读取者获得可用凭据。
+                        logger.info("Webhook URL verification succeeded (eventTs=$eventTs)")
 
                         call.respondText(
                             """{"plain_token":"$plainToken","signature":"$signatureHex"}""",
