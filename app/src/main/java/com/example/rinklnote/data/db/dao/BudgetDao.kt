@@ -31,6 +31,9 @@ interface BudgetDao {
     @Query("DELETE FROM budgets WHERE server_id = :serverId")
     suspend fun deleteByServerId(serverId: Long)
 
+    @Query("DELETE FROM budgets WHERE id = :id")
+    suspend fun hardDeleteById(id: Long)
+
     @Query("DELETE FROM budgets")
     suspend fun deleteAll()
 

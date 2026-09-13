@@ -87,6 +87,22 @@ class BudgetService {
             .map { it.toDTO() }
     }
 
+    /**
+     * 软删除一条预算（deleted = true，更新 updatedAt 供 LWW）。
+     * 与账单删除一致：不筛 deleted = 0，重复删除幂等返回 true（否则客户端会 404 重试循环）。
+     */
+    fun delete(userId: Long, id: Long): Boolean {
+        val now = System.currentTimeMillis()
+        return transaction {
+            BudgetsTable.update({
+                (BudgetsTable.id eq id) and (BudgetsTable.userId eq userId)
+            }) {
+                it[deleted] = true
+                it[updatedAt] = now
+            } > 0
+        }
+    }
+
     /** Create-or-update for a (user, month, category, sub-category) scope. Returns the current row. */
     fun upsert(
         userId: Long,

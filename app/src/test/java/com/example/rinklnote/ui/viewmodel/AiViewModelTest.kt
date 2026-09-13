@@ -384,6 +384,7 @@ class AiViewModelTest {
         override suspend fun deleteAccount(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgets(): List<BudgetDTO> = emptyList()
         override suspend fun upsertBudget(request: UpsertBudgetRequest): BudgetDTO = BudgetDTO(id = 0, monthStart = 0L, amountMinor = 0L, createdAt = 0L)
+        override suspend fun deleteBudget(id: Long): MessageResponse = MessageResponse("")
         override suspend fun getBudgetSummary(periodStart: Long): BudgetSummaryDTO =
             BudgetSummaryDTO(
                 periodStart = periodStart,

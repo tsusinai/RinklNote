@@ -292,4 +292,42 @@ class BudgetServiceTest {
         assertTrue(s.subCategoryBudgets.isEmpty())
         assertNull(s.lastMonthSurplus)
     }
+
+    // ---------- delete ----------
+
+    @Test
+    fun `delete soft deletes a budget and summary no longer sees it`() {
+        val start = monthStart("2026-09")
+        val created = service.upsert(1L, monthStart = start, amountMinor = 100000L)
+
+        val deleted = service.delete(1L, created.id)
+        assertTrue(deleted)
+
+        // 软删行仍在 list 中（带 deleted 标记，供客户端 pull 清理），但 summary 不再统计。
+        val row = service.list(1L).first { it.id == created.id }
+        assertTrue(row.deleted)
+        assertTrue(row.updatedAt != null)
+        assertNull(service.summary(1L, start).totalBudget)
+    }
+
+    @Test
+    fun `delete is idempotent for already deleted row`() {
+        val created = service.upsert(1L, monthStart = 100, amountMinor = 10000L)
+        assertTrue(service.delete(1L, created.id))
+        // 重复删除不返回 404 语义（否则客户端墓碑会陷入重试循环）。
+        assertTrue(service.delete(1L, created.id))
+    }
+
+    @Test
+    fun `delete is scoped per user`() {
+        val created = service.upsert(1L, monthStart = 100, amountMinor = 10000L)
+
+        assertTrue(!service.delete(2L, created.id))
+        assertTrue(!service.list(1L).first { it.id == created.id }.deleted)
+    }
+
+    @Test
+    fun `delete returns false for nonexistent id`() {
+        assertTrue(!service.delete(1L, 99999L))
+    }
 }

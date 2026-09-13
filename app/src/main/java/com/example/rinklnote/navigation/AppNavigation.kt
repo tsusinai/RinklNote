@@ -82,6 +82,7 @@ import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.login.LoginPage
+import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
@@ -96,6 +97,8 @@ import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
+import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
+import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
@@ -406,10 +409,54 @@ fun AppNavigation(app: RinklNoteApp) {
                 composable("plan") {
                     PlanScreen(
                         viewModel = budgetVM,
-                        isActive = currentRoute == "plan",
                         backgroundUri = appBackgroundUri,
-                        hazeState = hazeState
+                        hazeState = hazeState,
+                        onEditBudget = { navController.navigate("budget-edit") }
                     )
+                }
+                composable("budget-edit") {
+                    // bill-edit 同款：编辑目标走共享 VM 状态，路由无参数；target 未就绪前先不渲染。
+                    val editState by budgetVM.editState.collectAsStateWithLifecycle()
+                    if (editState.target != null) {
+                        BudgetEditScreen(
+                            state = editState,
+                            backgroundUri = appBackgroundUri,
+                            hazeState = hazeState.takeIf { appBackgroundUri != null },
+                            onCancel = {
+                                budgetVM.onEvent(BudgetEvent.CancelEdit)
+                                navController.popBackStack()
+                            },
+                            onDelete = {
+                                budgetVM.onEvent(BudgetEvent.DeleteBudget)
+                                budgetVM.onEvent(BudgetEvent.CancelEdit)
+                                navController.popBackStack()
+                            },
+                            onConfirm = { amountMinor ->
+                                // 确认后停留在编辑页，分析数据随 Flow 实时刷新。
+                                when (val target = editState.target) {
+                                    BudgetEditTarget.Total ->
+                                        budgetVM.onEvent(BudgetEvent.SetBudget(amountMinor))
+                                    is BudgetEditTarget.Category ->
+                                        budgetVM.onEvent(
+                                            BudgetEvent.SetBudget(amountMinor, categoryId = target.categoryId)
+                                        )
+                                    is BudgetEditTarget.SubCategory -> budgetVM.onEvent(
+                                        BudgetEvent.SetBudget(
+                                            amountMinor,
+                                            categoryId = target.parentCategoryId,
+                                            subCategoryId = target.subCategoryId
+                                        )
+                                    )
+                                    null -> Unit
+                                }
+                            },
+                            onBillClick = { bill ->
+                                // 账单联动：跳账单编辑页，保存/删除后返回预算页，数据经 Flow 自动刷新。
+                                bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                                navController.navigate("bill-edit")
+                            }
+                        )
+                    }
                 }
                 composable("bookkeeping") {
                     BookkeepingScreen(

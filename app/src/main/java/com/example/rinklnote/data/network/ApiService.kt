@@ -76,6 +76,9 @@ interface ApiService {
     @PUT("api/budgets")
     suspend fun upsertBudget(@Body request: UpsertBudgetRequest): BudgetDTO
 
+    @DELETE("api/budgets/{id}")
+    suspend fun deleteBudget(@Path("id") id: Long): MessageResponse
+
     @GET("api/budgets/summary")
     suspend fun getBudgetSummary(@Query("periodStart") periodStart: Long): BudgetSummaryDTO
 

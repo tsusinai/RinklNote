@@ -357,6 +357,213 @@ class BudgetViewModelTest {
         assertNull(vm.state.value.lastMonthSurplusMinor)
     }
 
+    // ---------- ViewModel：编辑页状态（EditBudget / CancelEdit / DeleteBudget） ----------
+
+    @Test
+    fun `editBudget fills edit state for total dimension`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 1000.0))
+        billRepo.bills.value = listOf(bill(1, 100.0, 1, "三餐"))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
+
+        val edit = vm.editState.value
+        assertTrue(edit.target is BudgetEditTarget.Total)
+        assertEquals(100000L, edit.existingAmountMinor)
+        assertEquals(10000L, edit.monthExpenseMinor)
+        // 剩余天数仅总额维度提供
+        assertTrue(edit.remainingDays != null)
+    }
+
+    @Test
+    fun `editBudget fills edit state for category dimension`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 300.0, categoryId = 1))
+        billRepo.bills.value = listOf(bill(1, 20.0, 1, "三餐"))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Category(1, "三餐")))
+
+        val edit = vm.editState.value
+        assertEquals(BudgetEditTarget.Category(1, "三餐"), edit.target)
+        assertEquals(30000L, edit.existingAmountMinor)
+        assertEquals(2000L, edit.monthExpenseMinor)
+        assertNull(edit.remainingDays)
+    }
+
+    @Test
+    fun `editBudget fills edit state for sub category dimension`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 80.0, categoryId = 1, subCategoryId = 11))
+        billRepo.bills.value = listOf(bill(1, 20.0, 1, "三餐", "午餐"))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.SubCategory(11, "午餐", 1, "三餐")))
+
+        val edit = vm.editState.value
+        assertEquals(BudgetEditTarget.SubCategory(11, "午餐", 1, "三餐"), edit.target)
+        assertEquals(8000L, edit.existingAmountMinor)
+        assertEquals(2000L, edit.monthExpenseMinor)
+    }
+
+    @Test
+    fun `editBudget treats zero amount category as unset`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        // 只设总额；三餐有支出 → 补全为 amountMinor = 0 的「未设」行
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 1000.0))
+        billRepo.bills.value = listOf(bill(1, 50.0, 1, "三餐"))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Category(1, "三餐")))
+
+        val edit = vm.editState.value
+        assertNull(edit.existingAmountMinor)
+        assertEquals(5000L, edit.monthExpenseMinor)
+    }
+
+    @Test
+    fun `cancelEdit clears edit state`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 300.0, categoryId = 1))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Category(1, "三餐")))
+        vm.onEvent(BudgetEvent.CancelEdit)
+
+        assertNull(vm.editState.value.target)
+    }
+
+    @Test
+    fun `deleteBudget soft deletes existing row and marks dirty`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 300.0, categoryId = 1))
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Category(1, "三餐")))
+        vm.onEvent(BudgetEvent.DeleteBudget)
+        advanceUntilIdle()
+
+        assertEquals(1, budgetRepo.upserted.size)
+        val tombstone = budgetRepo.upserted[0]
+        assertEquals(30000L, tombstone.amountMinor)
+        assertTrue(tombstone.deleted)
+        assertTrue(tombstone.dirty)
+        assertTrue(tombstone.updatedAt != null)
+        // 软删后派生状态不再包含该行（本月无其支出，也不会被补全）
+        assertTrue(vm.state.value.categoryBudgets.none { it.categoryId == 1L })
+    }
+
+    @Test
+    fun `deleteBudget is a no-op when dimension has no budget row`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        val vm = newVM()
+
+        vm.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Category(1, "三餐")))
+        vm.onEvent(BudgetEvent.DeleteBudget)
+        advanceUntilIdle()
+
+        assertTrue(budgetRepo.upserted.isEmpty())
+    }
+
+    // ---------- 编辑页分析派生（deriveEditState） ----------
+
+    @Test
+    fun `derive passes month bills through for edit analytics`() {
+        val bills = listOf(bill(1, 20.0, 1, "三餐"))
+        val result = deriveMonthBudget(emptyList(), bills, expenseCategories(), subCategories(), monthStart)
+        assertEquals(bills, result.monthBills)
+    }
+
+    @Test
+    fun `deriveEditState filters bills by category dimension and builds trend`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(
+            budgetRow(amount = 1000.0),
+            budgetRow(amount = 300.0, categoryId = 1)
+        )
+        billRepo.bills.value = listOf(
+            bill(1, 20.0, 1, "三餐", "午餐"),
+            bill(2, 30.0, 1, "三餐", "午餐"),
+            bill(3, 10.0, 2, "交通")
+        )
+        val vm = newVM()
+
+        val edit = deriveEditState(BudgetEditTarget.Category(1, "三餐"), vm.state.value, prevMonthSamePeriodMinor = 4000L)
+
+        assertEquals(30000L, edit.existingAmountMinor)
+        assertEquals(5000L, edit.monthExpenseMinor)
+        // 趋势只含该维度账单：午餐两笔 50 元落在月首日
+        val day = java.time.Instant.ofEpochMilli(monthStart)
+            .atZone(java.time.ZoneId.of("Asia/Shanghai")).toLocalDate().dayOfMonth
+        assertEquals(5000L, edit.dailyTrend.first { it.day == day }.amountMinor)
+        assertEquals(edit.elapsedDays, edit.dailyTrend.size)
+        // 构成：仅子分类「午餐」
+        assertEquals(1, edit.subBreakdown.size)
+        assertEquals("午餐", edit.subBreakdown[0].name)
+        assertEquals(5000L, edit.subBreakdown[0].amountMinor)
+        // 相关账单 2 笔，上月同期异步值透传
+        assertEquals(2, edit.billCount)
+        assertEquals(2, edit.recentBills.size)
+        assertEquals(4000L, edit.prevMonthSamePeriodMinor)
+        assertTrue(edit.remainingDays != null && edit.daysInMonth > 0)
+    }
+
+    @Test
+    fun `deriveEditState total dimension groups breakdown by category and caps recent bills`() {
+        val bills = (1L..15L).map { id -> bill(id, 1.0, 1, "三餐") }
+        val state = BudgetState(
+            totalBudget = budgetRow(amount = 1000.0),
+            monthExpenseMinor = 1500L,
+            monthBills = bills
+        )
+
+        val edit = deriveEditState(BudgetEditTarget.Total, state, prevMonthSamePeriodMinor = null)
+
+        assertEquals(100000L, edit.existingAmountMinor)
+        assertEquals(15, edit.billCount)
+        assertEquals(10, edit.recentBills.size)
+        // 最近在前：id 最大的排最前（同日按 id 倒序）
+        assertEquals(15L, edit.recentBills.first().id)
+        assertEquals(1, edit.subBreakdown.size)
+        assertEquals("三餐", edit.subBreakdown[0].name)
+        assertEquals(1500L, edit.subBreakdown[0].amountMinor)
+    }
+
+    @Test
+    fun `deriveEditState sub dimension filters by category and sub name`() {
+        val state = BudgetState(
+            categoryBudgets = listOf(
+                CategoryBudgetState(
+                    categoryId = 1,
+                    categoryName = "三餐",
+                    amountMinor = 5000L,
+                    expenseMinor = 5000L,
+                    subBudgets = listOf(
+                        SubCategoryBudgetState(subCategoryId = 11, name = "午餐", parentCategoryId = 1, amountMinor = 2000L, expenseMinor = 2000L)
+                    )
+                )
+            ),
+            monthBills = listOf(
+                bill(1, 20.0, 1, "三餐", "午餐"),
+                bill(2, 30.0, 1, "三餐", "晚餐"),
+                bill(3, 10.0, 2, "交通", "午餐"),
+                bill(4, 5.0, 1, "三餐", null)
+            )
+        )
+
+        val edit = deriveEditState(BudgetEditTarget.SubCategory(11, "午餐", 1, "三餐"), state, prevMonthSamePeriodMinor = null)
+
+        assertEquals(2000L, edit.existingAmountMinor)
+        assertEquals(2000L, edit.monthExpenseMinor)
+        // 只统计「三餐 · 午餐」的账单
+        assertEquals(1, edit.billCount)
+        assertEquals(1, edit.recentBills.size)
+        assertEquals(2000L, edit.recentBills[0].amountMinor)
+        // 子分类维度无构成卡
+        assertTrue(edit.subBreakdown.isEmpty())
+    }
+
     // ---------- fakes ----------
 
     private class FakeBillRepository : BillRepository {
