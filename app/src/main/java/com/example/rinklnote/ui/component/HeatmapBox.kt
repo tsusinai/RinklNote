@@ -2,7 +2,6 @@ package com.example.rinklnote.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.Blue40
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.ui.component.applyCardGlass
 import java.time.LocalDate
@@ -99,7 +99,7 @@ fun HeatmapBox(
     val interactionSource = remember { MutableInteractionSource() }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = Motion.Fade,
         label = "heatmap-chevron"
     )
 
@@ -149,7 +149,7 @@ fun HeatmapBox(
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "▾",
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.rotate(chevronRotation)
@@ -168,8 +168,8 @@ fun HeatmapBox(
 
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(animationSpec = tween(durationMillis = 220)),
-            exit = shrinkVertically(animationSpec = tween(durationMillis = 220))
+            enter = expandVertically(animationSpec = Motion.Expand),
+            exit = shrinkVertically(animationSpec = Motion.Expand)
         ) {
             Column {
                 Spacer(modifier = Modifier.padding(top = 4.dp))
@@ -181,7 +181,7 @@ fun HeatmapBox(
                             modifier = Modifier.weight(1f),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(it, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -235,7 +235,7 @@ fun HeatmapBox(
                                 ) {
                                     Text(
                                         text = day.toString(),
-                                        fontSize = 10.sp,
+                                        fontSize = 12.sp,
                                         color = textColor,
                                         fontWeight = if (day == todayDay) FontWeight.Bold else FontWeight.Normal
                                     )
@@ -255,7 +255,7 @@ fun HeatmapBox(
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "支出少",
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.padding(start = 4.dp))
@@ -273,7 +273,7 @@ fun HeatmapBox(
                     Spacer(modifier = Modifier.padding(start = 4.dp))
                     Text(
                         text = "支出多",
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

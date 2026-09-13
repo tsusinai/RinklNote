@@ -46,9 +46,9 @@ fun SettingsGroupCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .then(applyCardGlass(RoundedCornerShape(16.dp)))
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(vertical = 4.dp)
     ) {
         if (title != null) {

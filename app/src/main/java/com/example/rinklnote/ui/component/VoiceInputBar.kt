@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
 import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.VoiceRecorder
 import com.example.rinklnote.util.VoiceResult
@@ -209,7 +210,7 @@ fun VoiceInputBar(
         val pulse by rememberInfiniteTransition(label = "mic").animateFloat(
             initialValue = 1f,
             targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(Motion.DurationBreath), RepeatMode.Reverse),
             label = "pulse"
         )
         val micBg = when (phase) {
@@ -257,7 +258,7 @@ fun VoiceInputBar(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = previewText(preview),
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,

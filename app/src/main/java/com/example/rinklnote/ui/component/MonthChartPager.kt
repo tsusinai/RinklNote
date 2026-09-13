@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.domain.PieSlice
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
@@ -252,7 +253,7 @@ private fun PiePage(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         "${Money.format(slice.amount)}·${(slice.pct * 100).roundToInt()}%",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -297,7 +298,7 @@ private fun TrendPage(
 
     // 入场动画：单进度 0→1，重新进入本页时重放
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(chartType) { progress.animateTo(1f, tween(600)) }
+    LaunchedEffect(chartType) { progress.animateTo(1f, Motion.ChartUpdate) }
 
     Canvas(modifier = Modifier.fillMaxWidth().fillMaxSize().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)) {
         val n = values.size

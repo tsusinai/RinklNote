@@ -376,11 +376,11 @@ private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("已筛选：$label", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("已筛选：$label", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.weight(1f))
         Text(
             text = "清除",
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .clickable { onClear() }
@@ -416,7 +416,7 @@ private fun DetailRow(bill: Bill, onEditBill: (Bill) -> Unit) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = dateLabel,
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.width(8.dp))

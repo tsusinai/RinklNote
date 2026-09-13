@@ -89,10 +89,10 @@ internal fun PasswordDialog(viewModel: AuthViewModel, onDismiss: () -> Unit) {
                 val errorMsg = state.error
                 val successMsg = state.successMessage
                 if (errorMsg != null) {
-                    Text(errorMsg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(errorMsg, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                 }
                 if (successMsg != null) {
-                    Text(successMsg, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                    Text(successMsg, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
                 }
             }
         },
@@ -210,7 +210,7 @@ internal fun TimePickerDialog(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "%02d:%02d".format(selectedHour, selectedMinute),
-                    style = MaterialTheme.typography.headlineLarge,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(16.dp))

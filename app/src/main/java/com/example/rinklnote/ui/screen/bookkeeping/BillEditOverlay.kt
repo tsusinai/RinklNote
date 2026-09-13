@@ -57,6 +57,7 @@ import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -303,7 +304,7 @@ private fun EditTopBar(
             text = "编辑账单",
             modifier = Modifier.weight(1f),
             fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
 
@@ -373,7 +374,7 @@ private fun CategoryEditor(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "该标签暂无二级分类，可直接保存",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -486,11 +487,11 @@ private fun DateEditor(
                 )
                 Text(
                     text = if (selectedDate == today) "今天" else "点击打开日历",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text("选择日期", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            Text("选择日期", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -577,13 +578,14 @@ private fun SectionCard(
     hasCustomBackground: Boolean,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .rinkShadow(shape)
             .clip(shape)
             .then(sectionSurface(hasCustomBackground, shape))
-            .padding(10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         content = content
     )
 }
@@ -607,13 +609,13 @@ private fun SectionHeader(title: String, hint: String) {
     ) {
         Text(
             text = title,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
             text = hint,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

@@ -7,9 +7,6 @@ import android.annotation.SuppressLint
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -209,7 +206,7 @@ private fun DrawerContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                 Icon(
                     painter = painterResource(R.drawable.ic_register),
                     contentDescription = "登记",
@@ -282,7 +279,7 @@ private fun SuggestionSection(
     onUse: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -316,7 +313,7 @@ private fun TemplatesSection(
     templates: List<BillTemplate>,
     onTemplateClick: (BillTemplate) -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -329,8 +326,8 @@ private fun TemplatesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("快捷模板", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Text("一键记账", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("快捷模板", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text("一键记账", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(modifier = Modifier.height(8.dp))
         templates.forEach { template ->
@@ -365,7 +362,7 @@ private fun CategorySection(
     parentIdsWithSubs: Set<Long>,
     viewModel: QuickAddViewModel
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -378,8 +375,8 @@ private fun CategorySection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("标签", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-            Text("长按呼出二级标签", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("标签", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text("长按呼出二级标签", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -401,18 +398,8 @@ private fun CategorySection(
             // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
             AnimatedVisibility(
                 visible = visibleParentId == category.id && subCategories.isNotEmpty(),
-                enter = expandVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                ) + fadeIn(tween(200)),
-                exit = shrinkVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    )
-                ) + fadeOut(tween(150))
+                enter = expandVertically(animationSpec = Motion.Expand) + fadeIn(Motion.Fade),
+                exit = shrinkVertically(animationSpec = Motion.Expand) + fadeOut(Motion.Fade)
             ) {
                 SubCategoryPopup(
                     subCategories = subCategories,
@@ -527,7 +514,7 @@ private fun AccountSection(
     hidden: Boolean,
     viewModel: QuickAddViewModel
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -540,7 +527,7 @@ private fun AccountSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             Icon(
                 painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
                 contentDescription = if (hidden) "显示余额" else "隐藏余额",
@@ -646,10 +633,10 @@ private fun CountBefore(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
-        Text("点击输入金额", fontSize = 10.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("点击输入金额", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             "长按金额切换收支",
-            fontSize = 9.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
         )

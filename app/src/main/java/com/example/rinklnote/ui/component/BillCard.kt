@@ -49,6 +49,7 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.screen.bookkeeping.BillDragHost
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.toDateString
 
@@ -84,7 +85,7 @@ fun BillCard(
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .animateContentSize(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
+            .animateContentSize(animationSpec = Motion.ContentResize)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
@@ -251,7 +252,7 @@ internal fun BillRowContent(
                 if (!remark.isNullOrBlank()) {
                     Text(
                         text = remark,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Normal,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

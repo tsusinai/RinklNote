@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -43,12 +45,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -309,8 +311,8 @@ private fun CreateAccountContent(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = Money.formatPlain(parseBalanceInput(balanceInput) ?: 0L),
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -319,7 +321,7 @@ private fun CreateAccountContent(
             if (balanceError != null) {
                 Text(
                     text = balanceError,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
@@ -368,7 +370,7 @@ private fun AccountNameField(
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.32f), shape)
                 .border(1.dp, borderColor, shape)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            textStyle = MaterialTheme.typography.bodyLarge.copy(
+            textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 16.sp
             ),
@@ -454,7 +456,7 @@ private fun EditBalanceContent(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = Money.formatPlain(displayedBalance),
-                            fontSize = 28.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -479,9 +481,9 @@ private fun AccountPreviewCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .then(applyCardGlass(RoundedCornerShape(16.dp)))
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -497,7 +499,7 @@ private fun AccountPreviewCard(
             Text(
                 text = name,
                 fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
@@ -629,11 +631,11 @@ private fun AccountEditorTopBar(
             modifier = Modifier.align(Alignment.CenterStart)
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_chevron_right),
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
                 tint = LocalRinklColors.current.iconButtonColor
                     ?: MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.rotate(180f)
+                modifier = Modifier.size(24.dp)
             )
         }
         Text(

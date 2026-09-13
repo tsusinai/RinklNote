@@ -65,6 +65,7 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.BalancePrivacy
@@ -73,8 +74,6 @@ import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
 
 /**
@@ -83,9 +82,9 @@ import kotlinx.coroutines.launch
  * 风格对齐首页（Bookkeeping）毛玻璃气质，按 UI 设计规范执行：
  * - `Box` 根 + 渐变背景 + 装饰光斑（让毛玻璃有"模糊内容"，无照片也好用）；自选照片时由 nav 层整窗铺满。
  * - 悬浮顶栏（floating top bar）：左「对账」+ 居中「资产管理」+ 右「新建」；触摸目标 ≥ 44dp（IconButton）。
- * - 卡片 `rinkShadow` + `hazeEffect(CardFrostedStyle)` 毛玻璃（半透明 surface tint）+ 圆角（12/16dp 梯度）。
+ * - 卡片 `rinkShadow` + 1dp 边框（透明玻璃卡，照片透出）+ 统一 15dp 圆角。
  * - ⋮ 菜单用 `ModalBottomSheet`（明确分层浮层，不挡任何下方卡）。
- * - FAB 替代「+ 新建账户」卡：与首页加账单 FAB 同构（`rinkShadow` + `thin()` 毛玻璃 + 56dp 居中）。
+ * - FAB 替代「+ 新建账户」卡：与首页加账单 FAB 同构（`rinkShadow` + `RinklCardFrostedStyle` 毛玻璃 + 51dp 居中）。
  * - 余额编辑用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致）；其余弹窗用 `AlertDialog`。
  * - 间距全部落 4px 梯度（4/8/12/16/24/32dp），字号落梯度（12/14/16/20/30sp），圆角落梯度（8/12/16dp）。
  *
@@ -115,8 +114,8 @@ fun AssetsScreen(
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp = 36dp + 余量）。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 48.dp
+    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
     // 列表滚动后内容滑到顶栏下方，白色文字需要渐隐暗底兜住可读性。
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
@@ -136,8 +135,8 @@ fun AssetsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 顶栏是浮层：列表首项垫到它下面（不留整块空白）。
             item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
@@ -167,15 +166,15 @@ fun AssetsScreen(
             onAddAccount = onAddAccount
         )
 
-        // FAB：新建账户（与首页加账单 FAB 同款：rinkShadow + 毛玻璃 thin() + 56dp 触摸目标）。
+        // FAB：新建账户（与首页加账单 FAB 同款：rinkShadow + RinklCardFrostedStyle 毛玻璃 + 51dp）。
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
                 .rinkShadow(CircleShape)
-                .size(56.dp)
+                .size(51.dp)
                 .clip(CircleShape)
-                .hazeEffect(hazeState, HazeMaterials.thin())
+                .hazeEffect(hazeState, RinklCardFrostedStyle)
                 .clickable(onClick = onAddAccount),
             contentAlignment = Alignment.Center
         ) {
@@ -354,9 +353,10 @@ private fun TotalAssetsCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .then(applyCardGlass(RoundedCornerShape(16.dp)))
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -408,11 +408,11 @@ private fun AccountCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
-            .then(applyCardGlass(RoundedCornerShape(12.dp)))
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .clickable { currentOnClick() }
-            .padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AccountIcon(
@@ -430,7 +430,7 @@ private fun AccountCard(
         )
         Text(
             text = if (hidden) "***" else Money.formatPlain(account.balanceMinor),
-            fontSize = 20.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )

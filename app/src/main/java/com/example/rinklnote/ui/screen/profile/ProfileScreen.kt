@@ -60,6 +60,7 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AuthEvent
@@ -223,8 +224,8 @@ fun ProfileScreen(
     // ---------- 悬浮顶栏状态 ----------
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp = 36dp + 余量）。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 48.dp
+    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
     }
@@ -233,7 +234,6 @@ fun ProfileScreen(
         targetValue = if (backgroundUri != null || listScrolled) 1f else 0f,
         label = "profileTopBarScrim"
     )
-
     // ---------- 视图 ----------
     Box(modifier = Modifier.fillMaxSize()) {
         // 毛玻璃源：有自选照片时由 nav 层整窗铺满；无照片时本页铺纯白（公共 DefaultHazeBackground）。
@@ -244,8 +244,8 @@ fun ProfileScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 顶栏是浮层：列表首项垫到它下面（不留整块空白）。
             item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
@@ -446,9 +446,10 @@ private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .then(applyCardGlass(RoundedCornerShape(16.dp)))
-            .padding(20.dp),
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AvatarBadge(
@@ -475,7 +476,7 @@ private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
                 } else {
                     "登录后即可云端同步账单"
                 },
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             // 注册时间只有登录态才显示。

@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -48,7 +50,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -106,7 +107,7 @@ fun CustomThemeScreen(
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 52.dp
+    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
 
     /** 槽位当前生效色（未自定义时给的是该处默认色，便于用户看到「默认长什么样」）。 */
     fun resolved(slot: RinklThemeSlot): Color = when (slot) {
@@ -126,8 +127,8 @@ fun CustomThemeScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
 
@@ -236,13 +237,10 @@ private fun ThemeTopBar(
     ) {
         IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
             Icon(
-                // 项目里没有独立返回图标，用 chevron 旋转 180° 代替，与整体线条风格一致。
-                painter = painterResource(R.drawable.ic_chevron_right),
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
                 tint = textColor,
-                modifier = Modifier
-                    .size(22.dp)
-                    .rotate(180f)
+                modifier = Modifier.size(24.dp)
             )
         }
         Text(
@@ -308,7 +306,7 @@ private fun ColorDot(
                     for (col in 0..3) {
                         if ((row + col) % 2 == 0) {
                             drawRect(
-                                color = Color(0xFFCFCFCF),
+                                color = DefaultCardBorder,
                                 topLeft = Offset(col * cell, row * cell),
                                 size = Size(cell, cell)
                             )
@@ -334,7 +332,7 @@ private fun SlotRow(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -383,7 +381,7 @@ private fun PreviewCard() {
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text("午餐", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Text("公司楼下", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("公司楼下", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
                 "-¥28.00",
@@ -414,7 +412,7 @@ private fun PreviewCard() {
                     .background(MaterialTheme.colorScheme.primary)
                     .padding(horizontal = 14.dp, vertical = 7.dp)
             ) {
-                Text("按钮", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary)
+                Text("按钮", fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
@@ -447,7 +445,7 @@ private fun PresetThemeList(onApply: (PresetTheme) -> Unit) {
                     ColorDot(color = c, size = 22.dp)
                     Spacer(modifier = Modifier.width(6.dp))
                 }
-                Text("应用", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                Text("应用", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -538,7 +536,7 @@ private fun ColorPickerSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "透明（不描边）",
-                            fontSize = 15.sp,
+                            fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -548,7 +546,7 @@ private fun ColorPickerSheet(
                         )
                     }
                     if (transparent) {
-                        Text("已选", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("已选", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

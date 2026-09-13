@@ -3,6 +3,7 @@ package com.example.rinklnote.ui.screen.plan
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.theme.DarkIncomeGreen
+import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
@@ -102,7 +105,7 @@ fun PlanScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 14.dp)
         ) {
             // 顶栏是浮层：首项垫到它下面（不留整块空白）。
             Spacer(modifier = Modifier.height(topBarHeight))
@@ -122,7 +125,7 @@ fun PlanScreen(
                 LastMonthSurplusRow(surplusMinor = surplus)
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // 分类/子分类分层预算列表
             if (state.categoryBudgets.isEmpty()) {
@@ -235,6 +238,7 @@ private fun TotalBudgetCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .clickable { onClick() }
@@ -301,7 +305,7 @@ private fun TotalBudgetCard(
 
             Text(
                 text = "本月剩余 ${state.remainingDays} 天",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
@@ -318,15 +322,16 @@ private fun TotalBudgetCard(
     }
 }
 
-/** 上月结余行（Last Month Surplus）：仅展示，不结转；正数 primary 色，负数 error 色。 */
+/** 上月结余行（Last Month Surplus）：仅展示，不结转；正数=收入绿，负数 error 色。 */
 @Composable
 private fun LastMonthSurplusRow(surplusMinor: Long) {
     val sign = if (surplusMinor >= 0) "+" else "-"
-    val color = if (surplusMinor >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+    val color = if (surplusMinor >= 0) incomeGreen else MaterialTheme.colorScheme.error
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "上月结余 $sign${Money.format(abs(surplusMinor))}（仅展示）",
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = color
         )
     }
@@ -338,7 +343,7 @@ private fun EmptyCategoryGuide(onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(13.dp))
+            .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(vertical = 32.dp),
@@ -346,14 +351,14 @@ private fun EmptyCategoryGuide(onClick: () -> Unit) {
     ) {
         Text(
             text = "还没有任何预算",
-            fontSize = 15.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = "点击设置本月总额预算，或点分类单独设",
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
@@ -377,9 +382,9 @@ private fun CategoryBudgetCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(13.dp))
-            .clip(RoundedCornerShape(13.dp))
-            .then(applyCardGlass(RoundedCornerShape(13.dp)))
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
@@ -393,7 +398,7 @@ private fun CategoryBudgetCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = category.categoryName,
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -459,7 +464,7 @@ private fun SubCategoryBudgetRow(
     ) {
         Text(
             text = sub.name,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )

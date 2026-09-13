@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEditState
@@ -119,7 +120,7 @@ fun BudgetEditScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 14.dp)
             ) {
                 Spacer(modifier = Modifier.height(4.dp))
                 AmountCard(
@@ -138,7 +139,7 @@ fun BudgetEditScreen(
                 )
 
                 state.prevMonthSamePeriodMinor?.let { prev ->
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     CompareCard(
                         monthExpenseMinor = state.monthExpenseMinor,
                         prevMonthSamePeriodMinor = prev,
@@ -146,7 +147,7 @@ fun BudgetEditScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 TrendCard(
                     trend = state.dailyTrend,
                     monthExpenseMinor = state.monthExpenseMinor,
@@ -155,7 +156,7 @@ fun BudgetEditScreen(
                 )
 
                 if (state.subBreakdown.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     BreakdownCard(
                         breakdown = state.subBreakdown,
                         hasCustomBackground = hasCustomBackground
@@ -163,7 +164,7 @@ fun BudgetEditScreen(
                 }
 
                 if (state.recentBills.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     BillsCard(
                         bills = state.recentBills,
                         billCount = state.billCount,
@@ -275,7 +276,7 @@ private fun BudgetEditTopBar(
             text = title,
             modifier = Modifier.weight(1f),
             fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
 
@@ -302,7 +303,7 @@ private fun AmountCard(
     hasCustomBackground: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(15.dp)
     val over = existingAmountMinor != null && monthExpenseMinor > existingAmountMinor
     val progress = if (existingAmountMinor != null && existingAmountMinor > 0) {
         (monthExpenseMinor.toDouble() / existingAmountMinor).toFloat().coerceIn(0f, 1f)
@@ -313,10 +314,11 @@ private fun AmountCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .rinkShadow(shape)
             .clip(shape)
             .then(sectionSurface(hasCustomBackground, shape))
             .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -325,8 +327,8 @@ private fun AmountCard(
         ) {
             Text(
                 text = dimensionLabel(target),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
@@ -349,7 +351,7 @@ private fun AmountCard(
             Text(
                 text = displayAmount,
                 fontSize = 30.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
@@ -362,7 +364,7 @@ private fun AmountCard(
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = hintFor(target),
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
@@ -433,7 +435,7 @@ private fun StatusChip(existing: Long?, over: Boolean) {
     }
     Text(
         text = text,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
         color = color,
         modifier = Modifier
@@ -539,7 +541,7 @@ private fun BreakdownCard(
                 ) {
                     Text(
                         text = item.name,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                         maxLines = 1,
@@ -547,7 +549,7 @@ private fun BreakdownCard(
                     )
                     Text(
                         text = Money.format(item.amountMinor),
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -613,7 +615,7 @@ private fun BillsCard(
                     bill.remark?.takeIf { it.isNotBlank() }?.let { remark ->
                         Text(
                             text = remark,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -624,7 +626,7 @@ private fun BillsCard(
                     text = "-${Money.format(bill.amountMinor)}",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.tertiary
                 )
             }
         }
@@ -632,7 +634,7 @@ private fun BillsCard(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "仅显示最近 ${bills.size} 笔",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -650,12 +652,12 @@ private fun ContextRow(label: String, value: String, valueColor: Color? = null) 
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = value,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = valueColor ?: MaterialTheme.colorScheme.onSurface
         )
@@ -670,13 +672,14 @@ private fun SectionCard(
     hasCustomBackground: Boolean,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .rinkShadow(shape)
             .clip(shape)
             .then(sectionSurface(hasCustomBackground, shape))
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -685,14 +688,14 @@ private fun SectionCard(
         ) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
             hint?.let {
                 Text(
                     text = it,
-                    fontSize = 10.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

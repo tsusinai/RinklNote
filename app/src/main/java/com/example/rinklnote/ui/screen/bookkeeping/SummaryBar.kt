@@ -3,7 +3,6 @@ package com.example.rinklnote.ui.screen.bookkeeping
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
@@ -30,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.util.Money
 
 @SuppressLint("DefaultLocale")
@@ -48,7 +49,7 @@ fun SummaryBar(
     val interactionSource = remember { MutableInteractionSource() }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = Motion.Fade,
         label = "chevron"
     )
     val clickModifier = if (hasSummary) {
@@ -64,10 +65,11 @@ fun SummaryBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .then(clickModifier)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // 收入/支出合计行
         Row(
@@ -76,7 +78,7 @@ fun SummaryBar(
         ) {
             Text(
                 text = "${currentMonth}月：",
-                fontSize = 17.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -120,8 +122,8 @@ fun SummaryBar(
         // 有值时可点击卡片收回/展开；加载中但尚未有值时给出占位提示。
         AnimatedVisibility(
             visible = hasSummary && expanded,
-            enter = expandVertically(animationSpec = tween(durationMillis = 220)),
-            exit = shrinkVertically(animationSpec = tween(durationMillis = 220))
+            enter = expandVertically(animationSpec = Motion.Expand),
+            exit = shrinkVertically(animationSpec = Motion.Expand)
         ) {
             Column {
                 Spacer(modifier = Modifier.height(8.dp))

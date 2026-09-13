@@ -78,10 +78,10 @@ fun AiScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("AI 助手", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Text("AI 助手", fontSize = 20.sp, fontWeight = FontWeight.Medium)
         }
         if (!isLoggedIn) {
             Box(
@@ -115,7 +115,7 @@ fun AiScreen(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
         ) {
             items(messagesWithDay, key = { it.first.id }) { (msg, day, showDivider) ->
                 if (showDivider) {
@@ -134,7 +134,7 @@ fun AiScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onVoiceInput) {
@@ -178,7 +178,7 @@ fun AiScreen(
                                 if (state.input.isEmpty()) {
                                     Text(
                                         text = "输入记账或问题，如「午餐28元」",
-                                        fontSize = 13.sp,
+                                        fontSize = 14.sp,
                                         maxLines = 1,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -228,8 +228,8 @@ private fun ChatBubble(message: ChatMessage) {
         Box(
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .rinkShadow(RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
+                .rinkShadow(RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
@@ -278,15 +278,15 @@ private fun TypingBubble() {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Row(
             modifier = Modifier
-                .rinkShadow(RoundedCornerShape(18.dp))
-                .clip(RoundedCornerShape(18.dp))
+                .rinkShadow(RoundedCornerShape(15.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("帮你想一下…", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("帮你想一下…", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
