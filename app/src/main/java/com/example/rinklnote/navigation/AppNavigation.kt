@@ -514,6 +514,13 @@ fun AppNavigation(app: RinklNoteApp) {
                         expenseTotal = state.totalExpense,
                         incomeTotal = state.totalIncome,
                         monthDetail = state.monthDetail,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onEditBill = { bill ->
+                            // 账单联动：跳账单编辑页，保存/删除后返回月度详情，数据经 Flow 自动刷新。
+                            bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                            navController.navigate("bill-edit")
+                        },
                         onBack = { navController.popBackStack() }
                     )
                 }

@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,6 +68,13 @@ val PiePalette = listOf(
     Color(0xFFB0B0B0)
 )
 
+/** 切片取色：「其他」固定末位灰，真实分类按出现顺序取前 6 色——按下标直取会轮不到灰色。 */
+internal fun pieColor(slices: List<PieSlice>, index: Int): Color {
+    if (slices[index].name == "其他") return PiePalette.last()
+    val realIndex = slices.take(index).count { it.name != "其他" }
+    return PiePalette[realIndex % (PiePalette.size - 1)]
+}
+
 private enum class MonthChartTab(val label: String) { PIE("占比"), LINE("折线"), BAR("柱状") }
 
 /**
@@ -90,15 +99,17 @@ fun MonthChartPager(
 
     Column(
         modifier = modifier
-//            .padding(horizontal = 6.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .background(Color.Transparent)
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
     ) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(140.dp)
         ) { page ->
             when (page) {
                 0 -> PiePage(slices = pieSlices, selectedCategory = selectedCategory, onCategoryTap = onCategoryTap)
@@ -179,7 +190,7 @@ private fun PiePage(
                 slices.forEachIndexed { index, slice ->
                     val sweep = slice.pct * 360f
                     drawArc(
-                        color = PiePalette[index % PiePalette.size],
+                        color = pieColor(slices, index),
                         startAngle = startAngle,
                         sweepAngle = sweep,
                         useCenter = true,
@@ -205,12 +216,12 @@ private fun PiePage(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // 右：紧凑图例（色点·名称·金额·%），可点筛选
+        // 右：紧凑图例（色点·名称·金额·%），可点筛选。
+        // 高度随内容收缩、超出 pager 视口时可纵向滚动——固定高 + 居中排列会在分类多时把首尾行裁出视口。
         Column(
             modifier = Modifier
                 .weight(0.56f)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.Center
+                .verticalScroll(rememberScrollState())
         ) {
             slices.forEachIndexed { index, slice ->
                 val isSelected = selectedCategory == slice.name
@@ -227,7 +238,7 @@ private fun PiePage(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(PiePalette[index % PiePalette.size])
+                            .background(pieColor(slices, index))
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(

@@ -63,11 +63,22 @@ private fun heatRangeTotals(dailyExpense: Map<Int, Float>, daysInMonth: Int): Li
     return ranges.map { r -> r.fold(0f) { acc, d -> acc + (dailyExpense[d] ?: 0f) } }
 }
 
+/**
+ * 月度每日支出热力图（首页与月度详情共用）。
+ *
+ * @param onDetailClick 「明细」入口回调；传 null 隐藏入口（月度详情页本身就在明细里，无需再跳）
+ * @param initiallyExpanded 初始是否展开月历（首页默认收起；详情页作为选天工具默认展开）
+ * @param selectedDay 当前选中的日期（1 起始）；非空时格子加粗描边
+ * @param onDayTap 点选某天的回调；传 null 则格子不可点（首页只读）
+ */
 @Composable
 fun HeatmapBox(
     modifier: Modifier = Modifier,
     heatmap: MonthHeatmap,
-    onDetailClick: () -> Unit = {}
+    onDetailClick: (() -> Unit)? = null,
+    initiallyExpanded: Boolean = false,
+    selectedDay: Int? = null,
+    onDayTap: ((Int) -> Unit)? = null
 ) {
     val hotColor = Blue40
     // 缓存重计算：maxExpense / rangeTotals / rangeMax / today 只随 heatmap 变化，重组时不重复算。
@@ -83,8 +94,8 @@ fun HeatmapBox(
     val rangeTotals = remember(heatmap) { heatRangeTotals(heatmap.dailyExpense, heatmap.daysInMonth) }
     val rangeMax = remember(rangeTotals) { rangeTotals.maxOrNull()?.coerceAtLeast(1f) ?: 1f }
 
-    // 展开/收起：默认收回，点击标题区切换。
-    var expanded by remember { mutableStateOf(false) }
+    // 展开/收起：点击标题区切换。
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
     val interactionSource = remember { MutableInteractionSource() }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -144,13 +155,15 @@ fun HeatmapBox(
                     modifier = Modifier.rotate(chevronRotation)
                 )
             }
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "明细",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { onDetailClick() }
-            )
+            onDetailClick?.let { detail ->
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "明细",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { detail() }
+                )
+            }
         }
 
         AnimatedVisibility(
@@ -191,20 +204,33 @@ fun HeatmapBox(
                                 val bg = lerp(EmptyBlue, hotColor, intensity)
                                 val textColor =
                                     if (intensity > 0.55f) Color.White else MaterialTheme.colorScheme.onSurface
+                                val dayTap = onDayTap
+                                val isSelected = dayTap != null && selectedDay == day
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(CELL_ASPECT_RATIO)
                                         .padding(2.dp)
                                         .then(
-                                            if (day == todayDay) Modifier.border(
-                                                1.dp,
-                                                MaterialTheme.colorScheme.primary,
-                                                cellShape
-                                            ) else Modifier
+                                            when {
+                                                isSelected -> Modifier.border(
+                                                    2.dp,
+                                                    MaterialTheme.colorScheme.primary,
+                                                    cellShape
+                                                )
+                                                day == todayDay -> Modifier.border(
+                                                    1.dp,
+                                                    MaterialTheme.colorScheme.primary,
+                                                    cellShape
+                                                )
+                                                else -> Modifier
+                                            }
                                         )
                                         .clip(cellShape)
-                                        .background(bg),
+                                        .background(bg)
+                                        .then(
+                                            if (dayTap != null) Modifier.clickable { dayTap(day) } else Modifier
+                                        ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
