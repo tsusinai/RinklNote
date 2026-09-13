@@ -48,6 +48,21 @@ fun Route.budgetRoutes(budgetService: BudgetService) {
                     )
                 )
             }
+
+            delete("/{id}") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@delete call.respond(HttpStatusCode.Unauthorized)
+
+                val budgetId = call.parameters["id"]?.toLongOrNull()
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
+
+                val deleted = budgetService.delete(userId, budgetId)
+                if (deleted) {
+                    call.respond(mapOf("message" to "已删除"))
+                } else {
+                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "预算不存在"))
+                }
+            }
         }
     }
 }

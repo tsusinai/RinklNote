@@ -226,25 +226,45 @@ class SyncManager(
         }
     }
 
-    /** Upload a single local budget (non-blocking, called after SetBudget) */
+    /** Upload a single local budget (non-blocking, called after SetBudget/delete). */
     suspend fun pushBudget(budget: Budget) = syncMutex.withLock {
-        val dao = budgetDao ?: return@withLock
         try {
-            if (!budget.deleted) {
-                val dto = api.upsertBudget(
-                    UpsertBudgetRequest(
-                        monthStart = budget.monthStart,
-                        amountMinor = budget.amountMinor,
-                        periodType = budget.periodType,
-                        categoryId = budget.categoryId,
-                        subCategoryId = budget.subCategoryId
-                    )
-                )
-                dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
-            }
+            pushOneBudget(budget)
         } catch (_: Exception) {
             // Will be pushed on next full sync
         }
+    }
+
+    /**
+     * Push one budget, branching on its state (must be called while holding [syncMutex]):
+     *  - deleted   → DELETE server-side (soft), then hard-delete the local tombstone
+     *  - otherwise → PUT upsert, then record the server id
+     */
+    private suspend fun pushOneBudget(budget: Budget) {
+        val dao = budgetDao ?: return
+        if (budget.deleted) {
+            val serverId = budget.serverId
+            if (serverId == null) {
+                // Never pushed to the server — nothing to soft-delete remotely,
+                // so purge the local tombstone immediately (otherwise it lingers
+                // forever as an unsynced deleted row).
+                dao.hardDeleteById(budget.id)
+                return
+            }
+            api.deleteBudget(serverId)
+            dao.hardDeleteById(budget.id)
+            return
+        }
+        val dto = api.upsertBudget(
+            UpsertBudgetRequest(
+                monthStart = budget.monthStart,
+                amountMinor = budget.amountMinor,
+                periodType = budget.periodType,
+                categoryId = budget.categoryId,
+                subCategoryId = budget.subCategoryId
+            )
+        )
+        dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
     }
 
     /** Budgets are few in number → push all unsynced, pull everything, merge by LWW. */
@@ -254,24 +274,18 @@ class SyncManager(
         // Push unsynced (server_id IS NULL OR dirty = 1)
         dao.getUnsynced().forEach { budget ->
             try {
-                if (!budget.deleted) {
-                    val dto = api.upsertBudget(
-                        UpsertBudgetRequest(
-                            monthStart = budget.monthStart,
-                            amountMinor = budget.amountMinor,
-                            periodType = budget.periodType,
-                            categoryId = budget.categoryId,
-                            subCategoryId = budget.subCategoryId
-                        )
-                    )
-                    dao.updateServerId(budget.id, dto.id, dto.updatedAt ?: dto.createdAt)
-                }
+                pushOneBudget(budget)
             } catch (_: Exception) {}
         }
 
         // Pull all + last-write-wins merge
         try {
             api.getBudgets().forEach { dto ->
+                if (dto.deleted) {
+                    // 服务端已删除：本地直接清掉对应行（与账单行为一致，不留陈旧墓碑）。
+                    dao.deleteByServerId(dto.id)
+                    return@forEach
+                }
                 val serverTime = dto.updatedAt ?: dto.createdAt
                 val local = dao.getByServerId(dto.id)
                 if (local == null) {
@@ -284,7 +298,7 @@ class SyncManager(
                             categoryId = dto.categoryId,
                             subCategoryId = dto.subCategoryId,
                             updatedAt = serverTime,
-                            deleted = dto.deleted,
+                            deleted = false,
                             dirty = false
                         )
                     )
@@ -299,7 +313,7 @@ class SyncManager(
                                 categoryId = dto.categoryId,
                                 subCategoryId = dto.subCategoryId,
                                 updatedAt = serverTime,
-                                deleted = dto.deleted,
+                                deleted = false,
                                 dirty = false
                             )
                         )

@@ -1,10 +1,6 @@
 package com.example.rinklnote.ui.screen.plan
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,14 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,11 +38,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.DefaultHazeBackground
-import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
-import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetState
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
@@ -61,45 +52,31 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import kotlin.math.abs
 
-/** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时记录，键盘确认后按维度 SetBudget）。 */
-private sealed interface BudgetEditTarget {
-    data object Total : BudgetEditTarget
-    data class Category(val categoryId: Long) : BudgetEditTarget
-    data class SubCategory(val subCategoryId: Long, val parentCategoryId: Long) : BudgetEditTarget
-}
-
 /**
  * 计划/预算页（Plan）—— 月度预算管理。
  *
  * 风格深度对齐首页（Bookkeeping）：
  * - `Box` 根 + 渐变背景作毛玻璃（haze）blur 源；自选照片时由 nav 层整窗铺满。
  * - 悬浮顶栏（floating top bar）：极简，仅居中「计划」标题（tab 内页无返回键，左右留空）+ scrim 渐隐。
- * - 卡片 `rinkShadow` + `hazeEffect(RinklCardFrostedStyle)` 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
- * - 预算键盘 overlay 用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致），而非裸 `if` 硬切换。
+ * - 卡片 `rinkShadow` + 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
  *
- * 业务不变量：ViewModel 的 `State`/`Event` 不动；[BudgetEditTarget] 密封类型表达三级编辑目标（总额/分类/子分类）。
+ * 编辑流：点击总额卡/分类行/子分类行 → 派发 [BudgetEvent.EditBudget] 填充共享编辑状态 →
+ * [onEditBudget] 跳转独立路由 `budget-edit`（bill-edit 同款），金额输入/删除都在编辑页完成。
  *
  * @param viewModel 预算页 ViewModel
- * @param isActive 当前 tab 是否激活；离开时收起预算键盘（避免 pager 预组合留存）
  * @param backgroundUri nav 层透传的自选背景照片 URI；`null` 时本页自铺渐变
  * @param hazeState nav 层透传的毛玻璃状态
+ * @param onEditBudget 跳转预算编辑页（导航层注入）
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
 fun PlanScreen(
     viewModel: BudgetViewModel,
-    isActive: Boolean = true,
     backgroundUri: String?,
-    hazeState: HazeState
+    hazeState: HazeState,
+    onEditBudget: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var editTarget by remember { mutableStateOf<BudgetEditTarget?>(null) }
-
-    // 离开「计划」页（横向 pager 滑走/点其他 tab）时收起预算键盘，否则局部 remember 状态
-    // 会随 pager 预组合留存，返回时键盘依旧存在（与 QuickAdd 键盘离开记账页被重置一致）。
-    LaunchedEffect(isActive) {
-        if (!isActive) editTarget = null
-    }
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -133,7 +110,10 @@ fun PlanScreen(
             // 顶部：总额预算卡片
             TotalBudgetCard(
                 state = state,
-                onClick = { editTarget = BudgetEditTarget.Total }
+                onClick = {
+                    viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
+                    onEditBudget()
+                }
             )
 
             // 上月结余（仅展示，不结转）
@@ -146,7 +126,10 @@ fun PlanScreen(
 
             // 分类/子分类分层预算列表
             if (state.categoryBudgets.isEmpty()) {
-                EmptyCategoryGuide()
+                EmptyCategoryGuide(onClick = {
+                    viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
+                    onEditBudget()
+                })
             } else {
                 LazyColumn(
                     state = listState,
@@ -158,9 +141,26 @@ fun PlanScreen(
                     items(state.categoryBudgets, key = { it.categoryId }) { category ->
                         CategoryBudgetCard(
                             category = category,
-                            onClick = { editTarget = BudgetEditTarget.Category(category.categoryId) },
+                            onClick = {
+                                viewModel.onEvent(
+                                    BudgetEvent.EditBudget(
+                                        BudgetEditTarget.Category(category.categoryId, category.categoryName)
+                                    )
+                                )
+                                onEditBudget()
+                            },
                             onSubClick = { sub ->
-                                editTarget = BudgetEditTarget.SubCategory(sub.subCategoryId, sub.parentCategoryId)
+                                viewModel.onEvent(
+                                    BudgetEvent.EditBudget(
+                                        BudgetEditTarget.SubCategory(
+                                            subCategoryId = sub.subCategoryId,
+                                            subCategoryName = sub.name,
+                                            parentCategoryId = sub.parentCategoryId,
+                                            parentCategoryName = category.categoryName
+                                        )
+                                    )
+                                )
+                                onEditBudget()
                             }
                         )
                     }
@@ -174,45 +174,6 @@ fun PlanScreen(
             hasBackground = backgroundUri != null,
             listScrolled = listScrolled
         )
-
-        // 全屏键盘 overlay 用上滑进入（与快加键盘一致的 SheetEnter/Exit），而非裸 if 硬切换
-        AnimatedVisibility(
-            visible = editTarget != null,
-            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
-            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
-        ) {
-            val target = editTarget
-            if (target != null) {
-                BudgetKeypadOverlay(
-                    title = when (target) {
-                        BudgetEditTarget.Total -> "设置本月预算"
-                        is BudgetEditTarget.Category -> "设置分类预算"
-                        is BudgetEditTarget.SubCategory -> "设置子分类预算"
-                    },
-                    hint = when (target) {
-                        BudgetEditTarget.Total -> "请输入本月预算金额"
-                        is BudgetEditTarget.Category -> "请输入该分类本月预算金额"
-                        is BudgetEditTarget.SubCategory -> "请输入该子分类本月预算金额"
-                    },
-                    initialAmount = editInitialAmount(state, target),
-                    onConfirm = { amount ->
-                        editTarget = null
-                        viewModel.onEvent(
-                            when (target) {
-                                BudgetEditTarget.Total -> BudgetEvent.SetBudget(amount)
-                                is BudgetEditTarget.Category -> BudgetEvent.SetBudget(amount, categoryId = target.categoryId)
-                                is BudgetEditTarget.SubCategory -> BudgetEvent.SetBudget(
-                                    amount,
-                                    categoryId = target.parentCategoryId,
-                                    subCategoryId = target.subCategoryId
-                                )
-                            }
-                        )
-                    },
-                    onDismiss = { editTarget = null }
-                )
-            }
-        }
     }
 }
 
@@ -258,27 +219,11 @@ private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: 
     }
 }
 
-/** 编辑目标当前金额（已有则预填，未设则为空）。 */
-private fun editInitialAmount(state: BudgetState, target: BudgetEditTarget): String {
-    val amount = when (target) {
-        BudgetEditTarget.Total -> state.totalBudget?.amountMinor
-        is BudgetEditTarget.Category ->
-            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }?.amountMinor
-        is BudgetEditTarget.SubCategory ->
-            state.categoryBudgets
-                .firstOrNull { it.categoryId == target.parentCategoryId }
-                ?.subBudgets
-                ?.firstOrNull { it.subCategoryId == target.subCategoryId }
-                ?.amountMinor
-    }
-    return amount?.let { Money.toYuanInputString(it) } ?: ""
-}
-
 /**
  * 本月总额预算卡（Total Budget Card）：白底 + 毛玻璃。
  *
- * - 未设预算：显示「设置」入口；点击进键盘。
- * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算/百分比 + 剩余天数；
+ * - 未设预算：显示「设置」入口；点击跳预算编辑页。
+ * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算 + 百分比 + 剩余天数；
  *   超预算时进度条转 error 色并显示超额金额。
  */
 @Composable
@@ -302,7 +247,8 @@ private fun TotalBudgetCard(
         ) {
             Text("本月预算", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             if (budget == null) {
-                Text("设置", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                // 未设预算：主色「设置 ›」入口，比原纯文本更有点击暗示。
+                Text("设置 ›", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
             } else {
                 Text(
                     text = Money.format(budget.amountMinor),
@@ -336,11 +282,20 @@ private fun TotalBudgetCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "已花 $spentText / 预算 $budgetText ($percent%)",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            // 已花/预算与百分比左右分列：百分比独立加粗，超支时转 error 色更醒目。
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = "已花 $spentText / 预算 $budgetText",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "$percent%",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                )
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -377,21 +332,29 @@ private fun LastMonthSurplusRow(surplusMinor: Long) {
     }
 }
 
-/** 无分类预算时的空态引导（empty state guide）：提示「点击分类设置预算」。 */
+/** 无分类预算时的空态引导（empty state guide）：点击直达总额预算编辑。 */
 @Composable
-private fun EmptyCategoryGuide() {
-    Box(
+private fun EmptyCategoryGuide(onClick: () -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
-            .background(MaterialTheme.colorScheme.surface),
-        contentAlignment = Alignment.Center
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable { onClick() }
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "点击分类设置预算",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 32.dp)
+            text = "还没有任何预算",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "点击设置本月总额预算，或点分类单独设",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -444,16 +407,26 @@ private fun CategoryBudgetCard(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = if (category.amountMinor > 0) currencyText(category.amountMinor) else "未设",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (category.amountMinor > 0) {
-                    if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
+            if (category.amountMinor > 0) {
+                Text(
+                    text = currencyText(category.amountMinor),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                // 未设预算：主色调小胶囊引导（比原灰字「未设」更醒目、更有可点暗示）。
+                Text(
+                    text = "未设 · 去设置",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
         }
 
         category.subBudgets.forEach { sub ->
@@ -566,86 +539,3 @@ private fun BudgetProgressBar(
 private fun currencyText(value: Long): String =
     Money.toYuanInputString(value)
 
-/**
- * 预算键盘全屏 overlay（Budget Keypad Overlay）：上滑进入，编辑三级预算目标。
- *
- * - 标题/提示文案按 [BudgetEditTarget] 维度切换（总额/分类/子分类）。
- * - 复用 [NumericKeypad]（与快加键盘同款），隐藏类型切换与备注入口（预算无类型/备注）。
- * - 确认按维度派发 [BudgetEvent.SetBudget]；返回键（[BackHandler]）= 取消。
- *
- * @param initialAmount 已有预算预填，未设则为空串
- * @param onConfirm `(amount)` 回调
- */
-@Composable
-private fun BudgetKeypadOverlay(
-    title: String,
-    hint: String,
-    initialAmount: String,
-    onConfirm: (Long) -> Unit,
-    onDismiss: () -> Unit
-) {
-    BackHandler { onDismiss() }
-
-    var amount by remember { mutableStateOf(initialAmount) }
-
-    fun confirmEdit() {
-        val minor = Money.parseMinor(amount) ?: return
-        onConfirm(minor)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(title, fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            TextButton(onClick = onDismiss) {
-                Text("取消", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = hint,
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 20.dp)
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
-                .padding(top = 12.dp, bottom = 16.dp)
-        ) {
-            NumericKeypad(
-                amount = amount,
-                billType = "EXPENSE",
-                remark = "",
-                onDigit = { digit ->
-                    amount = when {
-                        digit == "." -> if (amount.isEmpty()) "0." else if (amount.contains(".")) amount else amount + digit
-                        amount == "0" -> digit // replace leading zero
-                        else -> amount + digit
-                    }
-                },
-                onClear = { amount = "" },
-                onBackspace = { amount = amount.dropLast(1) },
-                onToggleType = {},
-                showTypeToggle = false,
-                showRemark = false,
-                onConfirm = ::confirmEdit
-            )
-        }
-    }
-}

@@ -14,6 +14,7 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
+import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -78,6 +79,8 @@ data class BudgetState(
     val monthExpenseMinor: Long = 0L,
     val categoryBudgets: List<CategoryBudgetState> = emptyList(),
     val lastMonthSurplusMinor: Long? = null,
+    /** 本月全部账单（编辑页分析按维度过滤派生）。 */
+    val monthBills: List<Bill> = emptyList(),
     val monthStart: Long = getMonthStart(),
     val isLoading: Boolean = false
 ) {
@@ -105,6 +108,53 @@ data class BudgetState(
         }
 }
 
+/** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时构造，独立编辑页按维度取数与落库）。 */
+sealed interface BudgetEditTarget {
+    data object Total : BudgetEditTarget
+    data class Category(val categoryId: Long, val categoryName: String) : BudgetEditTarget
+    data class SubCategory(
+        val subCategoryId: Long,
+        val subCategoryName: String,
+        val parentCategoryId: Long,
+        val parentCategoryName: String
+    ) : BudgetEditTarget
+}
+
+/** 单日支出（分），日支出趋势图数据点。 */
+@androidx.compose.runtime.Immutable
+data class DailySpend(val day: Int, val amountMinor: Long)
+
+/** 构成占比条目（总额维度=一级分类构成；分类维度=子分类构成）。 */
+@androidx.compose.runtime.Immutable
+data class SubBreakdown(val name: String, val amountMinor: Long)
+
+/**
+ * 预算编辑页状态（与月度派生状态 [BudgetState] 分离，避免预算 Flow 每次发射牵动编辑页重组）。
+ * `existingAmountMinor == null` 表示该维度未设预算（新设流程，无删除入口）。
+ * 分析字段全部由 [deriveEditState] 从当月账单整数分本地派生；prevMonthSamePeriodMinor 异步补齐。
+ */
+@androidx.compose.runtime.Immutable
+data class BudgetEditState(
+    val target: BudgetEditTarget? = null,
+    val existingAmountMinor: Long? = null,
+    val monthExpenseMinor: Long = 0L,
+    /** 剩余天数（含今天）。 */
+    val remainingDays: Int? = null,
+    /** 本月已过天数（含今天，业务时区）。 */
+    val elapsedDays: Int = 0,
+    /** 本月总天数。 */
+    val daysInMonth: Int = 0,
+    /** 本月每日支出（1..elapsedDays，仅该维度相关账单）。 */
+    val dailyTrend: List<DailySpend> = emptyList(),
+    /** 上月同期已花（分）；`null` = 尚未加载完成。 */
+    val prevMonthSamePeriodMinor: Long? = null,
+    /** 构成占比（总额→一级分类；分类→子分类；子分类维度为空）。 */
+    val subBreakdown: List<SubBreakdown> = emptyList(),
+    /** 该维度本月相关账单（最近在前，最多 10 笔），点击可跳账单编辑。 */
+    val recentBills: List<Bill> = emptyList(),
+    val billCount: Int = 0
+)
+
 sealed interface BudgetEvent {
     /** categoryId / subCategoryId 均为 null = 设总额预算；仅 categoryId = 设分类预算；两者都在 = 设子分类预算。 */
     data class SetBudget(
@@ -112,13 +162,23 @@ sealed interface BudgetEvent {
         val categoryId: Long? = null,
         val subCategoryId: Long? = null
     ) : BudgetEvent
+
+    /** 进入独立编辑页：按目标维度填充 [BudgetEditState]（同步派生，无异步间隙）。 */
+    data class EditBudget(val target: BudgetEditTarget) : BudgetEvent
+
+    /** 退出编辑页：清空编辑状态。 */
+    data object CancelEdit : BudgetEvent
+
+    /** 删除当前编辑目标已设的预算（软删 + 尽力推送墓碑）。 */
+    data object DeleteBudget : BudgetEvent
 }
 
 /** deriveMonthBudget 的纯派生结果。 */
 internal data class MonthBudgetDerivation(
     val totalBudget: Budget?,
     val monthExpenseMinor: Long,
-    val categoryBudgets: List<CategoryBudgetState>
+    val categoryBudgets: List<CategoryBudgetState>,
+    val monthBills: List<Bill>
 )
 
 /**
@@ -204,7 +264,90 @@ internal fun deriveMonthBudget(
     return MonthBudgetDerivation(
         totalBudget = total,
         monthExpenseMinor = monthExpense,
-        categoryBudgets = budgetedCategories + completedCategories
+        categoryBudgets = budgetedCategories + completedCategories,
+        monthBills = bills
+    )
+}
+
+/** 维度 → 本月相关支出账单：总额=全部支出；分类=按 categoryId；子分类=categoryId + 子分类名（名称匹配口径与 deriveMonthBudget 一致）。 */
+private fun billsForScope(bills: List<Bill>, target: BudgetEditTarget): List<Bill> = when (target) {
+    BudgetEditTarget.Total -> bills.filter { it.billType == BillType.EXPENSE }
+    is BudgetEditTarget.Category -> bills.filter { it.billType == BillType.EXPENSE && it.categoryId == target.categoryId }
+    is BudgetEditTarget.SubCategory -> bills.filter {
+        it.billType == BillType.EXPENSE &&
+            it.categoryId == target.parentCategoryId &&
+            it.subCategoryName == target.subCategoryName
+    }
+}
+
+/** 按名称聚合构成占比（整数分求和，降序取前 6）。 */
+private fun groupBreakdown(bills: List<Bill>, key: (Bill) -> String): List<SubBreakdown> =
+    bills.groupBy(key)
+        .mapValues { (_, list) -> list.sumOf { it.amountMinor } }
+        .entries.sortedByDescending { it.value }
+        .take(6)
+        .map { SubBreakdown(it.key, it.value) }
+
+/**
+ * 纯函数：编辑目标 + 月度派生状态 → 编辑页完整状态（预填金额、每日趋势、构成占比、相关账单）。
+ * 独立可测；prevMonthSamePeriodMinor 由调用方传入（VM 异步补齐后重放）。
+ */
+internal fun deriveEditState(
+    target: BudgetEditTarget,
+    state: BudgetState,
+    prevMonthSamePeriodMinor: Long?
+): BudgetEditState {
+    val today = LocalDate.now(bookkeepingZone())
+    val elapsedDays = today.dayOfMonth
+    val daysInMonth = today.lengthOfMonth()
+    val scopeBills = billsForScope(state.monthBills, target)
+
+    val dayAmounts = scopeBills
+        .groupBy { Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth }
+        .mapValues { (_, list) -> list.sumOf { it.amountMinor } }
+    val dailyTrend = (1..elapsedDays).map { day -> DailySpend(day, dayAmounts[day] ?: 0L) }
+
+    val breakdown = when (target) {
+        BudgetEditTarget.Total -> groupBreakdown(scopeBills) { it.categoryName }
+        is BudgetEditTarget.Category -> groupBreakdown(scopeBills) { it.subCategoryName ?: "无子分类" }
+        is BudgetEditTarget.SubCategory -> emptyList()
+    }
+
+    val existing = when (target) {
+        BudgetEditTarget.Total -> state.totalBudget?.amountMinor?.takeIf { it > 0 }
+        is BudgetEditTarget.Category ->
+            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }
+                ?.amountMinor?.takeIf { it > 0 }
+        is BudgetEditTarget.SubCategory ->
+            state.categoryBudgets
+                .firstOrNull { it.categoryId == target.parentCategoryId }
+                ?.subBudgets?.firstOrNull { it.subCategoryId == target.subCategoryId }
+                ?.amountMinor?.takeIf { it > 0 }
+    }
+    val expenseMinor = when (target) {
+        BudgetEditTarget.Total -> state.monthExpenseMinor
+        is BudgetEditTarget.Category ->
+            state.categoryBudgets.firstOrNull { it.categoryId == target.categoryId }?.expenseMinor ?: 0L
+        is BudgetEditTarget.SubCategory ->
+            state.categoryBudgets
+                .firstOrNull { it.categoryId == target.parentCategoryId }
+                ?.subBudgets?.firstOrNull { it.subCategoryId == target.subCategoryId }?.expenseMinor ?: 0L
+    }
+
+    // 账单按日期倒序（同日按 id 倒序），取最近 10 笔供联动编辑。
+    val sorted = scopeBills.sortedWith(compareByDescending<Bill> { it.date }.thenByDescending { it.id })
+    return BudgetEditState(
+        target = target,
+        existingAmountMinor = existing,
+        monthExpenseMinor = expenseMinor,
+        remainingDays = daysInMonth - elapsedDays + 1,
+        elapsedDays = elapsedDays,
+        daysInMonth = daysInMonth,
+        dailyTrend = dailyTrend,
+        prevMonthSamePeriodMinor = prevMonthSamePeriodMinor,
+        subBreakdown = breakdown,
+        recentBills = sorted.take(10),
+        billCount = sorted.size
     )
 }
 
@@ -221,6 +364,10 @@ class BudgetViewModel(
 
     private val _state = MutableStateFlow(BudgetState())
     val state: StateFlow<BudgetState> = _state.asStateFlow()
+
+    /** 编辑页状态（bill-edit 同款：编辑目标经共享 VM 传递，路由本身无参数）。 */
+    private val _editState = MutableStateFlow(BudgetEditState())
+    val editState: StateFlow<BudgetEditState> = _editState.asStateFlow()
 
     /** 子分类参考数据（seed 后基本不变），供子分类预算按名称匹配账单。 */
     private val _subCategories = MutableStateFlow<List<SubCategory>>(emptyList())
@@ -273,13 +420,19 @@ class BudgetViewModel(
             ) { budgets, bills, categories, subCategories ->
                 deriveMonthBudget(budgets, bills, categories, subCategories, monthStart)
             }.collect { derivation ->
-                _state.update {
-                    it.copy(
+                _state.update { cur ->
+                    cur.copy(
                         totalBudget = derivation.totalBudget,
                         monthExpenseMinor = derivation.monthExpenseMinor,
                         categoryBudgets = derivation.categoryBudgets,
+                        monthBills = derivation.monthBills,
                         isLoading = false
                     )
+                }
+                // 编辑页开着时随最新数据实时刷新分析（账单联动编辑后不陈旧）。
+                _editState.update { cur ->
+                    val target = cur.target ?: return@update cur
+                    deriveEditState(target, _state.value, cur.prevMonthSamePeriodMinor)
                 }
             }
         }
@@ -288,6 +441,52 @@ class BudgetViewModel(
     fun onEvent(event: BudgetEvent) {
         when (event) {
             is BudgetEvent.SetBudget -> setBudget(event.amountMinor, event.categoryId, event.subCategoryId)
+            is BudgetEvent.EditBudget -> editBudget(event.target)
+            BudgetEvent.CancelEdit -> _editState.value = BudgetEditState()
+            BudgetEvent.DeleteBudget -> deleteBudget()
+        }
+    }
+
+    /** 编辑目标 → (categoryId, subCategoryId) 数据库维度。 */
+    private fun BudgetEditTarget.scope(): Pair<Long?, Long?> = when (this) {
+        BudgetEditTarget.Total -> null to null
+        is BudgetEditTarget.Category -> categoryId to null
+        is BudgetEditTarget.SubCategory -> parentCategoryId to subCategoryId
+    }
+
+    /**
+     * 进入编辑页：从当前派生状态同步取数（预填金额 + 分析），无异步间隙，
+     * 导航立即就能渲染出完整页面。上月同期对比异步补齐，就绪后原位刷新。
+     */
+    private fun editBudget(target: BudgetEditTarget) {
+        _editState.value = deriveEditState(target, _state.value, prevMonthSamePeriodMinor = null)
+        viewModelScope.launch {
+            val prevStart = getMonthStart(-1)
+            val curStart = getMonthStart()
+            // 「上月同期」= 上月 1 日起，与本月初至今等长的窗口（业务时区月起点，整数分求和）。
+            val elapsed = (System.currentTimeMillis() - curStart).coerceAtLeast(0L)
+            val prevExpense = repository.getTotalExpense(prevStart, prevStart + elapsed)
+            _editState.update { cur ->
+                if (cur.target == target) cur.copy(prevMonthSamePeriodMinor = prevExpense) else cur
+            }
+        }
+    }
+
+    /** 删除当前编辑目标已设的预算：软删落库（deleted=1, dirty=1）并尽力推送墓碑。 */
+    private fun deleteBudget() {
+        val target = _editState.value.target ?: return
+        val monthStart = getMonthStart()
+        viewModelScope.launch {
+            val (categoryId, subCategoryId) = target.scope()
+            val existing = budgetRepository.findBudgetByScope(monthStart, categoryId, subCategoryId)
+                ?: return@launch
+            val tombstone = existing.copy(
+                deleted = true,
+                dirty = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            budgetRepository.upsertBudget(tombstone)
+            syncManager?.let { launch { it.pushBudget(tombstone) } }
         }
     }
 
