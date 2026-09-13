@@ -15,6 +15,7 @@ import kotlinx.serialization.Serializable
 data class CreateAccountRequest(
     val name: String,
     val iconColor: String,
+    val iconKey: String = "WALLET",
     // 新字段（分，权威值）；旧客户端只发 balance 时回退。
     val balanceMinor: Long? = null,
     // 旧字段（元），仅供回退。
@@ -25,6 +26,7 @@ data class CreateAccountRequest(
 data class UpdateAccountRequest(
     val name: String? = null,
     val iconColor: String? = null,
+    val iconKey: String? = null,
     // 新字段（分，权威值）；旧客户端只发 balance 时回退。
     val balanceMinor: Long? = null,
     // 旧字段（元），仅供回退。
@@ -44,7 +46,13 @@ fun Route.accountRoutes(billService: BillService) {
                 val balanceMinor = if (body.balanceMinor == null && body.balance == null) 0L
                 else Money.resolveBalanceMinor(body.balanceMinor, body.balance)
                 try {
-                    val dto = billService.createAccount(userId, body.name, body.iconColor, balanceMinor)
+                    val dto = billService.createAccount(
+                        userId = userId,
+                        name = body.name,
+                        iconColor = body.iconColor,
+                        iconKey = body.iconKey,
+                        balanceMinor = balanceMinor
+                    )
                     call.respond(HttpStatusCode.Created, dto)
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "请求不合法")))
@@ -55,23 +63,31 @@ fun Route.accountRoutes(billService: BillService) {
                 val id = call.parameters["id"]?.toLongOrNull()
                     ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "无效ID"))
                 val body = call.receive<UpdateAccountRequest>()
-                val dto = billService.renameAccount(id, userId, body.name ?: "", body.iconColor ?: "")
-                if (dto == null) {
-                    return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账户不存在"))
-                }
-                if (body.balanceMinor != null || body.balance != null) {
-                    val balanceMinor = try {
+                val balanceMinor = if (body.balanceMinor != null || body.balance != null) {
+                    try {
                         Money.resolveBalanceMinor(body.balanceMinor, body.balance)
                     } catch (e: IllegalArgumentException) {
                         return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "余额不合法")))
                     }
-                    if (balanceMinor < 0) {
-                        return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "余额不能为负"))
-                    }
-                    billService.updateAccountBalance(id, balanceMinor, userId)
+                } else {
+                    null
                 }
-                val fresh = billService.accountsFor(userId).firstOrNull { it.id == id } ?: dto
-                call.respond(fresh)
+                val dto = try {
+                    billService.updateAccount(
+                        id = id,
+                        userId = userId,
+                        name = body.name,
+                        iconColor = body.iconColor,
+                        iconKey = body.iconKey,
+                        balanceMinor = balanceMinor
+                    )
+                } catch (e: IllegalArgumentException) {
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "请求不合法")))
+                }
+                if (dto == null) {
+                    return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账户不存在"))
+                }
+                call.respond(dto)
             }
             delete("/{id}") {
                 val userId = call.userId()

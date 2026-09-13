@@ -65,6 +65,7 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
+import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -77,7 +78,6 @@ import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
-import com.example.rinklnote.ui.util.accountIconRes
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.util.rememberPressHaptics
 import com.example.rinklnote.util.Money
@@ -563,11 +563,10 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(accountIconRes(account.name)),
-                contentDescription = account.name,
-                modifier = Modifier.size(23.dp),
-                tint = Color.Unspecified
+            AccountIcon(
+                iconKey = account.iconKey,
+                colorHex = account.iconColor,
+                size = 30.dp
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)

@@ -44,7 +44,8 @@ import dev.chrisbanes.haze.hazeEffect
 
 data class KeypadContextItem(
     val label: String,
-    val iconRes: Int
+    val iconRes: Int,
+    val iconTint: Color? = null
 )
 
 @Composable
@@ -81,6 +82,11 @@ fun NumericKeypad(
             .fillMaxWidth()
             .clip(panelShape)
             .then(panelSurface)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            )
             .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = bottomPadding),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -248,7 +254,7 @@ private fun ContextChip(item: KeypadContextItem) {
             painter = painterResource(item.iconRes),
             contentDescription = item.label,
             modifier = Modifier.size(16.dp),
-            tint = Color.Unspecified
+            tint = item.iconTint ?: Color.Unspecified
         )
         Text(
             text = item.label,

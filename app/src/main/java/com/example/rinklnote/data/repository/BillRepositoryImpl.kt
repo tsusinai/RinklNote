@@ -282,9 +282,9 @@ internal class BillRepositoryImpl(
 
     private suspend fun seedAccounts() {
         val accounts = listOf(
-            Account(name = "微信", iconColor = "#28C145"),
-            Account(name = "支付宝", iconColor = "#06B4FD"),
-            Account(name = ACCOUNT_BUCKET_NAME, iconColor = "#F97D1D"),
+            Account(name = "微信", iconColor = "#28C145", iconKey = "WECHAT"),
+            Account(name = "支付宝", iconColor = "#06B4FD", iconKey = "ALIPAY"),
+            Account(name = ACCOUNT_BUCKET_NAME, iconColor = "#F97D1D", iconKey = "OTHER"),
         )
         for (a in accounts) {
             accountDao.insert(a)

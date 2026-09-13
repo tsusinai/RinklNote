@@ -48,16 +48,47 @@ class AccountServiceTest {
     fun `ensureDefaultAccounts seeds the 3 defaults once and is idempotent`() {
         service.ensureDefaultAccounts(1L)
         assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
+        assertEquals(
+            listOf("WECHAT", "ALIPAY", "OTHER"),
+            service.accountsFor(1L).map { it.iconKey }
+        )
         service.ensureDefaultAccounts(1L)
         assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
     }
 
     @Test
     fun `createAccount adds a custom account only for that user`() {
-        val w = service.createAccount(1L, "招商银行", "#123456", 0L)
+        val w = service.createAccount(1L, "招商银行", "#123456", 0L, "BANK_CARD")
         assertTrue(w.id > 0)
+        assertEquals("BANK_CARD", w.iconKey)
         // 自定义账户与默认账户共存（无顺序要求）
         assertEquals(setOf("微信", "支付宝", "无账户", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
+    }
+
+    @Test
+    fun `createAccount without iconKey keeps old request compatible`() {
+        val created = service.createAccount(1L, "旧客户端账户", "#123456", 100L)
+        assertEquals("WALLET", created.iconKey)
+    }
+
+    @Test
+    fun `partial update balance preserves name color and icon`() {
+        val created = service.createAccount(1L, "招商银行", "#123456", 0L, "BANK_CARD")
+        val updated = service.updateAccount(created.id, 1L, balanceMinor = 25000L)
+        assertEquals("招商银行", updated!!.name)
+        assertEquals("#123456", updated.iconColor)
+        assertEquals("BANK_CARD", updated.iconKey)
+        assertEquals(25000L, updated.balanceMinor)
+    }
+
+    @Test
+    fun `partial update name preserves balance color and icon`() {
+        val created = service.createAccount(1L, "招商银行", "#123456", 500L, "BANK_CARD")
+        val updated = service.updateAccount(created.id, 1L, name = "招行卡")
+        assertEquals("招行卡", updated!!.name)
+        assertEquals("#123456", updated.iconColor)
+        assertEquals("BANK_CARD", updated.iconKey)
+        assertEquals(500L, updated.balanceMinor)
     }
 
     @Test

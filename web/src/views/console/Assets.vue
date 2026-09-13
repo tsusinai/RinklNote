@@ -4,6 +4,7 @@ import { useDataStore } from '../../stores/data'
 import { accounts } from '../../api/accounts'
 import { formatMoney, parseMoneyToMinor } from '../../utils/money'
 import { useToast } from '../../composables/useToast'
+import AccountIcon from '../../components/AccountIcon.vue'
 
 const data = useDataStore()
 const toast = useToast()
@@ -65,7 +66,7 @@ onMounted(() => { if (!data.accts.length) data.loadData() })
 
     <div class="acct-grid">
       <div v-for="a in data.accts" :key="a.id" class="acct-card" :style="{ borderLeftColor: a.iconColor }">
-        <div class="acct-avatar" :style="{ background: a.iconColor }">{{ a.name[0] }}</div>
+        <AccountIcon :icon-key="a.iconKey" :name="a.name" :color-hex="a.iconColor" :size="40" />
         <div class="acct-meta">
           <div class="acct-name">{{ a.name }}</div>
           <div class="acct-bal amount">{{ reveal ? formatMoney(a.balanceMinor || 0) : '¥***' }}</div>
@@ -92,7 +93,6 @@ onMounted(() => { if (!data.accts.length) data.loadData() })
 .net-val { font-size: 32px; font-weight: 800; }
 .acct-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .acct-card { background: var(--card); border-left: 4px solid; border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 12px; }
-.acct-avatar { width: 40px; height: 40px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; }
 .acct-meta { display: flex; flex-direction: column; gap: 4px; }
 .acct-name { font-weight: 600; }
 .acct-bal { font-size: 18px; font-weight: 700; }

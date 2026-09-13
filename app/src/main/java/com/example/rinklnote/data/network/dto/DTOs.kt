@@ -1,6 +1,7 @@
 package com.example.rinklnote.data.network.dto
 
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.domain.resolveAccountIconKey
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -97,19 +98,34 @@ data class AccountDTO(
     // 旧字段（元）：过渡期兼容，勿使用。
     val balance: Double? = null,
     val iconColor: String,
+    /** 旧服务端可能缺失；读取时按名称回退。 */
+    val iconKey: String? = null,
     val updatedAt: Long? = null,
     val deleted: Boolean = false
 ) {
     /** 解析余额：优先取分，旧服务端只回 balance（元）时回退换算。 */
     val resolvedBalanceMinor: Long
         get() = balanceMinor ?: Money.yuanToMinor(balance ?: 0.0)
+
+    val resolvedIconKey: String
+        get() = resolveAccountIconKey(iconKey, name)
 }
 
 @Serializable
-data class CreateAccountRequest(val name: String, val iconColor: String, val balanceMinor: Long = 0L)
+data class CreateAccountRequest(
+    val name: String,
+    val iconColor: String,
+    val balanceMinor: Long = 0L,
+    val iconKey: String = "WALLET"
+)
 
 @Serializable
-data class UpdateAccountRequest(val name: String? = null, val iconColor: String? = null, val balanceMinor: Long? = null)
+data class UpdateAccountRequest(
+    val name: String? = null,
+    val iconColor: String? = null,
+    val balanceMinor: Long? = null,
+    val iconKey: String? = null
+)
 
 @Serializable
 data class TemplateDTO(

@@ -54,9 +54,9 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
-import com.example.rinklnote.ui.util.accountIconRes
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -544,11 +544,10 @@ private fun AccountEditor(
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        painter = painterResource(accountIconRes(account.name)),
-                        contentDescription = account.name,
-                        modifier = Modifier.size(21.dp),
-                        tint = Color.Unspecified
+                    AccountIcon(
+                        iconKey = account.iconKey,
+                        colorHex = account.iconColor,
+                        size = 26.dp
                     )
                     Text(
                         text = account.name,

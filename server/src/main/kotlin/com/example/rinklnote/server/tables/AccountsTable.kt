@@ -11,6 +11,7 @@ object AccountsTable : Table("accounts") {
     // 整数分（权威值）。
     val balanceMinor = long("balance_minor").nullable()
     val iconColor = varchar("icon_color", 10)
+    val iconKey = varchar("icon_key", 32).default("WALLET")
     val updatedAt = long("updated_at").default(0)
     val deleted = bool("deleted").default(false)
 

@@ -5,6 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Budget
+import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.domain.Source
+import com.example.rinklnote.util.Money
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -180,8 +183,8 @@ class MockBillsSeederTest {
         // 追加（不删除既有数据）。服务器同步默认以 date 起算，故用当天 0 点已足够。
         mocks.forEach { m ->
             val bill = Bill(
-                amount = m.amount,
-                billType = m.type,
+                amountMinor = Money.yuanToMinor(m.amount),
+                billType = BillType.fromValue(m.type),
                 categoryId = catId[m.cat] ?: error("未找到分类: ${m.cat}"),
                 categoryName = m.cat,
                 subCategoryName = m.sub,
@@ -189,7 +192,7 @@ class MockBillsSeederTest {
                 remark = m.remark,
                 date = startOfDay(m.day),
                 createdAt = startOfDay(m.day),
-                source = "APP",
+                source = Source.APP,
                 deleted = false,
                 dirty = false
             )
@@ -197,7 +200,12 @@ class MockBillsSeederTest {
         }
 
         // 8 月预算 3000（验证超预算）；server_id=NULL 未同步，同样注意同步上传。
-        db.budgetDao().upsert(Budget(monthStart = startOfDay(1), amount = 3000.0))
+        db.budgetDao().upsert(
+            Budget(
+                monthStart = startOfDay(1),
+                amountMinor = Money.yuanToMinor(3000.0)
+            )
+        )
 
         Log.i("MockBillsSeeder", "已写入 ${mocks.size} 条 8 月模拟账单 + 8 月预算 3000")
         assertTrue(mocks.isNotEmpty())

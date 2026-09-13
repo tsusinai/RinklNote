@@ -14,11 +14,17 @@ import kotlinx.coroutines.launch
 
 @androidx.compose.runtime.Immutable
 data class AssetsState(
-    val accounts: List<Account> = emptyList()
+    val accounts: List<Account> = emptyList(),
+    val loaded: Boolean = false
 )
 
 sealed interface AssetsEvent {
-    data class AddAccount(val name: String, val iconColor: String, val balanceMinor: Long) : AssetsEvent
+    data class AddAccount(
+        val name: String,
+        val iconKey: String,
+        val iconColor: String,
+        val balanceMinor: Long
+    ) : AssetsEvent
     data class RenameAccount(val account: Account, val name: String) : AssetsEvent
     data class ChangeBalance(val account: Account, val balanceMinor: Long) : AssetsEvent
     data class DeleteAccount(val account: Account) : AssetsEvent
@@ -42,7 +48,7 @@ class AssetsViewModel(
     init {
         viewModelScope.launch {
             accountRepository.observeAccounts().collect { accounts ->
-                _state.update { it.copy(accounts = accounts) }
+                _state.update { it.copy(accounts = accounts, loaded = true) }
             }
         }
     }
@@ -68,6 +74,7 @@ class AssetsViewModel(
                 name = event.name,
                 balanceMinor = event.balanceMinor,
                 iconColor = event.iconColor,
+                iconKey = event.iconKey,
                 updatedAt = now,
                 deleted = false,
                 dirty = true

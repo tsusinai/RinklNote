@@ -11,7 +11,7 @@ export interface Category {
 }
 
 export interface Account {
-  id: number; name: string; balanceMinor: number; iconColor: string;
+  id: number; name: string; balanceMinor: number; iconColor: string; iconKey?: string;
   updatedAt: number; deleted: boolean;
   // 资产 Plan（worktree 未合并）：将来 server 会补下列可选字段，先预留
   type?: AccountType; isLiability?: boolean; openingBalanceMinor?: number;

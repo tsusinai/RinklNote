@@ -76,7 +76,9 @@ import com.example.rinklnote.ui.component.AppBackground
 import com.example.rinklnote.ui.component.KeypadContextItem
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.VoiceInputBar
+import com.example.rinklnote.ui.component.accountColor
 import com.example.rinklnote.ui.screen.ai.AiScreen
+import com.example.rinklnote.ui.screen.assets.AccountEditorScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
@@ -472,7 +474,21 @@ fun AppNavigation(app: RinklNoteApp) {
                     AssetsScreen(
                         viewModel = assetsVM,
                         backgroundUri = appBackgroundUri,
-                        hazeState = hazeState
+                        hazeState = hazeState,
+                        onAddAccount = { navController.navigate("account-editor/-1") },
+                        onEditBalance = { accountId -> navController.navigate("account-editor/$accountId") }
+                    )
+                }
+                composable(
+                    route = "account-editor/{accountId}",
+                    arguments = listOf(navArgument("accountId") { type = NavType.LongType })
+                ) { entry ->
+                    AccountEditorScreen(
+                        viewModel = assetsVM,
+                        accountId = entry.arguments?.getLong("accountId") ?: -1L,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable("profile") {
@@ -607,7 +623,11 @@ fun AppNavigation(app: RinklNoteApp) {
                             KeypadContextItem(it.name, categoryIconRes(it.name))
                         },
                         quickAddState.selectedAccount?.let {
-                            KeypadContextItem(it.name, accountIconRes(it.name))
+                            KeypadContextItem(
+                                label = it.name,
+                                iconRes = accountIconRes(it),
+                                iconTint = accountColor(it.iconColor)
+                            )
                         }
                     ),
                     hazeState = hazeState.takeIf { appBackgroundUri != null }

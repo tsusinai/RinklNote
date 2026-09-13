@@ -23,7 +23,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
     entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class],
-    version = 13,
+    version = 14,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -262,13 +262,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v14：账户增加稳定的图标协议 key，并按旧账户名回填。 */
+        private val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE accounts ADD COLUMN icon_key TEXT NOT NULL DEFAULT 'WALLET'")
+                db.execSQL(
+                    """
+                    UPDATE accounts
+                    SET icon_key = CASE name
+                        WHEN '微信' THEN 'WECHAT'
+                        WHEN '支付宝' THEN 'ALIPAY'
+                        WHEN '无账户' THEN 'OTHER'
+                        ELSE 'WALLET'
+                    END
+                    """.trimIndent()
+                )
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .fallbackToDestructiveMigration()
                 .build()
         }

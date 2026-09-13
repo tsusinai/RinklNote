@@ -1,5 +1,7 @@
 package com.example.rinklnote.server.services
 
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -57,6 +59,7 @@ data class CategoryDTO(
     val subCategories: List<SubCategoryDTO> = emptyList()
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class AccountDTO(
     val id: Long,
@@ -65,9 +68,28 @@ data class AccountDTO(
     // 旧字段，仅供旧客户端，勿用；值 = Money.fromMinor(balanceMinor)。
     val balance: Double,
     val iconColor: String,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val iconKey: String = "WALLET",
     val updatedAt: Long = 0,
     val deleted: Boolean = false
 )
+
+private const val ACCOUNT_BUCKET_NAME = "无账户"
+private val ACCOUNT_ICON_KEYS = setOf(
+    "WALLET", "BANK_CARD", "CASH", "WECHAT",
+    "ALIPAY", "CREDIT_CARD", "INVESTMENT", "OTHER"
+)
+
+private fun normalizeAccountName(raw: String): String {
+    val name = raw.trim()
+    require(name.isNotEmpty()) { "账户名不能为空" }
+    require(name != ACCOUNT_BUCKET_NAME) { "该账户名不可用" }
+    require(name.length <= 50) { "账户名不能超过50个字符" }
+    return name
+}
+
+private fun normalizeAccountIconKey(raw: String): String =
+    raw.takeIf { it in ACCOUNT_ICON_KEYS } ?: "WALLET"
 
 class BillService {
     fun createBill(
@@ -287,6 +309,7 @@ class BillService {
         balanceMinor = this[AccountsTable.balanceMinor] ?: 0L,
         balance = Money.fromMinor(this[AccountsTable.balanceMinor] ?: 0L),
         iconColor = this[AccountsTable.iconColor],
+        iconKey = this[AccountsTable.iconKey],
         updatedAt = this[AccountsTable.updatedAt],
         deleted = this[AccountsTable.deleted]
     )
@@ -300,17 +323,18 @@ class BillService {
                 .map { it[AccountsTable.name] }
                 .toSet()
             listOf(
-                Triple("微信", "#28C145", 0.0),
-                Triple("支付宝", "#06B4FD", 0.0),
-                Triple("无账户", "#F97D1D", 0.0)
-            ).forEach { (name, color, balance) ->
+                Triple("微信", "#28C145", "WECHAT"),
+                Triple("支付宝", "#06B4FD", "ALIPAY"),
+                Triple("无账户", "#F97D1D", "OTHER")
+            ).forEach { (name, color, iconKey) ->
                 if (name in existing) return@forEach
                 AccountsTable.insert {
                     it[AccountsTable.userId] = userId
                     it[AccountsTable.name] = name
                     it[AccountsTable.iconColor] = color
-                    it[AccountsTable.balanceMinor] = Money.toMinor(balance)
-                    it[AccountsTable.balance] = balance
+                    it[AccountsTable.iconKey] = iconKey
+                    it[AccountsTable.balanceMinor] = 0L
+                    it[AccountsTable.balance] = 0.0
                     it[AccountsTable.updatedAt] = now
                 }
             }
@@ -327,13 +351,20 @@ class BillService {
         }
     }
 
-    fun createAccount(userId: Long, name: String, iconColor: String, balanceMinor: Long): AccountDTO {
-        require(name.isNotBlank()) { "账户名不能为空" }
+    fun createAccount(
+        userId: Long,
+        name: String,
+        iconColor: String,
+        balanceMinor: Long,
+        iconKey: String = "WALLET"
+    ): AccountDTO {
+        val normalizedName = normalizeAccountName(name)
+        val normalizedIconKey = normalizeAccountIconKey(iconKey)
         require(balanceMinor >= 0) { "余额不能为负" }
         // (user_id, name) 唯一索引：同名账户对同一用户不可重复（含默认账户名）
         val exists = transaction {
             AccountsTable.selectAll()
-                .where { (AccountsTable.userId eq userId) and (AccountsTable.name eq name) and (AccountsTable.deleted eq false) }
+                .where { (AccountsTable.userId eq userId) and (AccountsTable.name eq normalizedName) and (AccountsTable.deleted eq false) }
                 .any()
         }
         require(!exists) { "账户已存在" }
@@ -341,33 +372,80 @@ class BillService {
         val id = transaction {
             AccountsTable.insert {
                 it[AccountsTable.userId] = userId
-                it[AccountsTable.name] = name
+                it[AccountsTable.name] = normalizedName
                 it[AccountsTable.iconColor] = iconColor
+                it[AccountsTable.iconKey] = normalizedIconKey
                 it[AccountsTable.balanceMinor] = balanceMinor
                 it[AccountsTable.balance] = Money.fromMinor(balanceMinor)
                 it[AccountsTable.updatedAt] = now
             } get AccountsTable.id
         }
-        return AccountDTO(id, name, balanceMinor, Money.fromMinor(balanceMinor), iconColor, now, false)
+        return AccountDTO(
+            id = id,
+            name = normalizedName,
+            balanceMinor = balanceMinor,
+            balance = Money.fromMinor(balanceMinor),
+            iconColor = iconColor,
+            iconKey = normalizedIconKey,
+            updatedAt = now,
+            deleted = false
+        )
     }
 
-    fun renameAccount(id: Long, userId: Long, name: String, iconColor: String): AccountDTO? = transaction {
+    /** 真正的部分更新：只覆盖请求中传入的字段，未传字段保持原值。 */
+    fun updateAccount(
+        id: Long,
+        userId: Long,
+        name: String? = null,
+        iconColor: String? = null,
+        iconKey: String? = null,
+        balanceMinor: Long? = null
+    ): AccountDTO? = transaction {
         val row = AccountsTable.selectAll()
             .where { (AccountsTable.id eq id) and (AccountsTable.userId eq userId) }
             .singleOrNull() ?: return@transaction null
-        // 不与同用户其他未删账户重名
-        val dup = AccountsTable.selectAll()
-            .where { (AccountsTable.userId eq userId) and (AccountsTable.name eq name) and (AccountsTable.deleted eq false) and (AccountsTable.id neq id) }
-            .any()
-        require(!dup) { "账户已存在" }
+
+        val current = row.toAccountDto()
+        val nextName = name?.let(::normalizeAccountName) ?: current.name
+        val nextColor = iconColor ?: current.iconColor
+        val nextIconKey = iconKey?.let(::normalizeAccountIconKey) ?: current.iconKey
+        val nextBalance = balanceMinor ?: current.balanceMinor
+        require(nextBalance >= 0) { "余额不能为负" }
+
+        if (name != null && nextName != current.name) {
+            val dup = AccountsTable.selectAll()
+                .where {
+                    (AccountsTable.userId eq userId) and
+                        (AccountsTable.name eq nextName) and
+                        (AccountsTable.deleted eq false) and
+                        (AccountsTable.id neq id)
+                }
+                .any()
+            require(!dup) { "账户已存在" }
+        }
+
         val now = System.currentTimeMillis()
         AccountsTable.update({ AccountsTable.id eq id }) {
-            it[AccountsTable.name] = name
-            it[AccountsTable.iconColor] = iconColor
+            it[AccountsTable.name] = nextName
+            it[AccountsTable.iconColor] = nextColor
+            it[AccountsTable.iconKey] = nextIconKey
+            it[AccountsTable.balanceMinor] = nextBalance
+            it[AccountsTable.balance] = Money.fromMinor(nextBalance)
             it[AccountsTable.updatedAt] = now
         }
-        row.toAccountDto().copy(name = name, iconColor = iconColor, updatedAt = now)
+        current.copy(
+            name = nextName,
+            balanceMinor = nextBalance,
+            balance = Money.fromMinor(nextBalance),
+            iconColor = nextColor,
+            iconKey = nextIconKey,
+            updatedAt = now
+        )
     }
+
+    /** 兼容旧调用：重命名同时更新颜色。 */
+    fun renameAccount(id: Long, userId: Long, name: String, iconColor: String): AccountDTO? =
+        updateAccount(id, userId, name = name, iconColor = iconColor)
 
     fun deleteAccount(id: Long, userId: Long): Boolean {
         val now = System.currentTimeMillis()
@@ -472,16 +550,17 @@ class BillService {
 
     private fun seedAccounts() {
         val accounts = listOf(
-            Triple("微信", "#28C145", 0.0),
-            Triple("支付宝", "#06B4FD", 0.0),
-            Triple("无账户", "#F97D1D", 0.0)
+            Triple("微信", "#28C145", "WECHAT"),
+            Triple("支付宝", "#06B4FD", "ALIPAY"),
+            Triple("无账户", "#F97D1D", "OTHER")
         )
-        accounts.forEach { (name, color, balance) ->
+        accounts.forEach { (name, color, iconKey) ->
             AccountsTable.insert {
                 it[AccountsTable.name] = name
                 it[AccountsTable.iconColor] = color
-                it[AccountsTable.balanceMinor] = Money.toMinor(balance)
-                it[AccountsTable.balance] = balance
+                it[AccountsTable.iconKey] = iconKey
+                it[AccountsTable.balanceMinor] = 0L
+                it[AccountsTable.balance] = 0.0
             }
         }
     }

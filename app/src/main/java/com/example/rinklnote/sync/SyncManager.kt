@@ -345,14 +345,14 @@ class SyncManager(
                     local = if (byName != null && !byName.dirty) {
                         byName.copy(
                             serverId = dto.id, name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
-                            iconColor = dto.iconColor, updatedAt = serverTime,
+                            iconColor = dto.iconColor, iconKey = dto.resolvedIconKey, updatedAt = serverTime,
                             deleted = dto.deleted, dirty = false
                         ).also { dao.upsert(it) }
                     } else {
                         dao.upsert(
                             Account(
                                 serverId = dto.id, name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
-                                iconColor = dto.iconColor, updatedAt = serverTime,
+                                iconColor = dto.iconColor, iconKey = dto.resolvedIconKey, updatedAt = serverTime,
                                 deleted = dto.deleted, dirty = false
                             )
                         )
@@ -366,7 +366,7 @@ class SyncManager(
                     dao.upsert(
                         local.copy(
                             name = dto.name, balanceMinor = dto.resolvedBalanceMinor,
-                            iconColor = dto.iconColor, updatedAt = serverTime,
+                            iconColor = dto.iconColor, iconKey = dto.resolvedIconKey, updatedAt = serverTime,
                             deleted = dto.deleted, dirty = false
                         )
                     )
@@ -397,14 +397,24 @@ class SyncManager(
             account.serverId != null -> {
                 val dto = api.updateAccount(
                     account.serverId,
-                    UpdateAccountRequest(name = account.name, iconColor = account.iconColor, balanceMinor = account.balanceMinor)
+                    UpdateAccountRequest(
+                        name = account.name,
+                        iconColor = account.iconColor,
+                        iconKey = account.iconKey,
+                        balanceMinor = account.balanceMinor
+                    )
                 )
                 dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
                 true
             }
             else -> {
                 val dto = api.createAccount(
-                    CreateAccountRequest(name = account.name, iconColor = account.iconColor, balanceMinor = account.balanceMinor)
+                    CreateAccountRequest(
+                        name = account.name,
+                        iconColor = account.iconColor,
+                        iconKey = account.iconKey,
+                        balanceMinor = account.balanceMinor
+                    )
                 )
                 dao.updateServerId(account.id, dto.id, dto.updatedAt ?: 0L)
                 true

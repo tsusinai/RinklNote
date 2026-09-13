@@ -51,7 +51,15 @@ class AssetsViewModelTest {
     }
 
     private fun account(id: Long, name: String, yuanBalance: Double) =
-        Account(id = id, name = name, balanceMinor = Money.yuanToMinor(yuanBalance), iconColor = "#28C145", updatedAt = 0L, dirty = false)
+        Account(
+            id = id,
+            name = name,
+            balanceMinor = Money.yuanToMinor(yuanBalance),
+            iconColor = "#28C145",
+            iconKey = "WECHAT",
+            updatedAt = 0L,
+            dirty = false
+        )
 
     @Test
     fun `state accounts come from observeAccounts flow`() = runTest(dispatcher) {
@@ -64,13 +72,14 @@ class AssetsViewModelTest {
     @Test
     fun `addAccount inserts with dirty true and correct fields`() = runTest(dispatcher) {
         val vm = newVM()
-        vm.onEvent(AssetsEvent.AddAccount("支付宝", "#06B4FD", 50000L))
+        vm.onEvent(AssetsEvent.AddAccount("支付宝", "ALIPAY", "#06B4FD", 50000L))
         advanceUntilIdle()
         assertEquals(1, repo.inserted.size)
         val a = repo.inserted.last()
         assertEquals("支付宝", a.name)
         assertEquals(50000L, a.balanceMinor)
         assertEquals("#06B4FD", a.iconColor)
+        assertEquals("ALIPAY", a.iconKey)
         assertTrue(a.dirty)
         assertFalse(a.deleted)
     }
@@ -99,6 +108,8 @@ class AssetsViewModelTest {
         assertEquals(1, repo.updatedLocal.size)
         val u = repo.updatedLocal.last()
         assertEquals(25000L, u.balanceMinor)
+        assertEquals("WECHAT", u.iconKey)
+        assertEquals("#28C145", u.iconColor)
         assertTrue(u.dirty)
     }
 

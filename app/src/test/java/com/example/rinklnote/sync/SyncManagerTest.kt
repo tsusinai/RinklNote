@@ -15,6 +15,7 @@ import com.example.rinklnote.data.network.dto.BudgetDTO
 import com.example.rinklnote.data.network.dto.CreateAccountRequest
 import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.SyncResponse
+import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -216,10 +217,23 @@ class SyncManagerTest {
     @Test
     fun `account create pushes and stamps the returned server id`() = runTest {
         stubLoggedIn(true)
-        val newAcct = Account(id = 5, name = "招商", balanceMinor = 0L, iconColor = "#123456")
+        val newAcct = Account(
+            id = 5,
+            name = "招商",
+            balanceMinor = 0L,
+            iconColor = "#123456",
+            iconKey = "BANK_CARD"
+        )
         whenever(accountDao.getUnsynced()).thenReturn(listOf(newAcct))
         whenever(api.createAccount(any())).thenReturn(
-            AccountDTO(id = 500, name = "招商", balanceMinor = 0L, iconColor = "#123456", updatedAt = 2000)
+            AccountDTO(
+                id = 500,
+                name = "招商",
+                balanceMinor = 0L,
+                iconColor = "#123456",
+                iconKey = "BANK_CARD",
+                updatedAt = 2000
+            )
         )
         whenever(billDao.getUnsynced()).thenReturn(emptyList())
         whenever(api.syncBills(after = null, afterId = null, limit = 200))
@@ -231,8 +245,51 @@ class SyncManagerTest {
         val result = manager.sync()
         assertTrue("sync returned ${result}", result is SyncResult.Success)
 
-        verify(api).createAccount(CreateAccountRequest(name = "招商", iconColor = "#123456", balanceMinor = 0L))
+        verify(api).createAccount(
+            CreateAccountRequest(
+                name = "招商",
+                iconColor = "#123456",
+                balanceMinor = 0L,
+                iconKey = "BANK_CARD"
+            )
+        )
         verify(accountDao).updateServerId(5, 500, 2000)
+    }
+
+    @Test
+    fun `account update sends iconKey without dropping other fields`() = runTest {
+        val local = Account(
+            id = 6,
+            serverId = 501,
+            name = "余额宝",
+            balanceMinor = 10000L,
+            iconColor = "#8B5CF6",
+            iconKey = "INVESTMENT",
+            updatedAt = 3000,
+            dirty = true
+        )
+        whenever(api.updateAccount(any(), any())).thenReturn(
+            AccountDTO(
+                id = 501,
+                name = "余额宝",
+                balanceMinor = 10000L,
+                iconColor = "#8B5CF6",
+                iconKey = "INVESTMENT",
+                updatedAt = 4000
+            )
+        )
+
+        manager.pushAccount(local)
+
+        verify(api).updateAccount(
+            501L,
+            UpdateAccountRequest(
+                name = "余额宝",
+                iconColor = "#8B5CF6",
+                balanceMinor = 10000L,
+                iconKey = "INVESTMENT"
+            )
+        )
     }
 
     @Test
@@ -367,7 +424,13 @@ class SyncManagerTest {
         manager.sync()
         // The seed row is reconciled (adopts the server id) rather than duplicated.
         verify(accountDao).upsert(
-            argThat<Account> { acc -> acc.serverId == 214L && acc.id == 1L && !acc.dirty }
+            argThat<Account> {
+                acc ->
+                acc.serverId == 214L &&
+                    acc.id == 1L &&
+                    acc.iconKey == "WECHAT" &&
+                    !acc.dirty
+            }
         )
     }
 }

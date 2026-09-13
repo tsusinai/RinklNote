@@ -30,6 +30,7 @@ fun Application.configureDatabase() {
     Database.connect(HikariDataSource(config))
 
     transaction {
+        ensureAccountIconKeyColumn()
         SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, WebhookEventTable, PushLogTable, AiApiTokensTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
@@ -39,6 +40,42 @@ fun Application.configureDatabase() {
     val billService = BillService()
     billService.seedIfNeeded()
     log.info("Database initialized (${if (isH2) "H2" else "PostgreSQL"}) and seeded")
+}
+
+/**
+ * v16 迁移：账户增加稳定图标 key。
+ * 必须在 createMissingTablesAndColumns 之前判断列是否存在，只在首次补列时按旧账户名回填，
+ * 避免服务重启时覆盖用户后来显式选择的 WALLET。
+ */
+private fun Transaction.ensureAccountIconKeyColumn() {
+    val tableExists = exec(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+        WHERE UPPER(TABLE_NAME) = 'ACCOUNTS'
+        """.trimIndent()
+    ) { rs -> rs.next() && rs.getInt(1) > 0 } ?: false
+    if (!tableExists) return
+
+    val exists = exec(
+        """
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE UPPER(TABLE_NAME) = 'ACCOUNTS' AND UPPER(COLUMN_NAME) = 'ICON_KEY'
+        """.trimIndent()
+    ) { rs -> rs.next() && rs.getInt(1) > 0 } ?: false
+    if (exists) return
+
+    exec("ALTER TABLE accounts ADD COLUMN icon_key VARCHAR(32) DEFAULT 'WALLET'")
+    exec(
+        """
+        UPDATE accounts
+        SET icon_key = CASE name
+            WHEN '微信' THEN 'WECHAT'
+            WHEN '支付宝' THEN 'ALIPAY'
+            WHEN '无账户' THEN 'OTHER'
+            ELSE 'WALLET'
+        END
+        """.trimIndent()
+    )
 }
 
 private fun Transaction.runMigrations() {

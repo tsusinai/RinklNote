@@ -1,11 +1,7 @@
 package com.example.rinklnote.ui.screen.assets
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,13 +61,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
-import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
+import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.theme.LocalRinklColors
-import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
@@ -81,22 +76,6 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.launch
-
-/** 账户名 → 图标 drawable 资源映射（微信/支付宝有专属图标，其余用默认图标）。 */
-private fun accountIconRes(name: String): Int = when (name) {
-    "微信" -> R.drawable.ic_wechat
-    "支付宝" -> R.drawable.ic_alipay
-    else -> R.drawable.ic_default_account
-}
-
-/** 新建账户时可选的预设色板（hex），含微信绿/支付宝蓝/橙/紫/红/灰 6 色。 */
-private val ACCOUNT_COLORS = listOf("#28C145", "#06B4FD", "#F97D1D", "#8B5CF6", "#EF4444", "#64748B")
-
-/** 将 hex 字符串（如 `"#28C145"`）解析为 [Color]；解析失败回退浅灰底色 `0xFFE5E7EB`。 */
-private fun hexColor(hex: String): Color {
-    val value = hex.removePrefix("#").toLongOrNull(16) ?: return Color(0xFFE5E7EB)
-    return Color(0xFF000000L or value)
-}
 
 /**
  * 资产页（Assets）—— 账户与总资产管理。
@@ -121,13 +100,13 @@ private fun hexColor(hex: String): Color {
 fun AssetsScreen(
     viewModel: AssetsViewModel,
     backgroundUri: String?,
-    hazeState: HazeState
+    hazeState: HazeState,
+    onAddAccount: () -> Unit,
+    onEditBalance: (Long) -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
 
-    var editingAccount by remember { mutableStateOf<Account?>(null) }
-    var addingAccount by remember { mutableStateOf(false) }
     var renamingAccount by remember { mutableStateOf<Account?>(null) }
     var deletingAccount by remember { mutableStateOf<Account?>(null) }
     var reconcilingAccount by remember { mutableStateOf<Account?>(null) }
@@ -170,7 +149,7 @@ fun AssetsScreen(
                 AccountCard(
                     account = account,
                     hidden = balanceHidden,
-                    onClick = { editingAccount = account },
+                    onClick = { onEditBalance(account.id) },
                     onMenu = { menuForAccount = account }
                 )
             }
@@ -185,7 +164,7 @@ fun AssetsScreen(
             listScrolled = listScrolled,
             canReconcileAll = state.accounts.isNotEmpty(),
             onReconcileAll = { reconcilingAll = true },
-            onAddAccount = { addingAccount = true }
+            onAddAccount = onAddAccount
         )
 
         // FAB：新建账户（与首页加账单 FAB 同款：rinkShadow + 毛玻璃 thin() + 56dp 触摸目标）。
@@ -197,7 +176,7 @@ fun AssetsScreen(
                 .size(56.dp)
                 .clip(CircleShape)
                 .hazeEffect(hazeState, HazeMaterials.thin())
-                .clickable { addingAccount = true },
+                .clickable(onClick = onAddAccount),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -227,37 +206,10 @@ fun AssetsScreen(
             )
         }
 
-        // 全屏编辑余额用上滑进入（与快加键盘一致的 SheetEnter/Exit）
-        AnimatedVisibility(
-            visible = editingAccount != null,
-            enter = slideInVertically(initialOffsetY = { it }, animationSpec = Motion.SheetEnter),
-            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = Motion.SheetExit)
-        ) {
-            editingAccount?.let { account ->
-                BalanceEditDialog(
-                    account = account,
-                    onConfirm = { updated ->
-                        editingAccount = null
-                        viewModel.onEvent(AssetsEvent.ChangeBalance(updated, updated.balanceMinor))
-                    },
-                    onDismiss = { editingAccount = null }
-                )
-            }
-        }
-
-        if (addingAccount) {
-            AddAccountDialog(
-                onConfirm = { name, color, balance ->
-                    addingAccount = false
-                    viewModel.onEvent(AssetsEvent.AddAccount(name, color, Money.yuanToMinor(balance)))
-                },
-                onDismiss = { addingAccount = false }
-            )
-        }
-
         renamingAccount?.let { account ->
             RenameAccountDialog(
                 account = account,
+                accounts = state.accounts,
                 onConfirm = { name ->
                     renamingAccount = null
                     viewModel.onEvent(AssetsEvent.RenameAccount(account, name))
@@ -463,11 +415,10 @@ private fun AccountCard(
             .padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            painter = painterResource(accountIconRes(account.name)),
-            contentDescription = account.name,
-            modifier = Modifier.size(24.dp),
-            tint = Color.Unspecified
+        AccountIcon(
+            iconKey = account.iconKey,
+            colorHex = account.iconColor,
+            size = 32.dp
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
@@ -525,11 +476,10 @@ private fun AccountActionsSheet(
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(accountIconRes(account.name)),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                    tint = Color.Unspecified
+                AccountIcon(
+                    iconKey = account.iconKey,
+                    colorHex = account.iconColor,
+                    size = 40.dp
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -608,83 +558,6 @@ private fun ActionSheetItem(
 }
 
 /**
- * 新建账户弹窗（Add Account Dialog）：账户名 + 余额 + 预设色板 6 选 1。
- *
- * 约束：「无账户」([ACCOUNT_BUCKET_NAME]) 为保留名，禁止用户创建同名账户（确定键禁用）。
- * 色板触摸目标 44dp（defaultMinSize 包裹 32dp 色块）。
- *
- * @param onConfirm `(name, colorHex, balance)` 三元回调
- * @param onDismiss 取消
- */
-@Composable
-private fun AddAccountDialog(
-    onConfirm: (String, String, Double) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var balance by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf(ACCOUNT_COLORS.first()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("新建账户") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("账户名") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = balance,
-                    onValueChange = { balance = it },
-                    label = { Text("余额") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ACCOUNT_COLORS.forEach { c ->
-                        Box(
-                            modifier = Modifier
-                                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(hexColor(c))
-                                    .border(
-                                        width = if (c == color) 2.dp else 0.dp,
-                                        color = if (c == color) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                        shape = CircleShape
-                                    )
-                                    .clickable { color = c }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val n = name.trim()
-                    if (n.isBlank()) return@TextButton
-                    onConfirm(n, color, balance.toDoubleOrNull() ?: 0.0)
-                },
-                // 「无账户」为保留名，禁止用户再建一个。
-                enabled = name.trim().isNotBlank() && name.trim() != ACCOUNT_BUCKET_NAME
-            ) { Text("创建") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
-}
-
-/**
  * 重命名账户弹窗（Rename Account Dialog）：单字段账户名。
  *
  * 约束：禁止重命名为保留名「无账户」([ACCOUNT_BUCKET_NAME])；空名禁用。
@@ -692,10 +565,12 @@ private fun AddAccountDialog(
 @Composable
 private fun RenameAccountDialog(
     account: Account,
+    accounts: List<Account>,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember(account.id) { mutableStateOf(account.name) }
+    val error = validateAccountName(name, accounts, editingAccountId = account.id)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -705,7 +580,11 @@ private fun RenameAccountDialog(
                 value = name,
                 onValueChange = { name = it },
                 label = { Text("账户名") },
-                singleLine = true
+                singleLine = true,
+                isError = error != null,
+                supportingText = {
+                    if (error != null) Text(error)
+                }
             )
         },
         confirmButton = {
@@ -715,8 +594,7 @@ private fun RenameAccountDialog(
                     if (n.isBlank()) return@TextButton
                     onConfirm(n)
                 },
-                // 禁止重命名成「无账户」（保留名）。
-                enabled = name.trim().isNotBlank() && name.trim() != ACCOUNT_BUCKET_NAME
+                enabled = error == null
             ) { Text("保存") }
         },
         dismissButton = {

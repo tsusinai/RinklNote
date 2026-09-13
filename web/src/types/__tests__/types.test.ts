@@ -15,8 +15,9 @@ describe('types', () => {
     expect(r.nextAfterId).toBeNull()
   })
   it('Account has asset-plan optional fields', () => {
-    const a: Account = { id: 1, name: '微信', balanceMinor: 0, iconColor: '#28C145', updatedAt: 0, deleted: false, type: 'WECHAT', isLiability: false }
+    const a: Account = { id: 1, name: '微信', balanceMinor: 0, iconColor: '#28C145', iconKey: 'WECHAT', updatedAt: 0, deleted: false, type: 'WECHAT', isLiability: false }
     expect(a.isLiability).toBe(false)
+    expect(a.iconKey).toBe('WECHAT')
   })
   // 其余为纯类型占位，引用即校验
   it('other interfaces are constructible', () => {
