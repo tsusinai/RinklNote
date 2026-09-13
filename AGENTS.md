@@ -25,6 +25,10 @@ RinklNote/
 
 ## 构建与测试
 
+> **环境前提（本机 Windows）**：默认 JDK 24 会让 Gradle 8.13 建 Test 任务报 `Type T not present`，且用户路径含撇号（`C:\Users\a'su's`）会破坏 Gradle 缓存。跑任何 gradle 命令前先导出：
+> `export JAVA_HOME="D:/Codes/AndroidStudio/jbr" GRADLE_USER_HOME="D:/Codes/RinklNote/.gradle-home"`
+> （详见 docs/superpowers/plans/2026-09-09-budget-upgrade.md）
+
 ### Android 客户端（`:app`）
 
 ```bash
