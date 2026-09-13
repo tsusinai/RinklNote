@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -372,7 +373,7 @@ class BudgetViewModelTest {
         assertTrue(edit.target is BudgetEditTarget.Total)
         assertEquals(100000L, edit.existingAmountMinor)
         assertEquals(10000L, edit.monthExpenseMinor)
-        // 剩余天数仅总额维度提供
+        // 剩余天数所有维度都提供（编辑页「日均可花」提示通用）
         assertTrue(edit.remainingDays != null)
     }
 
@@ -389,7 +390,7 @@ class BudgetViewModelTest {
         assertEquals(BudgetEditTarget.Category(1, "三餐"), edit.target)
         assertEquals(30000L, edit.existingAmountMinor)
         assertEquals(2000L, edit.monthExpenseMinor)
-        assertNull(edit.remainingDays)
+        assertNotNull(edit.remainingDays)
     }
 
     @Test
