@@ -33,8 +33,12 @@ fun Application.configureSecurity() {
         System.getenv("JWT_SECRET") ?: environment.config.propertyOrNull("jwt.secret")?.getString(),
         "JWT_SECRET"
     )
-    val jwtIssuer = environment.config.propertyOrNull("jwt.issuer")?.getString() ?: "rinklnote-server"
-    val jwtAudience = environment.config.propertyOrNull("jwt.audience")?.getString() ?: "rinklnote-app"
+    // issuer/audience 的读取必须与签发侧（Application.kt）保持同一优先级：
+    // env 优先、回落 application.conf——否则配置 env 后会出现「签发用 env 值、校验用 conf 值」的全线 401。
+    val jwtIssuer = System.getenv("JWT_ISSUER")
+        ?: environment.config.propertyOrNull("jwt.issuer")?.getString() ?: "rinklnote-server"
+    val jwtAudience = System.getenv("JWT_AUDIENCE")
+        ?: environment.config.propertyOrNull("jwt.audience")?.getString() ?: "rinklnote-app"
 
     install(Authentication) {
         jwt("auth-jwt") {
