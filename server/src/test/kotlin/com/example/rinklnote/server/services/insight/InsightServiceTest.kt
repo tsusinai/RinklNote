@@ -98,13 +98,19 @@ class InsightServiceTest {
                 BillDTO(id = 1, amountMinor = 2800L, amount = 28.0, billType = "EXPENSE", categoryId = 1,
                     categoryName = "三餐", subCategoryName = null, accountId = 1,
                     remark = "机密周二午餐", date = 1724169600000L, source = "app",
+                    createdAt = 1724169600000L),
+                BillDTO(id = 2, amountMinor = 1200L, amount = 12.0, billType = "EXPENSE", categoryId = 1,
+                    categoryName = "三餐", subCategoryName = null, accountId = 1,
+                    remark = "加餐", date = 1724169600000L, source = "app",
                     createdAt = 1724169600000L)
             )
         )
         assertTrue(ctx.contains("三餐"))
-        assertTrue(ctx.contains("28.00"))
         assertTrue("应标注所问月份", ctx.contains("2026-8"))
-        assertFalse("备注不应送 LLM", ctx.contains("机密"))
+        // NFR1：最近花销必须按「天+分类」聚合——同天两笔三餐合并为一行合计 40.00。
+        assertTrue("聚合合计应出现", ctx.contains("40.00"))
+        assertFalse("逐笔金额不得单独出现在上下文中", ctx.contains("28.00") || ctx.contains("12.00"))
+        assertFalse("备注不应送 LLM", ctx.contains("机密") || ctx.contains("加餐"))
     }
 
     @Test

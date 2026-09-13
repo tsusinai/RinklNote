@@ -804,11 +804,18 @@ data class MonthlyFacts(
             recentBills: List<BillDTO>,
             memorySummary: String = ""
         ): String {
-            val recentLines = recentBills.sortedByDescending { it.date }.take(10)
-                .joinToString("\n") { "- ${formatDate(it.date)} ${it.categoryName} ¥${Money.format(it.amountMinor)}" }
             // 记忆段自带结尾空行；无摘要时整段省略
             val memoryBlock = if (memorySummary.isBlank()) ""
             else "用户记忆（聚合画像，无任何单笔明细/金额）:\n$memorySummary\n\n"
+            val recentLines = recentBills
+                .filter { it.billType == "EXPENSE" }
+                .groupBy { it.date to it.categoryName }
+                .entries
+                .sortedByDescending { it.key.first }
+                .take(7)
+                .joinToString("\n") { (key, bills) ->
+                    "- ${formatDate(key.first)} ${key.second} 合计 ¥${Money.format(bills.sumOf { it.amountMinor })}"
+                }
             return """
 用户问题: "$query"
 
@@ -820,7 +827,7 @@ ${memoryBlock}数据 ($year-$month):
 - 总收入: ¥${Money.format(totalIncome)}
 - 支出分类TOP5: ${topCategories.joinToString { pair -> "${pair.first} ¥${Money.format(pair.second)}" }}
 
-最近10笔记录:
+最近支出（按天+分类聚合，非逐笔）:
 $recentLines
 
 请仅基于以上真实数据回答用户的问题，不要编造数据。
