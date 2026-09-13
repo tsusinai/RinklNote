@@ -171,6 +171,8 @@ fun Route.authRoutes(
                 return@post
             }
             val (userId, token) = userService.register(phone.takeIf { it.isNotBlank() }, email, body.password)
+            // 注册成功同样计入限流窗口：成功不清零，防止换号批量开户绕过限制（每 IP 每小时 5 次）。
+            registerLimiter.recordFailure(ip)
             call.respond(HttpStatusCode.Created, AuthResponse(userId, token))
         }
 
