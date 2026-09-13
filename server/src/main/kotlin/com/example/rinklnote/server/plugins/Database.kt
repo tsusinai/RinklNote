@@ -42,7 +42,7 @@ fun Application.configureDatabase() {
         SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, ChallengesTable, WebhookEventTable, PushLogTable, AiApiTokensTable, UserMemoryTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
-        runMigrations()
+        runMigrations(isPostgres = !isH2)
     }
 
     val billService = BillService()
@@ -87,7 +87,7 @@ private fun Transaction.ensureAccountIconKeyColumn() {
     )
 }
 
-private fun Transaction.runMigrations() {
+private fun Transaction.runMigrations(isPostgres: Boolean) {
     // v10 迁移：账户改为每用户（ug_accounts_user_name 替代旧 accounts(name) 唯一索引）。
     // 旧唯一索引不移除，则会禁止跨用户同名账户；createMissingTablesAndColumns 不会 drop 旧索引。
     listOf("accounts_name", "accounts_name_unique", "index_accounts_name", "index_accounts_name_unique")
@@ -132,9 +132,11 @@ private fun Transaction.runMigrations() {
 
     // v11 迁移：users.phone/password_hash 改为可空，以支持「QQ openid 自动开户」。
     // createMissingTablesAndColumns 只加表/加列，不会改动已有列 nullability，需手动 ALTER。
-    listOf("ALTER TABLE users ALTER COLUMN phone SET NULL",
-            "ALTER TABLE users ALTER COLUMN password_hash SET NULL").forEach { sql ->
-        try { exec(sql) } catch (_: Exception) {}
+    // 方言差异：H2 用 SET NULL，PostgreSQL 只认 DROP NOT NULL——
+    // PG 上执行错误语法会中止整个事务并级联后续语句，必须按方言分支而不是靠 try/catch 吞。
+    val dropNotNullSql = if (isPostgres) "DROP NOT NULL" else "SET NULL"
+    listOf("phone", "password_hash").forEach { column ->
+        try { exec("ALTER TABLE users ALTER COLUMN $column $dropNotNullSql") } catch (_: Exception) {}
     }
 
     // v14 迁移：users 日报推送三列（子开关 + 时刻）。createMissingTablesAndColumns 通常会自动补列，
@@ -155,9 +157,11 @@ private fun Transaction.runMigrations() {
     // 注意：H2 2.3 的 INFORMATION_SCHEMA.INDEX_COLUMNS / KEY_COLUMN_USAGE / CONSTRAINT_COLUMN_USAGE 均为空，
     // 无法据此反查「某约束/索引覆盖哪些列」。因此不按列匹配，而是：
     //   1) 用 TABLE_CONSTRAINTS 找出 ACCOUNTS 上的所有 UNIQUE 约束并 DROP CONSTRAINT（会连带删除其 backing index）；
-    //   2) 再用 INDEXES 兜底枚举 ACCOUNTS 上仍残留的 UNIQUE 索引（排除主键与复合 uq_accounts_user_name）并 DROP INDEX；
+    //   2) 再枚举 ACCOUNTS 上仍残留的 UNIQUE 索引（排除主键与复合 uq_accounts_user_name）并 DROP INDEX；
     //   3) 最后确保 (user_id, name) 复合唯一索引存在。
-    // 三类 DDL 各自 try/catch，幂等，PostgreSQL 上同样安全（对应视图存在）。
+    // 三类 DDL 各自 try/catch，幂等。注意第 2) 步的系统视图按方言分支：
+    //   H2 用 INFORMATION_SCHEMA.INDEXES（H2 私有视图），PostgreSQL 用 pg_indexes
+    //   （PG 的 information_schema 没有 INDEXES 视图，误查会中止事务导致启动失败）。
     val staleConstraints: List<String>? = exec(
         "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE UPPER(TABLE_NAME) = 'ACCOUNTS' AND CONSTRAINT_TYPE = 'UNIQUE'"
     ) { rs ->
@@ -169,18 +173,34 @@ private fun Transaction.runMigrations() {
         try { exec("ALTER TABLE accounts DROP CONSTRAINT IF EXISTS \"$name\"") } catch (_: Exception) {}
     }
 
-    val staleIndexes: List<String>? = exec(
-        """
-        SELECT INDEX_NAME FROM INFORMATION_SCHEMA.INDEXES
-        WHERE UPPER(TABLE_NAME) = 'ACCOUNTS'
-          AND UPPER(INDEX_TYPE_NAME) LIKE 'UNIQUE%'
-          AND UPPER(INDEX_NAME) NOT LIKE 'UQ_ACCOUNTS_USER_NAME%'
-          AND UPPER(INDEX_NAME) NOT LIKE 'PRIMARY_KEY%'
-        """.trimIndent()
-    ) { rs ->
-        val names = mutableListOf<String>()
-        while (rs.next()) names.add(rs.getString(1))
-        names
+    val staleIndexes: List<String>? = if (isPostgres) {
+        exec(
+            """
+            SELECT indexname FROM pg_indexes
+            WHERE UPPER(tablename) = 'ACCOUNTS'
+              AND UPPER(indexdef) LIKE '%UNIQUE%'
+              AND UPPER(indexname) NOT LIKE 'UQ_ACCOUNTS_USER_NAME%'
+              AND UPPER(indexname) NOT LIKE '%_PKEY%'
+            """.trimIndent()
+        ) { rs ->
+            val names = mutableListOf<String>()
+            while (rs.next()) names.add(rs.getString(1))
+            names
+        }
+    } else {
+        exec(
+            """
+            SELECT INDEX_NAME FROM INFORMATION_SCHEMA.INDEXES
+            WHERE UPPER(TABLE_NAME) = 'ACCOUNTS'
+              AND UPPER(INDEX_TYPE_NAME) LIKE 'UNIQUE%'
+              AND UPPER(INDEX_NAME) NOT LIKE 'UQ_ACCOUNTS_USER_NAME%'
+              AND UPPER(INDEX_NAME) NOT LIKE 'PRIMARY_KEY%'
+            """.trimIndent()
+        ) { rs ->
+            val names = mutableListOf<String>()
+            while (rs.next()) names.add(rs.getString(1))
+            names
+        }
     }
     staleIndexes?.forEach { name ->
         try { exec("DROP INDEX IF EXISTS \"$name\"") } catch (_: Exception) {}
