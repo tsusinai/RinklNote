@@ -43,3 +43,9 @@ docs/*.sql
 /.idea/compiler.xml
 /.idea/gradle.xml
 /.idea/misc.xml
+
+# AI 会话与本地运行产物
+.zcode/
+.android-home/
+gradle-merge-verify.log
+*.pptx

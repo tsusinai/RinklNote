@@ -16,14 +16,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,10 +40,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,7 +54,9 @@ import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
@@ -223,9 +220,8 @@ fun ProfileScreen(
 
     // ---------- 悬浮顶栏状态 ----------
     val listState = rememberLazyListState()
-    val density = LocalDensity.current
-    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    // 顶栏悬浮：列表首项垫到它下面。
+    val topBarHeight = rememberRinklTopBarHeight()
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
     }
@@ -406,37 +402,17 @@ private fun ProfileTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolle
         !listScrolled -> LocalRinklColors.current.topBarTitleColor
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
-    Box(modifier = Modifier.fillMaxWidth()) {
-        // 顶部渐隐遮罩：白色标题下的内容被它压暗，保证可读性。
-        if (scrimAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
-        // 内容层：状态栏避让 + 内边距，悬浮于背景/列表之上。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = "我的",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
+    RinklTopBar(
+        scrimAlpha = scrimAlpha,
+        horizontalPadding = 8.dp
+    ) {
+        Text(
+            text = "我的",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center)
+        )
     }
 }
 

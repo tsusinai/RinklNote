@@ -12,12 +12,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,9 +61,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -132,10 +137,30 @@ private val tabs= listOf<Tabs>(
 // 记账(index 1) 是 start destination；AI 不在 tab 列表里，单独有 route。
 private val tabRoutes = listOf("plan", "bookkeeping", "assets", "profile")
 
-/** 过渡方向用的页面序号：tab 按 计划0/记账1/资产2/我的3；AI 是记账页里的子页，排在最右。 */
+private val SecondaryEnterTransition =
+    fadeIn(animationSpec = Motion.Fade) + scaleIn(initialScale = 0.96f, animationSpec = Motion.Fade)
+private val SecondaryExitTransition =
+    fadeOut(animationSpec = Motion.Fade) + scaleOut(targetScale = 1.02f, animationSpec = Motion.Fade)
+private val SecondaryPopEnterTransition =
+    fadeIn(animationSpec = Motion.Fade) + scaleIn(initialScale = 1.02f, animationSpec = Motion.Fade)
+private val SecondaryPopExitTransition =
+    fadeOut(animationSpec = Motion.Fade) + scaleOut(targetScale = 0.96f, animationSpec = Motion.Fade)
+
+/** 四个主页的横向转场序号：计划 0 / 记账 1 / 资产 2 / 我的 3。 */
 internal fun routeIndex(route: String?): Int {
     val index = tabRoutes.indexOfFirst { it == route }
     return if (index >= 0) index else tabRoutes.size
+}
+
+/** 只有四个一级主页之间才使用横向滑动转场，二级页统一走缩放淡入淡出。 */
+internal fun usesHorizontalTabTransition(initialRoute: String?, targetRoute: String?): Boolean =
+    tabRoutes.any { it == initialRoute } && tabRoutes.any { it == targetRoute }
+
+/** 返回左右滑动后相邻的主页路由；到达边界或当前不是主页时返回 null。 */
+internal fun adjacentTabRoute(route: String?, step: Int): String? {
+    val index = tabRoutes.indexOfFirst { it == route }
+    if (index < 0 || step !in -1..1) return null
+    return tabRoutes.getOrNull(index + step)
 }
 
 /**
@@ -200,6 +225,7 @@ fun AppNavigation(app: RinklNoteApp) {
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val tabWidth = screenWidth / tabs.size
+    val tabSwipeThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
         factory = BookkeepingViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService)
@@ -294,6 +320,30 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
     val onTabClick: (Int) -> Unit = { index -> navigateTo(tabRoutes[index]) }
+    val currentTabIndex = tabRoutes.indexOfFirst { it == currentRoute }
+    val tabSwipeModifier = if (currentTabIndex >= 0) {
+        Modifier.pointerInput(currentTabIndex) {
+            var dragDistance = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { dragDistance = 0f },
+                onDragCancel = { dragDistance = 0f },
+                onHorizontalDrag = { _, dragAmount ->
+                    dragDistance += dragAmount
+                },
+                onDragEnd = {
+                    val step = when {
+                        dragDistance <= -tabSwipeThresholdPx -> 1
+                        dragDistance >= tabSwipeThresholdPx -> -1
+                        else -> 0
+                    }
+                    adjacentTabRoute(currentRoute, step)?.let(navigateTo)
+                    dragDistance = 0f
+                }
+            )
+        }
+    } else {
+        Modifier
+    }
 
     // Collect one-shot effects from QuickAddViewModel
     LaunchedEffect(quickAddVM) {
@@ -389,23 +439,40 @@ fun AppNavigation(app: RinklNoteApp) {
                 startDestination = "bookkeeping",
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                // 前进/后退一律按 tab 顺序给方向，push 与 pop 用同一套，保证滑动方向与页面顺序一致。
+                    .fillMaxWidth()
+                    .then(tabSwipeModifier),
+                // 四个主页按 tab 顺序横滑；二级页使用缩放淡入淡出，避免沿用横向滑动。
                 enterTransition = {
-                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                    slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                    if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
+                        val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                        slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                    } else {
+                        SecondaryEnterTransition
+                    }
                 },
                 exitTransition = {
-                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                    slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                    if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
+                        val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                        slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                    } else {
+                        SecondaryExitTransition
+                    }
                 },
                 popEnterTransition = {
-                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                    slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                    if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
+                        val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                        slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                    } else {
+                        SecondaryPopEnterTransition
+                    }
                 },
                 popExitTransition = {
-                    val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                    slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                    if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
+                        val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
+                        slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                    } else {
+                        SecondaryPopExitTransition
+                    }
                 }
             ) {
                 composable("plan") {
@@ -605,7 +672,6 @@ fun AppNavigation(app: RinklNoteApp) {
 
             // Custom bottom navigation — 仅 4 个 tab route (plan/bookkeeping/assets/profile) 显示；
             // AI(ai) 整条隐藏。
-            val currentTabIndex = tabRoutes.indexOf(currentRoute)
             if (currentTabIndex >= 0) {
                 CustomBottomBar(
                     currentIndex = currentTabIndex,

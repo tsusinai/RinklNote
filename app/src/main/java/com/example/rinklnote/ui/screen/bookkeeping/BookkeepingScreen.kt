@@ -14,14 +14,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -46,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -73,7 +69,9 @@ import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
@@ -121,8 +119,7 @@ fun BookkeepingScreen(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     // 顶栏是浮层：配图背景时把列表首项垫到它下面（不留整块空白）。
-    // 高度 = 状态栏避让 + 图标行（30dp 图标 + 上下各 8dp），与 TopBar 的布局保持一致。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    val topBarHeight = rememberRinklTopBarHeight()
     // 列表滚动后内容会滑到顶栏下方，白色图标需要一层渐隐暗底兜住可读性。
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
@@ -381,33 +378,14 @@ private fun TopBar(
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
     val iconColor = textColor
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 顶部渐隐遮罩：白色图标下的内容（照片/滚动上来的账单）被它压暗，保证可读性。
-        if (scrimAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
-        // 内容层：状态栏避让 + 内容内边距，悬浮于照片/渐变/横幅之上
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.TopCenter
-        ) {
+    RinklTopBar(
+        scrimAlpha = scrimAlpha,
+        horizontalPadding = 16.dp,
+        modifier = modifier
+    ) {
         // 更多 → 我的页；金融 → 资产页；登记 → 记账抽屉
         Row(
-            modifier = Modifier.align(Alignment.TopStart),
+            modifier = Modifier.align(Alignment.CenterStart),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -429,7 +407,7 @@ private fun TopBar(
             )
         }
         Row(
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -459,7 +437,7 @@ private fun TopBar(
             )
         }
         Row(
-            modifier = Modifier.align(Alignment.TopEnd),
+            modifier = Modifier.align(Alignment.CenterEnd),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -480,7 +458,6 @@ private fun TopBar(
                 tint = iconColor
             )
         }
-        } // 内容层 Box
     }
 }
 

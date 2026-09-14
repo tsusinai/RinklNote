@@ -1,6 +1,9 @@
 package com.example.rinklnote.navigation
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -33,12 +36,27 @@ class NavigationTransitionDirectionTest {
         assertEquals(1, direction("plan", "bookkeeping"))
     }
 
-    /** AI 不在 tab 列表里，视为记账页右侧的子页。 */
+    /** 二级页不再复用主页的横向滑动转场。 */
     @Test
-    fun aiIsTreatedAsPageRightOfEveryTab() {
-        assertEquals(1, direction("bookkeeping", "ai"))
-        assertEquals(1, direction("profile", "ai"))
-        assertEquals(-1, direction("ai", "bookkeeping"))
-        assertEquals(-1, direction("ai", "plan"))
+    fun secondaryPagesDoNotUseHorizontalTabTransition() {
+        assertFalse(usesHorizontalTabTransition("bookkeeping", "ai"))
+        assertFalse(usesHorizontalTabTransition("profile", "custom-theme"))
+        assertFalse(usesHorizontalTabTransition("month-detail", "bookkeeping"))
+        assertFalse(usesHorizontalTabTransition("bill-edit", "month-detail"))
+    }
+
+    @Test
+    fun onlyTabToTabUsesHorizontalTabTransition() {
+        assertTrue(usesHorizontalTabTransition("plan", "bookkeeping"))
+        assertTrue(usesHorizontalTabTransition("profile", "assets"))
+    }
+
+    @Test
+    fun swipeMovesToAdjacentTabWithoutWrapping() {
+        assertEquals("assets", adjacentTabRoute("bookkeeping", 1))
+        assertEquals("bookkeeping", adjacentTabRoute("assets", -1))
+        assertNull(adjacentTabRoute("plan", -1))
+        assertNull(adjacentTabRoute("profile", 1))
+        assertNull(adjacentTabRoute("ai", 1))
     }
 }

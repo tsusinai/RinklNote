@@ -34,6 +34,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -366,6 +369,7 @@ private fun CategorySection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .height(240.dp)
             .clip(shape)
             .then(applyCardGlass(shape))
             .padding(10.dp)
@@ -385,27 +389,41 @@ private fun CategorySection(
 
         // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
         val visibleParentId = if (showSubCategories) expandedParentId else null
-        categories.forEach { category ->
-            CategoryRow(
-                category = category,
-                isSelected = selectedCategory?.id == category.id,
-                hasSubCategories = category.id in parentIdsWithSubs,
-                onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
-                onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
-            )
-            // 二级分类紧跟母标签正下方展示，左缘与标签文字对齐。
-            // AnimatedVisibility 始终在组合中（不能靠 if 守卫，否则进入组合即 visible=true，
-            // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
-            AnimatedVisibility(
-                visible = visibleParentId == category.id && subCategories.isNotEmpty(),
-                enter = expandVertically(animationSpec = Motion.Expand) + fadeIn(Motion.Fade),
-                exit = shrinkVertically(animationSpec = Motion.Expand) + fadeOut(Motion.Fade)
-            ) {
-                SubCategoryPopup(
-                    subCategories = subCategories,
-                    selected = selectedSubCategory,
-                    onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
-                )
+        val listState = rememberLazyListState()
+        LaunchedEffect(selectedCategory?.id, categories.size) {
+            val selectedIndex = categories.indexOfFirst { it.id == selectedCategory?.id }
+            if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
+        }
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            items(categories, key = { it.id }) { category ->
+                Column {
+                    CategoryRow(
+                        category = category,
+                        isSelected = selectedCategory?.id == category.id,
+                        hasSubCategories = category.id in parentIdsWithSubs,
+                        onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
+                        onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
+                    )
+                    // 二级分类紧跟母标签正下方展示，左缘与标签文字对齐。
+                    // AnimatedVisibility 始终在组合中（不能靠 if 守卫，否则进入组合即 visible=true，
+                    // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
+                    AnimatedVisibility(
+                        visible = visibleParentId == category.id && subCategories.isNotEmpty(),
+                        enter = expandVertically(animationSpec = Motion.Expand) + fadeIn(Motion.Fade),
+                        exit = shrinkVertically(animationSpec = Motion.Expand) + fadeOut(Motion.Fade)
+                    ) {
+                        SubCategoryPopup(
+                            subCategories = subCategories,
+                            selected = selectedSubCategory,
+                            onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
+                        )
+                    }
+                }
             }
         }
     }

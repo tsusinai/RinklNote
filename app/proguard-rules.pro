@@ -1,26 +1,2 @@
-# Keep Compose stability annotations for recomposition skipping
--keep @androidx.compose.runtime.Stable class **
--keep @androidx.compose.runtime.Immutable class **
--keepclassmembers class * {
-    @androidx.compose.runtime.Stable <methods>;
-}
-
-# Room
--keep class com.example.rinklnote.data.db.entity.** { *; }
-
-# kotlinx-serialization
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.AnnotationsKt
--keepclassmembers class kotlinx.serialization.json.** {
-    *** Companion;
-}
--keepclasseswithmembers class kotlinx.serialization.json.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
--keep,includedescriptorclasses class com.example.rinklnote.**$$serializer { *; }
--keepclassmembers class com.example.rinklnote.** {
-    *** Companion;
-}
--keepclasseswithmembers class com.example.rinklnote.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
+# Compose、Room 和 kotlinx-serialization 都会随依赖提供 R8 consumer rules。
+# 仅当 R8 full mode 报出缺失规则时，再把规则收敛到具体类，避免全局 keep 阻碍裁剪与优化。

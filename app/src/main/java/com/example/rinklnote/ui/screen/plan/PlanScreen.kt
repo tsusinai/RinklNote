@@ -4,18 +4,18 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -31,19 +32,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.DarkIncomeGreen
 import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetState
@@ -82,9 +86,8 @@ fun PlanScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     val listState = rememberLazyListState()
-    val density = LocalDensity.current
-    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    // 顶栏悬浮：列表首项垫到它下面。
+    val topBarHeight = rememberRinklTopBarHeight()
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
     }
@@ -127,40 +130,51 @@ fun PlanScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 分类/子分类分层预算列表
-            if (state.categoryBudgets.isEmpty()) {
-                EmptyCategoryGuide(onClick = {
-                    viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
-                    onEditBudget()
-                })
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(state.categoryBudgets, key = { it.categoryId }) { category ->
-                        CategoryBudgetCard(
-                            category = category,
-                            onClick = {
-                                viewModel.onEvent(
-                                    BudgetEvent.EditBudget(
-                                        BudgetEditTarget.Category(category.categoryId, category.categoryName)
+            // 分类/子分类分层预算列表 + 尚可添加的分类入口。
+            val availableCategories = state.expenseCategories.filter { category ->
+                state.categoryBudgets.none { it.categoryId == category.id }
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(state.categoryBudgets, key = { it.categoryId }) { category ->
+                    CategoryBudgetCard(
+                        category = category,
+                        onClick = {
+                            viewModel.onEvent(
+                                BudgetEvent.EditBudget(
+                                    BudgetEditTarget.Category(category.categoryId, category.categoryName)
+                                )
+                            )
+                            onEditBudget()
+                        },
+                        onSubClick = { sub ->
+                            viewModel.onEvent(
+                                BudgetEvent.EditBudget(
+                                    BudgetEditTarget.SubCategory(
+                                        subCategoryId = sub.subCategoryId,
+                                        subCategoryName = sub.name,
+                                        parentCategoryId = sub.parentCategoryId,
+                                        parentCategoryName = category.categoryName
                                     )
                                 )
-                                onEditBudget()
-                            },
-                            onSubClick = { sub ->
+                            )
+                            onEditBudget()
+                        }
+                    )
+                }
+                if (availableCategories.isNotEmpty()) {
+                    item {
+                        CategoryBudgetPickerCard(
+                            categories = availableCategories,
+                            onCategoryClick = { category ->
                                 viewModel.onEvent(
                                     BudgetEvent.EditBudget(
-                                        BudgetEditTarget.SubCategory(
-                                            subCategoryId = sub.subCategoryId,
-                                            subCategoryName = sub.name,
-                                            parentCategoryId = sub.parentCategoryId,
-                                            parentCategoryName = category.categoryName
-                                        )
+                                        BudgetEditTarget.Category(category.id, category.name)
                                     )
                                 )
                                 onEditBudget()
@@ -189,36 +203,18 @@ private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: 
         !listScrolled -> LocalRinklColors.current.topBarTitleColor
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 顶部渐隐遮罩：白色标题下的内容被它压暗，保证可读性。
-        if (scrimAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = "计划",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
+    RinklTopBar(
+        scrimAlpha = scrimAlpha,
+        horizontalPadding = 16.dp,
+        modifier = modifier
+    ) {
+        Text(
+            text = "计划",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center)
+        )
     }
 }
 
@@ -337,29 +333,84 @@ private fun LastMonthSurplusRow(surplusMinor: Long) {
     }
 }
 
-/** 无分类预算时的空态引导（empty state guide）：点击直达总额预算编辑。 */
+/**
+ * 分类预算选择卡：承载尚未出现在预算列表中的支出分类。
+ * 分类完整列表来自 [BudgetState.expenseCategories]，空账本首次进入时也能直接设置。
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EmptyCategoryGuide(onClick: () -> Unit) {
+private fun CategoryBudgetPickerCard(
+    categories: List<Category>,
+    onCategoryClick: (Category) -> Unit
+) {
+    val shape = RoundedCornerShape(15.dp)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(15.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable { onClick() }
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .rinkShadow(shape)
+            .clip(shape)
+            .then(applyCardGlass(shape))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(
-            text = "还没有任何预算",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "分类预算",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "选择分类添加",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            categories.forEach { category ->
+                CategoryBudgetChip(
+                    category = category,
+                    onClick = { onCategoryClick(category) }
+                )
+            }
+        }
+    }
+}
+
+/** 分类预算快速入口：复用记账页的一级分类图标与紧凑 chip 形态。 */
+@Composable
+private fun CategoryBudgetChip(
+    category: Category,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(categoryIconRes(category.name)),
+            contentDescription = category.name,
+            modifier = Modifier.size(22.dp),
+            tint = Color.Unspecified
         )
-        Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "点击设置本月总额预算，或点分类单独设",
+            text = category.name,
             fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

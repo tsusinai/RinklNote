@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,15 +53,16 @@ import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthChartPager
 import com.example.rinklnote.ui.component.MonthHeatmap
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.RinklDivider
+import com.example.rinklnote.ui.component.RinklTopBar
+import com.example.rinklnote.ui.component.RinklTopBarContentHeight
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import java.time.Instant
 import java.time.LocalDate
 
@@ -127,8 +128,8 @@ fun MonthDetailOverlay(
                 .fillMaxSize()
                 .statusBarsPadding(),
             contentPadding = PaddingValues(
-                // 顶部垫高 = 浮动顶栏胶囊（上边距 8dp + 高 46dp），与首页「底栏之上有留白」同理
-                top = 54.dp,
+                // 顶部垫高 = 统一顶栏高度 + 内容起始留白。
+                top = RinklTopBarContentHeight + 8.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
@@ -197,7 +198,6 @@ fun MonthDetailOverlay(
         MonthDetailTopBar(
             monthLabel = monthLabel,
             hasPhoto = backgroundUri != null,
-            hazeState = hazeState,
             onBack = onBack
         )
     }
@@ -268,57 +268,39 @@ private fun FramedBanner(
     }
 }
 
-/** 浮动顶栏胶囊：与底部导航同款双材质——自选照片时挂 RinklCardFrostedStyle 毛玻璃，否则实底 surface。 */
+/** 月度详情悬浮顶栏：与主页同款无边框浮层，仅保留返回按钮和居中标题。 */
 @Composable
 private fun MonthDetailTopBar(
     monthLabel: String,
     hasPhoto: Boolean,
-    hazeState: HazeState?,
     onBack: () -> Unit
 ) {
-    val capsuleShape = RoundedCornerShape(20.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(start = 10.dp, end = 10.dp, top = 8.dp)
+    val textColor = if (hasPhoto) Color.White else LocalRinklColors.current.topBarTitleColor
+    RinklTopBar(
+        scrimAlpha = if (hasPhoto) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp)
-                .rinkShadow(capsuleShape)
-                .clip(capsuleShape)
-                .then(
-                    if (hasPhoto && hazeState != null) {
-                        Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
-                    } else {
-                        Modifier.background(MaterialTheme.colorScheme.surface)
-                    }
-                )
-                .then(applyCardGlass(capsuleShape))
-                .padding(horizontal = 3.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .align(Alignment.CenterStart)
+                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = monthLabel,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = textColor,
+                modifier = Modifier.size(24.dp)
             )
-            // 右侧等宽占位，让标题在胶囊内真正居中
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(40.dp))
         }
+        Text(
+            text = monthLabel,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center)
+        )
     }
 }
 

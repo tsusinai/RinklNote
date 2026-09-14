@@ -78,6 +78,8 @@ data class BudgetState(
     val totalBudget: Budget? = null,
     val monthExpenseMinor: Long = 0L,
     val categoryBudgets: List<CategoryBudgetState> = emptyList(),
+    /** 全部支出分类；供计划页在下框直接选择尚无双层预算行的分类。 */
+    val expenseCategories: List<Category> = emptyList(),
     val lastMonthSurplusMinor: Long? = null,
     /** 本月全部账单（编辑页分析按维度过滤派生）。 */
     val monthBills: List<Bill> = emptyList(),
@@ -178,6 +180,7 @@ internal data class MonthBudgetDerivation(
     val totalBudget: Budget?,
     val monthExpenseMinor: Long,
     val categoryBudgets: List<CategoryBudgetState>,
+    val expenseCategories: List<Category>,
     val monthBills: List<Bill>
 )
 
@@ -265,6 +268,7 @@ internal fun deriveMonthBudget(
         totalBudget = total,
         monthExpenseMinor = monthExpense,
         categoryBudgets = budgetedCategories + completedCategories,
+        expenseCategories = expenseCategories,
         monthBills = bills
     )
 }
@@ -425,6 +429,7 @@ class BudgetViewModel(
                         totalBudget = derivation.totalBudget,
                         monthExpenseMinor = derivation.monthExpenseMinor,
                         categoryBudgets = derivation.categoryBudgets,
+                        expenseCategories = derivation.expenseCategories,
                         monthBills = derivation.monthBills,
                         isLoading = false
                     )

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,10 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,8 +60,10 @@ import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.viewmodel.AssetsEvent
@@ -113,9 +110,8 @@ fun AssetsScreen(
     var menuForAccount by remember { mutableStateOf<Account?>(null) }
 
     val listState = rememberLazyListState()
-    val density = LocalDensity.current
-    // 顶栏悬浮：列表首项垫到它下面。高度 = 状态栏避让 + 标题行（20sp + 上下各 8dp）。
-    val topBarHeight = with(density) { WindowInsets.statusBars.getTop(density).toDp() } + 46.dp
+    // 顶栏悬浮：列表首项垫到它下面。
+    val topBarHeight = rememberRinklTopBarHeight()
     // 列表滚动后内容滑到顶栏下方，白色文字需要渐隐暗底兜住可读性。
     val listScrolled by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
@@ -277,62 +273,43 @@ private fun AssetsTopBar(
         !listScrolled -> LocalRinklColors.current.topBarTitleColor
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
-    Box(modifier = modifier.fillMaxWidth()) {
-        // 顶部渐隐遮罩：白色标题下的内容（照片/滚动上来的账户卡）被它压暗，保证可读性。
-        if (scrimAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
-        // 内容层：状态栏避让 + 内边距，悬浮于背景/列表之上（与首页 TopBar 同构）。
+    RinklTopBar(
+        scrimAlpha = scrimAlpha,
+        horizontalPadding = 8.dp,
+        modifier = modifier
+    ) {
+        // 左侧：全部对账（账户为空时禁用：半透明 + 不可点 + contentDescription 说明）。
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .align(Alignment.CenterStart)
+                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // 左侧：全部对账（账户为空时禁用：半透明 + 不可点 + contentDescription 说明）。
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "对账",
-                    fontSize = 16.sp,
-                    color = textColor.copy(alpha = if (canReconcileAll) 1f else 0.4f),
-                    modifier = Modifier.clickable(enabled = canReconcileAll) { onReconcileAll() }
-                )
-            }
-            // 居中：标题。
             Text(
-                text = "资产管理",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = textColor,
-                modifier = Modifier.align(Alignment.Center)
+                text = "对账",
+                fontSize = 16.sp,
+                color = textColor.copy(alpha = if (canReconcileAll) 1f else 0.4f),
+                modifier = Modifier.clickable(enabled = canReconcileAll) { onReconcileAll() }
             )
-            // 右侧：新建账户入口（IconButton 默认 48dp 触摸区）。
-            IconButton(
-                onClick = { onAddAccount() },
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_add_bill),
-                    contentDescription = "新建账户",
-                    tint = textColor
-                )
-            }
+        }
+        // 居中：标题。
+        Text(
+            text = "资产管理",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center)
+        )
+        // 右侧：新建账户入口。
+        IconButton(
+            onClick = { onAddAccount() },
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_add_bill),
+                contentDescription = "新建账户",
+                tint = textColor
+            )
         }
     }
 }
