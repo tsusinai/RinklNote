@@ -68,3 +68,38 @@ AppNavigation：接更多抽屉入口（BookkeepingScreen 回调）、`bill-map`
 - 只允许改动本任务列出的文件；**禁止运行 Gradle**（主会话统一编译）；**禁止 git 提交**。
 - 不改 Room schema（不新增迁移）；新依赖必须先加 `gradle/libs.versions.toml` 再引用。
 - 所有新 UI 走既有令牌体系；文案注释全中文；金额 Long 分。
+
+---
+
+# 第二轮（2026-09-15，用户 6 项新优化，分支不变）
+
+## R2-A1（MoreDrawer.kt 独占 + 新 ui/screen/currency/ + SettingsManager.kt）
+1. 更多抽屉对齐快速记账抽屉：宽度与 QuickAddDrawer 面板一致（200dp）、顶部个人信息区 padding
+   对齐（statusBarsPadding + 面板 vertical 8dp 内边距节奏）；**拉出时背景不黑化**——去掉黑 scrim，
+   改为透明触摸层收 dismissal（对照 QuickAddDrawer 的遮罩实现）。
+2. 多币种预实现：MoreDrawer 新增「多币种」行（LocationOn 风格图标体系内选合适图标）→
+   新页 MultiCurrencyScreen（路由 multi-currency 主会话接线）：本位币选择（默认 CNY，存
+   SettingsManager 新键 base_currency，代码表用 ISO 4217 常用币种：CNY/USD/EUR/JPY/GBP/HKD/KRW），
+   静态演示汇率表（标注「演示数据，记账换算为后续接入点」注释），不改 Room schema。
+
+## R2-A2（BillMapScreen.kt 独占）
+1. AccessBlocked 修复：OSM MAPNIK 封锁默认 UA——瓦片源换成国内可直连的公共源（高德
+   webrd01..04.is.autonavi.com appmaptile style=7，逐服务器轮询），TileSource 自定义
+   + UA 保持 packageName；保留演示标记。
+2. 定位 UI：标记改经典大头针样式 + 上方椭圆标签气泡（分类名 + 金额），配色走主题令牌
+   （支出 tertiary / 收入 IncomeGreen，底面 surface / 白雾）。
+
+## R2-A3（PlanScreen.kt 独占）
+计划主页已有「分类预算设置」入口：移除主页分类预算卡上的「未设 · 去设置」增加引导框
+（已设预算的分类展示保留），避免双入口。
+
+## R2-B1（QuickAddDrawer.kt + BillEditOverlay.kt + Motion.kt 独占）
+动画优化：编辑账单账户选择的伸展动画（animateContentSize/expand 收敛 Motion）；快速记账
+一级标签切换后二级标签的过渡（切换分类时二级区 AnimatedContent/淡入淡出 + Motion 令牌）。
+
+## R2-B2（新 ui/screen/web/ 独占）
+WebView 屏 WebScreen（路由 web-view?url={url}，Url 编解码；顶部 ArrowBack + 标题 +
+加载进度条；WebViewClient/JS 开启），用于 QQ 机器人绑定引导页内打开；导航层接线由主会话做，
+ProfileCards 的引导入口是否改跳由主会话集成时定。
+
+## 集成 R2（主会话）：AppNavigation 接 multi-currency / web-view 路由与回调；编译 + 测试 + 提交。

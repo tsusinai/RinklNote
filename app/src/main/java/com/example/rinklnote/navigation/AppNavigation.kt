@@ -88,6 +88,7 @@ import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
+import com.example.rinklnote.ui.screen.currency.MultiCurrencyScreen
 import com.example.rinklnote.ui.screen.importbills.BillImportViewModel
 import com.example.rinklnote.ui.screen.importbills.ImportBillsScreen
 import com.example.rinklnote.ui.screen.login.LoginPage
@@ -95,6 +96,7 @@ import com.example.rinklnote.ui.screen.map.BillMapScreen
 import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
 import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
+import com.example.rinklnote.ui.screen.web.WebScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
 import com.example.rinklnote.ui.screen.profile.CustomThemeScreen
@@ -527,6 +529,31 @@ fun AppNavigation(app: RinklNoteApp) {
                         onRequestEnable = { /* 开启动作已由页面内确认卡承担，此处预留埋点 */ }
                     )
                 }
+                composable("multi-currency") {
+                    // 多币种预实现：本位币选择存 DataStore，汇率演示表。
+                    MultiCurrencyScreen(
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        settingsManager = app.settingsManager,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = "web-view?url={url}&title={title}",
+                    arguments = listOf(
+                        navArgument("url") { type = NavType.StringType },
+                        navArgument("title") {
+                            type = NavType.StringType
+                            defaultValue = "网页"
+                        }
+                    )
+                ) { entry ->
+                    WebScreen(
+                        url = entry.arguments?.getString("url").orEmpty(),
+                        title = entry.arguments?.getString("title").orEmpty(),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
                 composable("budget-edit") {
                     // bill-edit 同款：编辑目标走共享 VM 状态，路由无参数；target 未就绪前先不渲染。
                     val editState by budgetVM.editState.collectAsStateWithLifecycle()
@@ -586,7 +613,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         profileName = authState.accountPhone,
                         profileLoggedIn = authState.isLoggedIn,
                         onOpenBillMap = { navController.navigate("bill-map") },
-                        onOpenImport = { navController.navigate("bill-import") }
+                        onOpenImport = { navController.navigate("bill-import") },
+                        onOpenMultiCurrency = { navController.navigate("multi-currency") }
                     )
 
                 }
@@ -877,19 +905,16 @@ fun AppNavigation(app: RinklNoteApp) {
             }
         }
 
-        // QQ 机器人绑定引导 — deep-links to the web binding page
+        // QQ 机器人绑定引导 — 应用内 WebView 打开 Web 端绑定页（web-view 路由）
         if (showQqBotGuide) {
             QqBotGuideDialog(
                 botBound = authState.botBound,
                 onOpenWeb = {
                     showQqBotGuide = false
-                    try {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(RetrofitClient.BASE_URL))
-                        )
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "无法打开浏览器", Toast.LENGTH_SHORT).show()
-                    }
+                    val guideUrl = RetrofitClient.BASE_URL + "settings"
+                    navController.navigate(
+                        "web-view?url=${Uri.encode(guideUrl)}&title=${Uri.encode("QQ 机器人引导")}"
+                    )
                 },
                 onDismiss = { showQqBotGuide = false }
             )

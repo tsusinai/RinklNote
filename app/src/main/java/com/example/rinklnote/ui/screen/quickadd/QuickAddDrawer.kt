@@ -6,13 +6,16 @@ import java.util.Locale
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
@@ -429,11 +432,21 @@ private fun CategorySection(
                         enter = expandVertically(animationSpec = Motion.Expand) + fadeIn(Motion.Fade),
                         exit = shrinkVertically(animationSpec = Motion.Expand) + fadeOut(Motion.Fade)
                     ) {
-                        SubCategoryPopup(
-                            subCategories = subCategories,
-                            selected = selectedSubCategory,
-                            onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
-                        )
+                        // 二级内容淡替：以二级分类列表为 key 交叉淡化（令牌 Motion.Fade）。
+                        // 切换母标签时 VM 会先清空 subCategories 再异步加载新列表——旧内容
+                        // 按切换瞬间的快照冻结，收起时旧二级淡出而非瞬空；新父级列表就绪后
+                        // 展开时直接呈现自己的内容，不再出现「内容瞬换」的生硬感。
+                        AnimatedContent(
+                            targetState = subCategories,
+                            transitionSpec = { fadeIn(Motion.Fade) togetherWith fadeOut(Motion.Fade) },
+                            label = "二级标签淡替"
+                        ) { subs ->
+                            SubCategoryPopup(
+                                subCategories = subs,
+                                selected = selectedSubCategory,
+                                onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
+                            )
+                        }
                     }
                 }
             }
@@ -479,11 +492,17 @@ private fun CategoryRow(
             }
         }
         // Radio dot
+        // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
+        val dotColor by animateColorAsState(
+            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+            animationSpec = Motion.SelectColor,
+            label = "分类选中圆点"
+        )
         Box(
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                .background(dotColor)
                 .then(
                     if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                     else Modifier
@@ -522,11 +541,17 @@ private fun SubCategoryPopup(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 // 与父分类/账户行同款单选圆点；未选中给空心圆点做右锚，保证可选中观感
+                // 填充随选中交叉淡化（令牌 Motion.SelectColor）
+                val dotColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    animationSpec = Motion.SelectColor,
+                    label = "二级标签选中圆点"
+                )
                 Box(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                        .background(dotColor)
                         .then(
                             if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                             else Modifier
@@ -604,11 +629,17 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (hidden) "***" else Money.format(account.balanceMinor), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(8.dp))
+            // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
+            val dotColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                animationSpec = Motion.SelectColor,
+                label = "账户选中圆点"
+            )
             Box(
                 modifier = Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                    .background(dotColor)
                     .then(
                         if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                         else Modifier

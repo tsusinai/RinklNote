@@ -1,7 +1,15 @@
 package com.example.rinklnote.ui.screen.map
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.drawable.BitmapDrawable
+import android.util.TypedValue
+import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -37,23 +45,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.example.rinklnote.R
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import java.io.File
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.infowindow.InfoWindow
 
 /**
  * 「账单地图」预实现（路由 `bill-map` 由主会话接线，对应目标 9）。
@@ -61,11 +78,18 @@ import org.osmdroid.views.overlay.Marker
  * 现实约束：bills 表**尚无位置字段（lat/lng）**，无真实账单地点数据——本页按三态流程预实现：
  * ① 确认卡：说明「账单地图按消费地点展示账单，需开启定位权限」，「开启」同时请求
  *    ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION（[RequestMultiplePermissions]）→
- * ② 地图态：osmdroid [MapView]（开源 OSM 瓦片，**无需 API key**），放置演示标记占位；
+ * ② 地图态：osmdroid [MapView] + 高德瓦片源（[AmapTileSource]，**无需 API key**、国内可直连；
+ *    OSM MAPNIK 会封锁 osmdroid 类默认 UA 导致 AccessBlocked，故弃用），演示标记为
+ *    Canvas 自绘经典水滴大头针（支出 tertiary 红 / 收入 IncomeGreen）+ 上方椭圆白雾气泡
+ *    （[BillInfoWindow]，展示「分类名 ¥金额」）；
  * ③ 拒绝态：引导卡（说明 + 「去开启」重试 + 返回）。
  *
+ * **坐标系说明**：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在数百米级偏移；
+ * 演示标记阶段可接受，**接入真实账单位置时需 WGS-84→GCJ-02 纠偏**后再打点。
+ *
  * **后续接入点**：bills 表加位置字段后，①删掉 [DemoBillPlaces] 演示标记，改为按账单
- * 聚合真实标记；②初始视野改为按聚合点的包围盒定位（或用户最近一次消费地点）。
+ * 聚合真实标记（含 WGS-84→GCJ-02 纠偏）；②初始视野改为按聚合点的包围盒定位
+ * （或用户最近一次消费地点）。
  *
  * 材质沿用 App 既有规范：确认/引导卡 15dp 圆角 + rinkShadow + applyCardGlass，
  * 字阶 18/14/16，页面水平 14dp；有自选背景时卡片透出照片（hazeState 非空即挂毛玻璃能力）。
@@ -260,26 +284,152 @@ private fun StepCard(
 // ---------------------------------------------------------------------------
 
 /**
- * 演示标记数据：**bills 表位置字段（lat/lng）接入前的占位**。
- * 接入后删除本列表，替换为真实账单按地点聚合的标记（见类头注释「后续接入点」）。
+ * 高德瓦片源：修复 OSM MAPNIK 对 osmdroid 类默认 UA 的 AccessBlocked 封锁，
+ * 同时改善国内加载速度。webrd01~04 四台公共瓦片服务器，[XYTileSource] 经
+ * getBaseUrl() 内部随机轮询分发；zoom 3-19、瓦片 256px、.png 后缀；
+ * UA 已由 Configuration 统一设为应用包名，此处无需额外处理。
+ *
+ * 覆写说明：osmdroid 默认按「baseUrl + z/x/y.png」路径拼接瓦片地址（不支持 {x} 占位符），
+ * 而高德 appmaptile 是查询参数式 URL，故覆写 [getTileURLString] 改为
+ * 「baseUrl（含 lang/size/scale/style 业务参数）+ &x=…&y=…&z=…」拼接。
  */
-private data class DemoBillPlace(val lat: Double, val lng: Double, val title: String)
+private val AmapTileSource: XYTileSource = object : XYTileSource(
+    "AmapTiles", 3, 19, 256, ".png",
+    arrayOf(
+        "https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7",
+        "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7",
+        "https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7",
+        "https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7"
+    )
+) {
+    override fun getTileURLString(pMapTileIndex: Long): String = buildString {
+        append(getBaseUrl())
+        append("&x=").append(MapTileIndex.getX(pMapTileIndex))
+        append("&y=").append(MapTileIndex.getY(pMapTileIndex))
+        append("&z=").append(MapTileIndex.getZoom(pMapTileIndex))
+    }
+}
+
+/**
+ * 演示标记数据：**bills 表位置字段（lat/lng）接入前的占位**。
+ * 接入后删除本列表，替换为真实账单按地点聚合的标记（见文件头注释「后续接入点」）。
+ *
+ * 坐标系说明：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在偏移——演示标记阶段可接受，
+ * **接入真实账单位置时需 WGS-84→GCJ-02 纠偏**后再打点。
+ *
+ * @param isExpense true = 支出（大头针/气泡字色走 tertiary 红），false = 收入（IncomeGreen）
+ */
+private data class DemoBillPlace(
+    val lat: Double,
+    val lng: Double,
+    val category: String,
+    val amountMinor: Long,
+    val isExpense: Boolean
+)
 
 private val DemoBillPlaces = listOf(
-    DemoBillPlace(31.2304, 121.4737, "示例 · 午餐 ¥28"),
-    DemoBillPlace(31.2455, 121.5028, "示例 · 咖啡 ¥18"),
-    DemoBillPlace(31.2230, 121.4400, "示例 · 地铁 ¥4"),
-    DemoBillPlace(31.2600, 121.4300, "示例 · 超市 ¥96")
+    DemoBillPlace(31.2304, 121.4737, "午餐", 2800L, isExpense = true),
+    DemoBillPlace(31.2230, 121.4400, "地铁", 400L, isExpense = true),
+    DemoBillPlace(31.2245, 121.4890, "超市", 9600L, isExpense = true),
+    DemoBillPlace(31.2600, 121.4300, "兼职", 15000L, isExpense = false),
+    DemoBillPlace(31.2380, 121.4560, "红包", 888L, isExpense = false)
 )
 
 /** 默认演示城市：上海人民广场一带（无定位数据时的固定初始视野）。 */
 private val DefaultCenter = GeoPoint(31.2304, 121.4737)
 
+/**
+ * Canvas 自绘经典水滴大头针：大头圆弧 + 两条切线收拢到针尖 + 中心白点，
+ * 颜色随收支类型（支出 tertiary 红 / 收入 IncomeGreen）。
+ * 位图按当前屏幕密度绘制，保证各分辨率下大小一致、边缘清晰。
+ */
+private fun buildPinDrawable(context: Context, colorArgb: Int): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val width = (34 * density).toInt().coerceAtLeast(1)
+    val height = (46 * density).toInt().coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+
+    val radius = width * 0.36f
+    val cx = width / 2f
+    val cy = height * 0.36f
+    val tipY = height * 0.96f
+
+    // 水滴轮廓：从圆左下切点起，沿大头圆弧（绕过顶部）到右下切点，再收拢到针尖；
+    // 切点角 = asin(radius / 针尖距)，保证两段直线与圆弧相切、轮廓平滑无折角
+    val drop = Path()
+    val tipDistance = (tipY - cy) / radius
+    val tangentAngle = Math.toDegrees(Math.asin(1.0 / tipDistance)).toFloat()
+    drop.arcTo(
+        cx - radius, cy - radius, cx + radius, cy + radius,
+        180f - tangentAngle, 180f + 2f * tangentAngle, false
+    )
+    drop.lineTo(cx, tipY)
+    drop.close()
+
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorArgb }
+    canvas.drawPath(drop, paint)
+
+    // 经典大头针的中心白点（字面量 0xFFFFFFFF，避免与 Compose Color 导入冲突）
+    paint.color = 0xFFFFFFFF.toInt()
+    canvas.drawCircle(cx, cy, radius * 0.42f, paint)
+
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+/**
+ * 气泡视图：单个 TextView + 椭圆（胶囊圆角）白雾底图（[R.drawable.map_bubble_bg]），
+ * 12sp「分类名 ¥金额」，字色随收支类型。
+ */
+private fun buildBubbleLabel(context: Context, label: String, textColorArgb: Int): TextView {
+    val density = context.resources.displayMetrics.density
+    return TextView(context).apply {
+        text = label
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+        setTextColor(textColorArgb)
+        background = ContextCompat.getDrawable(context, R.drawable.map_bubble_bg)
+        val horizontal = (10 * density).toInt()
+        val vertical = (5 * density).toInt()
+        setPadding(horizontal, vertical, horizontal, vertical)
+    }
+}
+
+/**
+ * 账单气泡：osmdroid [InfoWindow] 自定义实现（替代默认灰底 title/snippet 气泡观感）。
+ * 每个标记各持一个实例，「分类名 ¥金额」文本随实例固定；
+ * 点击标记展开（Marker 默认行为）、点地图空白处收起（MapEventsOverlay 兜底）。
+ * 定位：Marker.setInfoWindowAnchor(CENTER, 0f) + InfoWindow 内部 BOTTOM_CENTER 锚定，
+ * 使气泡底边中点悬于大头针图标正上方。
+ */
+private class BillInfoWindow(
+    context: Context,
+    mapView: MapView,
+    label: String,
+    textColorArgb: Int
+) : InfoWindow(buildBubbleLabel(context, label, textColorArgb), mapView) {
+
+    override fun onOpen(item: Any?) {
+        // 同屏最多一个气泡：open() 内部先于 addView 调用 onOpen，此刻本气泡尚未挂上
+        // MapView，先收起其他已展开的气泡不会误伤自己
+        mMapView?.let { InfoWindow.closeAllInfoWindowsOn(it) }
+    }
+
+    override fun onClose() {
+        // 气泡视图由基类 close() 统一从 MapView 移除，无需额外清理
+    }
+}
+
 @Composable
 private fun MapContent(onBack: () -> Unit) {
     val context = LocalContext.current
 
-    // osmdroid 初始化只做一次：UA 必须在首个 MapView 创建前设置（默认空 UA 会被瓦片服务器拒绝）；
+    // 收支配色一次性转为 android 层 ARGB int（大头针与气泡共用）：
+    // 支出 = tertiary（亮色主题即 ExpenseRed #CA3032），收入 = IncomeGreen #04A433
+    val expenseColor = MaterialTheme.colorScheme.tertiary.toArgb()
+    val incomeColor = IncomeGreen.toArgb()
+
+    // osmdroid 初始化只做一次：UA 必须在首个 MapView 创建前设置——OSM 官方源封锁
+    // osmdroid 类默认 UA（AccessBlocked 的根源），改走高德瓦片后沿用应用包名 UA 即可；
     // 瓦片缓存落到应用 cache 目录，避开 Android 10+ 分区存储下默认外部路径不可写的问题。
     val mapView = remember {
         Configuration.getInstance().apply {
@@ -287,20 +437,42 @@ private fun MapContent(onBack: () -> Unit) {
             osmdroidBasePath = File(context.cacheDir, "osmdroid")
             osmdroidTileCache = File(context.cacheDir, "osmdroid/tiles")
         }
-        MapView(context).apply {
-            setTileSource(TileSourceFactory.MAPNIK)
-            setMultiTouchControls(true)
+        MapView(context).also { map ->
+            // 换用高德瓦片源：国内可直连、不受 MAPNIK 封锁影响（替代 TileSourceFactory.MAPNIK）
+            map.setTileSource(AmapTileSource)
+            map.setMultiTouchControls(true)
             // 隐藏 osmdroid 自带缩放按钮（+/-），走双指捏合手势
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-            controller.setZoom(11.0)
-            controller.setCenter(DefaultCenter)
-            // 演示标记（占位）：账单位置字段接入后替换为真实聚合数据
+            map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            map.controller.setZoom(11.0)
+            map.controller.setCenter(DefaultCenter)
+
+            // 地图空白处单击收起已展开气泡：osmdroid 默认不会自动收起 InfoWindow，
+            // 用 MapEventsOverlay 兜底；先加入（overlay 列表底部），后加的标记获得更高触摸优先级，
+            // 点标记仍由 Marker 自己处理展开
+            map.overlays.add(
+                MapEventsOverlay(object : MapEventsReceiver {
+                    override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                        InfoWindow.closeAllInfoWindowsOn(map)
+                        return false
+                    }
+
+                    override fun longPressHelper(p: GeoPoint?): Boolean = false
+                })
+            )
+
+            // 演示标记（占位）：账单位置字段接入后替换为真实聚合数据（需 WGS-84→GCJ-02 纠偏）。
+            // 大头针针尖对准坐标点（ANCHOR_CENTER / ANCHOR_BOTTOM），气泡悬于针尖上方
+            // （setInfoWindowAnchor(CENTER, 0f)）；点击标记展开、点其他处收起
             DemoBillPlaces.forEach { place ->
-                overlays.add(
-                    Marker(this).apply {
+                val colorArgb = if (place.isExpense) expenseColor else incomeColor
+                val label = "${place.category} ${Money.format(place.amountMinor)}"
+                map.overlays.add(
+                    Marker(map).apply {
                         position = GeoPoint(place.lat, place.lng)
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                        title = place.title
+                        setInfoWindowAnchor(Marker.ANCHOR_CENTER, 0f)
+                        icon = buildPinDrawable(context, colorArgb)
+                        setInfoWindow(BillInfoWindow(context, map, label, colorArgb))
                     }
                 )
             }

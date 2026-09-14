@@ -5,8 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
-import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -72,9 +69,10 @@ import kotlin.math.abs
  * - 悬浮顶栏（floating top bar）：极简，仅居中「计划」标题（tab 内页无返回键，左右留空）+ scrim 渐隐。
  * - 卡片 `rinkShadow` + 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
  *
- * 编辑流：点击总额卡/分类行/子分类行 → 派发 [BudgetEvent.EditBudget] 填充共享编辑状态 →
+ * 编辑流：点击总额卡/已设预算的分类行/子分类行 → 派发 [BudgetEvent.EditBudget] 填充共享编辑状态 →
  * [onEditBudget] 跳转独立路由 `budget-edit`（bill-edit 同款），金额输入/删除都在编辑页完成。
- * 列表区头部另有「分类预算设置」入口行 → [onOpenCategoryBudgets] 跳转独立路由
+ * 未设预算的分类行在主页不可点（仅灰色「未设置」纯文本提示），分类预算的新增/编辑统一走
+ * 列表区头部的「分类预算设置」入口行 → [onOpenCategoryBudgets] 跳转独立路由
  * `budget-categories`（该路由由主会话接线）。
  *
  * @param viewModel 预算页 ViewModel
@@ -139,10 +137,8 @@ fun PlanScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 分类/子分类分层预算列表 + 尚可添加的分类入口。
-            val availableCategories = state.expenseCategories.filter { category ->
-                state.categoryBudgets.none { it.categoryId == category.id }
-            }
+            // 分类/子分类分层预算列表：主页只展示各分类预算进度（R2-A3：去掉「选择分类添加」
+            // 增加框与「未设 · 去设置」引导胶囊，新增/编辑统一走「分类预算设置」独立页）。
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -179,21 +175,6 @@ fun PlanScreen(
                             onEditBudget()
                         }
                     )
-                }
-                if (availableCategories.isNotEmpty()) {
-                    item {
-                        CategoryBudgetPickerCard(
-                            categories = availableCategories,
-                            onCategoryClick = { category ->
-                                viewModel.onEvent(
-                                    BudgetEvent.EditBudget(
-                                        BudgetEditTarget.Category(category.id, category.name)
-                                    )
-                                )
-                                onEditBudget()
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -349,8 +330,7 @@ private fun LastMonthSurplusRow(surplusMinor: Long) {
 /**
  * 计划模块共用的分类图标（适应铺满）：图标 Box 尺寸即「行内图标位」尺寸，
  * 内部 [Image] 以 `ContentScale.Fit` 铺满整个 Box、不留多余 padding。
- * 分类图标为彩色矢量资源，不走 tint。分类行 / 子分类行 / 快速入口 chip /
- * 「分类预算设置」页共用本组件。
+ * 分类图标为彩色矢量资源，不走 tint。分类行 / 子分类行 /「分类预算设置」页共用本组件。
  */
 @Composable
 internal fun PlanCategoryIcon(
@@ -405,95 +385,14 @@ private fun CategoryBudgetEntryRow(onClick: () -> Unit) {
 }
 
 /**
- * 分类预算选择卡：承载尚未出现在预算列表中的支出分类。
- * 分类完整列表来自 [BudgetState.expenseCategories]，空账本首次进入时也能直接设置。
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CategoryBudgetPickerCard(
-    categories: List<Category>,
-    onCategoryClick: (Category) -> Unit
-) {
-    val shape = RoundedCornerShape(15.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(shape)
-            .clip(shape)
-            .then(applyCardGlass(shape))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "分类预算",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "选择分类添加",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            categories.forEach { category ->
-                CategoryBudgetChip(
-                    category = category,
-                    onClick = { onCategoryClick(category) }
-                )
-            }
-        }
-    }
-}
-
-/** 分类预算快速入口：复用记账页的一级分类图标与紧凑 chip 形态。 */
-@Composable
-private fun CategoryBudgetChip(
-    category: Category,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(10.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f), shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 图标适应铺满：22dp 图标位内 Image 按 Fit 铺满，不留多余 padding。
-        PlanCategoryIcon(
-            iconRes = categoryIconRes(category.name),
-            size = 22.dp,
-            contentDescription = category.name
-        )
-        Text(
-            text = category.name,
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-/**
  * 一级分类预算卡（Category Budget Card）：白底 + 毛玻璃，内含分类行 + 子分类行列表。
  *
- * - 分类行：分类图标（28dp 图标位，[PlanCategoryIcon] 适应铺满）+ 分类名 + 进度条 + 预算额/未设；
- *   点击进分类预算键盘。
+ * - 分类行：分类图标（28dp 图标位，[PlanCategoryIcon] 适应铺满）+ 分类名 + 进度条 +
+ *   预算额/灰色「未设置」纯文本；已设预算才可点击进编辑，未设行不可点
+ *   （R2-A3：主页去掉「未设 · 去设置」引导，新增/编辑统一走「分类预算设置」独立页）。
  * - 子分类行：缩进 + 半透明底色（非毛玻璃），点击进子分类预算键盘。
  *
- * @param onClick 点分类行 → 编辑分类预算
+ * @param onClick 点已设预算的分类行 → 编辑分类预算
  * @param onSubClick 点子分类行 → 编辑子分类预算
  */
 @Composable
@@ -514,7 +413,10 @@ private fun CategoryBudgetCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
-                .clickable { onClick() },
+                .then(
+                    // 仅已设预算的分类行可点击进编辑；未设行主页不可点，设置统一走「分类预算设置」独立页。
+                    if (category.amountMinor > 0) Modifier.clickable { onClick() } else Modifier
+                ),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -550,16 +452,12 @@ private fun CategoryBudgetCard(
                     color = if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
             } else {
-                // 未设预算：主色调小胶囊引导（比原灰字「未设」更醒目、更有可点暗示）。
+                // 未设预算：仅灰色「未设置」纯文本提示（12sp、不可点、不做任何引导），
+                // 设置/编辑统一走「分类预算设置」独立页（R2-A3）。
                 Text(
-                    text = "未设 · 去设置",
+                    text = "未设置",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

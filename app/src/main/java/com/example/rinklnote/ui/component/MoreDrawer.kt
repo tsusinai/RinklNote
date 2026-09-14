@@ -2,8 +2,6 @@ package com.example.rinklnote.ui.component
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -20,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,7 +53,8 @@ import dev.chrisbanes.haze.hazeEffect
  * `hazeState` 非空才挂 `hazeEffect`（有自选背景时由 nav 层传入），否则回落纯白实心。
  *
  * 交互约定：点击功能行**先关闭抽屉再触发回调**（`onDismiss` 在内部先行调用）；
- * scrim 半透明黑底点击关闭；系统返回键关闭（[BackHandler]）。
+ * 遮罩层为**透明可点击层**（不做黑化，拉出时背景保持原观感，对齐 [com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer]），
+ * 点击空白处关闭；系统返回键关闭（[BackHandler]）。
  *
  * @param isVisible 抽屉可见性（由调用方 `remember` 的布尔状态驱动）
  * @param profileName 登录昵称/手机号；未登录时忽略，显示「未登录」
@@ -64,6 +64,8 @@ import dev.chrisbanes.haze.hazeEffect
  * @param onOpenImport 「导入账单」项回调（路由 `bill-import` 由主会话接线）
  * @param onOpenSettings 「设置」项回调（当前跳「我的」页）
  * @param onOpenAbout 「关于」项回调（当前跳「我的」页，后续可接独立关于页）
+ * @param onOpenMultiCurrency 「多币种」项回调（路由 `multi-currency` 由主会话接线）；
+ *   默认空实现——现调用点（BookkeepingScreen）未传参也能编译，主会话集成时再接通
  * @param hazeState 毛玻璃状态；null = 无背景照片可采样，面板回落纯白实心
  */
 @Composable
@@ -76,6 +78,7 @@ fun MoreDrawer(
     onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenMultiCurrency: () -> Unit = {},
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
@@ -102,35 +105,30 @@ fun MoreDrawer(
         modifier = modifier
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // scrim：半透明黑底，点击任意空白处关闭（随抽屉进出淡入淡出）
+            // 透明可点击层：仅用于点击空白处关闭（不做黑化遮罩，随抽屉进出出现/消失）
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .animateEnterExit(
-                        enter = fadeIn(Motion.Fade),
-                        exit = fadeOut(Motion.Fade)
-                    )
-                    .background(Color.Black.copy(alpha = 0.32f))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { onDismiss() }
             )
 
-            // 抽屉面板：左缘贴边、宽 280dp、右缘 18dp 圆角
+            // 抽屉面板：左缘贴边、宽 200dp、高 88%（几何对齐 QuickAddDrawer 面板，左右镜像）、右缘 18dp 圆角
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .fillMaxHeight()
+                    .fillMaxHeight(0.88f)
+                    .width(200.dp)
                     .padding(vertical = 8.dp)
-                    .width(280.dp)
                     .clip(panelShape)
                     .then(panelSurface)
                     .then(applyCardGlass(panelShape))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { /* 面板吞掉点击，避免透传到 scrim 误关 */ }
+                    ) { /* 面板吞掉点击，避免透传到点击层误关 */ }
             ) {
                 DrawerContent(
                     profileName = profileName,
@@ -138,6 +136,7 @@ fun MoreDrawer(
                     onDismiss = onDismiss,
                     onOpenBillMap = onOpenBillMap,
                     onOpenImport = onOpenImport,
+                    onOpenMultiCurrency = onOpenMultiCurrency,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout
                 )
@@ -157,12 +156,15 @@ private fun DrawerContent(
     onDismiss: () -> Unit,
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
+    onOpenMultiCurrency: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            // 个人信息区避让状态栏：面板上缘可能顶进状态栏，内容整体下压
+            .statusBarsPadding()
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         // ---- 顶部个人信息区 ----
@@ -228,6 +230,17 @@ private fun DrawerContent(
             },
             label = "导入账单",
             onClick = closeThen(onDismiss, onOpenImport)
+        )
+        MoreDrawerRow(
+            icon = { tint ->
+                Icon(
+                    painter = painterResource(R.drawable.ic_finance),
+                    contentDescription = null,
+                    tint = tint
+                )
+            },
+            label = "多币种",
+            onClick = closeThen(onDismiss, onOpenMultiCurrency)
         )
         MoreDrawerRow(
             icon = { tint -> Icon(Icons.Filled.Settings, contentDescription = null, tint = tint) },

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -51,6 +52,9 @@ object Motion {
 
     // 按压缩放（PressScale 修饰符）：短促干脆的按下/回弹，无过冲
     val PressScale: FiniteAnimationSpec<Float> = tween(DurationPress, easing = IndicatorEasing)
+
+    // 选中态颜色过渡（Color）：chip 底色 / radio 圆点填充在选中切换时交叉淡化，避免色块跳变
+    val SelectColor: FiniteAnimationSpec<Color> = tween(DurationExpand, easing = IndicatorEasing)
 
     // Card height auto-resize (drag settle / expand) — same spring feel as row shift
     val ContentResize: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow)

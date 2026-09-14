@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 账单地图气泡底图：椭圆（胶囊圆角）白雾底 + 1dp 描边。
+     描边色取自 ui/theme/RinklColors.kt 的 DefaultCardBorder（#CFCFCF）——
+     资源层无法引用 Compose 令牌，令牌改动时需手动同步本文件。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- 白雾底：高透白，压住地图瓦片保证文字可读 -->
+    <solid android:color="#D9FFFFFF" />
+
+    <!-- 胶囊圆角（气泡高度约 26dp，radius 取一半即呈椭圆观感） -->
+    <corners android:radius="18dp" />
+
+    <!-- 1dp DefaultCardBorder 描边 -->
+    <stroke
+        android:width="1dp"
+        android:color="#CFCFCF" />
+</shape>

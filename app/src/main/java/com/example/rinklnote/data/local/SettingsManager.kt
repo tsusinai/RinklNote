@@ -22,9 +22,14 @@ private val Context.settingsDataStore: DataStore<Preferences>
 
 class SettingsManager(private val context: Context) {
     companion object {
+        /** 本位币默认值：人民币（ISO 4217 代码）。 */
+        const val DEFAULT_BASE_CURRENCY = "CNY"
+
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
         private val KEY_AUTO_SYNC = booleanPreferencesKey("auto_sync")
         private val KEY_BACKGROUND_URI = stringPreferencesKey("background_uri")
+        // 多币种（预实现）：本位币，存 ISO 4217 代码（如 "CNY"）。
+        private val KEY_BASE_CURRENCY = stringPreferencesKey("base_currency")
         private val KEY_BALANCE_HIDDEN = booleanPreferencesKey("balance_hidden")
         private val KEY_DAILY_REPORT_ENABLED = booleanPreferencesKey("daily_report_enabled")
         private val KEY_DAILY_REPORT_HOUR = intPreferencesKey("daily_report_hour")
@@ -71,6 +76,13 @@ class SettingsManager(private val context: Context) {
     /** 自定义背景：记账页毛玻璃背后铺的图库照片路径；null 表示未设置（用主题背景色）。 */
     val backgroundUri: Flow<String?> = context.settingsDataStore.data.map { it[KEY_BACKGROUND_URI] }
 
+    /**
+     * 本位币（ISO 4217 代码，如 CNY/USD/EUR…）；默认人民币。
+     * 当前仅多币种预实现页读写，暂不参与任何记账/统计换算（bills 金额仍为整数分本位币）。
+     */
+    val baseCurrency: Flow<String> =
+        context.settingsDataStore.data.map { it[KEY_BASE_CURRENCY] ?: DEFAULT_BASE_CURRENCY }
+
     /** 余额/金额隐私掩码：默认 false（显示真实金额）。App 与主屏小组件共读此开关。 */
         val balanceHidden: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_BALANCE_HIDDEN] ?: false }
     val dailyReportEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_ENABLED] ?: false }
@@ -113,6 +125,11 @@ class SettingsManager(private val context: Context) {
             if (uri == null) it.remove(KEY_BACKGROUND_URI)
             else it[KEY_BACKGROUND_URI] = uri
         }
+    }
+
+    /** 写入本位币（ISO 4217 代码，由调用方保证取值合法，如多币种页的币种清单）。 */
+    suspend fun setBaseCurrency(code: String) {
+        context.settingsDataStore.edit { it[KEY_BASE_CURRENCY] = code }
     }
 
     suspend fun setDailyReportEnabled(enabled: Boolean) {

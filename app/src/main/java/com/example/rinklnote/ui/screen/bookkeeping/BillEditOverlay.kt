@@ -1,6 +1,12 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +64,7 @@ import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -351,32 +358,43 @@ private fun CategoryEditor(
         )
         Spacer(modifier = Modifier.height(4.dp))
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SecondaryCategoryChip(
-                label = "不限",
-                selected = selectedSubCategory == null,
-                onClick = { onSubCategoryClick(null) }
-            )
-            subCategories.forEach { subCategory ->
-                SecondaryCategoryChip(
-                    label = subCategory.name,
-                    selected = selectedSubCategory?.id == subCategory.id,
-                    onClick = { onSubCategoryClick(subCategory) }
-                )
-            }
-        }
+        // 二级标签区以二级分类列表为 key 交叉淡替（令牌 Motion.Fade）：切换一级标签时
+        // 旧内容按切换瞬间的快照淡出、新内容淡入，避免整块内容瞬间替换的生硬感
+        // （与快捷记账抽屉的二级标签同款处理）。
+        AnimatedContent(
+            targetState = subCategories,
+            transitionSpec = { fadeIn(Motion.Fade) togetherWith fadeOut(Motion.Fade) },
+            label = "编辑页二级标签淡替"
+        ) { subs ->
+            Column {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SecondaryCategoryChip(
+                        label = "不限",
+                        selected = selectedSubCategory == null,
+                        onClick = { onSubCategoryClick(null) }
+                    )
+                    subs.forEach { subCategory ->
+                        SecondaryCategoryChip(
+                            label = subCategory.name,
+                            selected = selectedSubCategory?.id == subCategory.id,
+                            onClick = { onSubCategoryClick(subCategory) }
+                        )
+                    }
+                }
 
-        if (subCategories.isEmpty()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "该标签暂无二级分类，可直接保存",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                if (subs.isEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "该标签暂无二级分类，可直接保存",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -388,16 +406,24 @@ private fun PrimaryCategoryChip(
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(10.dp)
+    // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
+    val chipColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+        },
+        animationSpec = Motion.SelectColor,
+        label = "一级标签选中底色"
+    )
     Row(
         modifier = Modifier
             .clip(shape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-                shape
-            )
+            .background(chipColor, shape)
             .then(if (selected) Modifier else applyCardGlass(shape))
             .clickable(onClick = onClick)
+            // 选中字重加粗引起微宽度变化：平滑伸缩，相邻 chip 不再瞬移
+            .animateContentSize(animationSpec = Motion.ContentResize)
             .padding(horizontal = 11.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -428,14 +454,20 @@ private fun SecondaryCategoryChip(
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(8.dp)
+    // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
+    val chipColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+        },
+        animationSpec = Motion.SelectColor,
+        label = "二级标签选中底色"
+    )
     Box(
         modifier = Modifier
             .clip(shape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-                shape
-            )
+            .background(chipColor, shape)
             .then(if (selected) Modifier else applyCardGlass(shape))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -531,16 +563,25 @@ private fun AccountEditor(
             accounts.forEach { account ->
                 val selected = selectedAccount?.id == account.id
                 val shape = RoundedCornerShape(10.dp)
+                // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
+                val chipColor by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+                    },
+                    animationSpec = Motion.SelectColor,
+                    label = "账户选中底色"
+                )
                 Row(
                     modifier = Modifier
                         .clip(shape)
-                        .background(
-                            if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-                            shape
-                        )
+                        .background(chipColor, shape)
                         .then(if (selected) Modifier else applyCardGlass(shape))
                         .clickable { onAccountClick(account) }
+                        // 选中圆点出现/消失引起宽度跳变：以 ContentResize 平滑伸缩，
+                        // FlowRow 内相邻账户的位置随动不再瞬移
+                        .animateContentSize(animationSpec = Motion.ContentResize)
                         .padding(horizontal = 11.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically
