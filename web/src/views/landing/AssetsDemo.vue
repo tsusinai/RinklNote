@@ -58,7 +58,7 @@ const debts = demoAccounts.filter((a) => a.kind === 'liability')
 .phone-card { width: min(100%, 340px); background: var(--card); border-radius: 24px; padding: 18px 16px; box-shadow: var(--shadow); border: 1px solid var(--border-light); }
 .phone-title { display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 12px; }
 .pill { padding: 2px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--primary-soft); color: var(--primary); }
-.net-card { background: var(--primary); color: #0b2b44; border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: baseline; }
+.net-card { background: var(--primary); color: var(--on-primary); border-radius: 14px; padding: 14px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: baseline; }
 .net-label { font-weight: 600; opacity: .85; }
 .net-value { font-size: 24px; font-weight: 800; }
 .acct-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }

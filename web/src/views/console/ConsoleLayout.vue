@@ -37,7 +37,7 @@ function go(name: string) { router.push({ name }) }
 .sidebar { width: 200px; padding: 20px 12px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--border-light); }
 .sidebar h1 { font-size: 20px; margin: 0 0 16px; }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
-.sidebar nav button, .logout { text-align: left; padding: 10px 12px; border-radius: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; font-family: inherit; }
+.sidebar nav button, .logout { text-align: left; padding: 10px 12px; border-radius: 12px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; font-family: inherit; }
 .sidebar nav button.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 .logout { margin-top: auto; color: var(--expense); }
 .content { flex: 1; padding: 20px 24px; overflow-y: auto; }

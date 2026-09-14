@@ -112,7 +112,7 @@ function msgClass(m: string): string {
 <style scoped>
 .page { max-width: 760px; }
 .toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-.toggle-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
 .toggle-btn.on.exp { background: var(--expense); color: #fff; border-color: transparent; font-weight: 600; }
 .toggle-btn.on.inc { background: var(--income); color: #fff; border-color: transparent; font-weight: 600; }
 .amount-input { width: 100%; font-size: 38px; font-weight: 800; border: none; border-bottom: 2px solid var(--border); padding: 12px 0; background: none; color: var(--text); margin-bottom: 16px; }
@@ -129,6 +129,6 @@ function msgClass(m: string): string {
 .msg.ok { color: var(--income); }
 .msg.err { color: var(--expense); }
 .btn { padding: 14px 18px; border-radius: 12px; border: none; font-size: 15px; cursor: pointer; }
-.btn-primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .block { width: 100%; margin-top: 12px; }
 </style>

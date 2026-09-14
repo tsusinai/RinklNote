@@ -20,7 +20,8 @@ const revMonth = ref(toMonthStr(Date.now()))
 const review = ref<MonthlyReview | null>(null)
 const reviewLoading = ref(false)
 
-const palette = ['#7EC1FC', '#CA3032', '#04A433', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4']
+// 与 App 端 PiePalette 对齐：末位灰固定给「其他」
+const palette = ['#7EC1FC', '#F97D1D', '#04A433', '#9B59B6', '#F2B134', '#CA3032', '#B0B0B0']
 
 const pieData = computed(() => expenseByCategory(data.bills, period.value))
 const lineData = computed(() => monthlyTrend(data.bills))
@@ -125,15 +126,15 @@ watch(revMonth, loadReview)
 .rev-panel { margin-bottom: 16px; }
 .rev-head { display: flex; justify-content: space-between; align-items: center; }
 .rev-head h3 { margin: 0; }
-.sel { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
+.sel { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
 .rev-summary { white-space: pre-wrap; color: var(--text); line-height: 1.6; }
 .rev-hl { color: var(--muted); line-height: 1.9; }
 .rev-sec { margin-top: 10px; }
 .rev-heading { font-weight: 600; margin-bottom: 6px; }
 .rev-line { color: var(--muted); line-height: 1.8; font-size: 14px; }
 .period-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
-.toggle-btn { padding: 8px 18px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
-.toggle-btn.on { background: var(--primary); color: #0b2b44; font-weight: 600; border-color: transparent; }
+.toggle-btn { padding: 8px 18px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: transparent; }
 .chart-card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
 .card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 .card-title .hint { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 8px; }

@@ -54,8 +54,8 @@ async function remove(id: number) {
 .card { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
 .card-title { font-weight: 600; margin-bottom: 12px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-.sel { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; width: 100%; }
-.btn.primary { padding: 10px 16px; border-radius: 10px; border: none; background: var(--primary); color: #0b2b44; font-weight: 600; font-size: 14px; cursor: pointer; }
+.sel { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; width: 100%; }
+.btn.primary { padding: 10px 16px; border-radius: 12px; border: none; background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .tmpl-list { margin-top: 14px; }
 .tmpl-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 14px; }
 .link.danger { background: none; border: none; color: var(--expense); cursor: pointer; font-size: 13px; }

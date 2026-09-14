@@ -22,6 +22,6 @@ const modes: { v: ThemeMode; label: string }[] = [
 .card { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
 .card-title { font-weight: 600; margin-bottom: 12px; }
 .toggle { display: flex; gap: 8px; }
-.toggle-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
-.toggle-btn.on { background: var(--primary); color: #0b2b44; font-weight: 600; border-color: transparent; }
+.toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: transparent; }
 </style>

@@ -47,9 +47,9 @@ async function remove(id: number) {
 .card-title { font-weight: 600; margin-bottom: 8px; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
 .add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.sel { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
+.sel { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
 .grow { flex: 1; min-width: 120px; }
-.btn.primary { padding: 10px 16px; border-radius: 10px; border: none; background: var(--primary); color: #0b2b44; font-weight: 600; font-size: 14px; cursor: pointer; }
+.btn.primary { padding: 10px 16px; border-radius: 12px; border: none; background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 .kw-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-light); }
 .kw-pair em { color: var(--muted); font-size: 12px; font-style: normal; margin-left: 8px; }
 .link.danger { background: none; border: none; color: var(--expense); cursor: pointer; font-size: 13px; }

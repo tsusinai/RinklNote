@@ -37,7 +37,7 @@ function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ be
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 56px; }
 .btn { padding: 13px 22px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform .12s var(--ease), box-shadow .12s var(--ease); }
 .btn:active { transform: scale(.97); }
-.btn-primary { background: var(--primary); color: #0b2b44; box-shadow: 0 4px 18px rgba(126,193,252,.35); }
+.btn-primary { background: var(--primary); color: var(--on-primary); box-shadow: 0 4px 18px rgba(126,193,252,.35); }
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .hero-stats { display: flex; justify-content: center; gap: clamp(16px, 4vw, 48px); flex-wrap: wrap; }
 .stat { display: flex; flex-direction: column; gap: 6px; }

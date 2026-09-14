@@ -71,7 +71,7 @@ onMounted(() => {
 .amount-big { font-size: 34px; font-weight: 800; }
 .cny { font-size: 20px; color: var(--muted); }
 .cat-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-.cat { padding: 6px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+.cat { padding: 6px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
 .cat.on { background: var(--primary-soft); border-color: transparent; color: var(--primary); font-weight: 600; }
 .bill-list { display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; }
 .day-group { border-top: 1px solid var(--border-light); padding-top: 10px; }

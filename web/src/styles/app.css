@@ -1,11 +1,11 @@
 /* 通用卡片 */
-.card { background: var(--card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
-.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.card { background: var(--card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
 
 /* 按钮 */
 .btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; font-family: inherit; transition: transform .12s var(--ease); }
 .btn:active { transform: scale(.98); }
-.btn-primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .btn-ghost, .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 .btn.danger { background: var(--expense); color: #fff; }
 .block { width: 100%; }
@@ -16,16 +16,16 @@
 
 /* 开关 */
 .toggle { display: flex; gap: 8px; }
-.toggle-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
-.toggle-btn.on { background: var(--primary); color: #0b2b44; font-weight: 600; border-color: transparent; }
+.toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: transparent; }
 
 /* 金额输入 */
 .amount-input { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
 /* 网格 */
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
 /* 选中 */
 .sel { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 15px; font-family: inherit; }

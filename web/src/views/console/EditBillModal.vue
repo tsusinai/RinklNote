@@ -100,17 +100,17 @@ async function save() {
 .modal { width: 100%; max-width: 420px; background: var(--card); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
 .modal h3 { margin: 0 0 4px; }
 .toggle { display: flex; gap: 8px; }
-.toggle-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
+.toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
 .toggle-btn.on.exp { background: var(--expense); color: #fff; border-color: transparent; font-weight: 600; }
 .toggle-btn.on.inc { background: var(--income); color: #fff; border-color: transparent; font-weight: 600; }
 .amount-input { width: 100%; font-size: 32px; font-weight: 800; border: none; border-bottom: 2px solid var(--border); padding: 8px 0; background: none; color: var(--text); }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.cat-btn { padding: 8px 4px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
+.cat-btn { padding: 8px 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
 .cat-btn.on { background: var(--primary-soft); border-color: var(--primary); }
 .msg.err { color: var(--expense); font-size: 14px; }
 .modal-actions { display: flex; gap: 12px; margin-top: 8px; }
 .btn { padding: 12px 18px; border-radius: 12px; border: none; font-size: 15px; cursor: pointer; }
 .btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-.btn-primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 </style>

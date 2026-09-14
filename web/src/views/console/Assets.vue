@@ -85,10 +85,10 @@ onMounted(() => { if (!data.accts.length) data.loadData() })
 <style scoped>
 .head-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.btn { padding: 9px 14px; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; }
+.btn { padding: 9px 14px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-.btn.primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
-.net-card { background: var(--primary); color: #0b2b44; border-radius: var(--radius); padding: 20px; margin: 16px 0; }
+.btn.primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
+.net-card { background: var(--primary); color: var(--on-primary); border-radius: var(--radius); padding: 20px; margin: 16px 0; }
 .net-label { font-weight: 600; opacity: .85; margin-bottom: 8px; }
 .net-val { font-size: 32px; font-weight: 800; }
 .acct-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }

@@ -82,6 +82,6 @@ async function saveBudget() {
 .budget-note { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .over-note { color: var(--expense); }
 .budget-edit { display: flex; gap: 8px; margin-top: 14px; }
-.sel { flex: 1; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
-.btn.primary { padding: 10px 16px; border-radius: 10px; border: none; background: var(--primary); color: #0b2b44; font-weight: 600; font-size: 14px; cursor: pointer; }
+.sel { flex: 1; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; }
+.btn.primary { padding: 10px 16px; border-radius: 12px; border: none; background: var(--primary); color: var(--on-primary); font-weight: 600; font-size: 14px; cursor: pointer; }
 </style>

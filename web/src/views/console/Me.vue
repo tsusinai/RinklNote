@@ -118,8 +118,8 @@ function logout() {
 .arrow { color: var(--primary); }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; margin-bottom: 10px; }
-.btn { padding: 11px 16px; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; }
-.btn.primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; }
+.btn.primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 .btn.danger { background: var(--expense); color: #fff; }
 .block { width: 100%; }

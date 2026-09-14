@@ -20,5 +20,5 @@ function lastSyncStr() { return data.lastSync ? new Date(data.lastSync).toLocale
 .card-title { font-weight: 600; margin-bottom: 12px; }
 .row { display: flex; justify-content: space-between; margin-bottom: 10px; }
 .k { color: var(--muted); }
-.btn.ghost { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; cursor: pointer; }
+.btn.ghost { padding: 9px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; cursor: pointer; }
 </style>

@@ -8,8 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.BitmapDrawable
+import android.text.TextPaint
+import android.text.TextUtils
 import android.util.TypedValue
-import android.widget.TextView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -61,16 +62,14 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import java.io.File
+import kotlin.math.ceil
 import org.osmdroid.config.Configuration
-import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.infowindow.InfoWindow
 
 /**
  * 「账单地图」预实现（路由 `bill-map` 由主会话接线，对应目标 9）。
@@ -80,8 +79,8 @@ import org.osmdroid.views.overlay.infowindow.InfoWindow
  *    ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION（[RequestMultiplePermissions]）→
  * ② 地图态：osmdroid [MapView] + 高德瓦片源（[AmapTileSource]，**无需 API key**、国内可直连；
  *    OSM MAPNIK 会封锁 osmdroid 类默认 UA 导致 AccessBlocked，故弃用），演示标记为
- *    Canvas 自绘经典水滴大头针（支出 tertiary 红 / 收入 IncomeGreen）+ 上方椭圆白雾气泡
- *    （[BillInfoWindow]，展示「分类名 ¥金额」）；
+ *    Canvas 合成位图：常驻「分类名 ¥金额」椭圆白雾气泡 + 经典水滴大头针（支出 tertiary 红 /
+ *    收入 IncomeGreen），标签直接烧进标记图标，无需点击即始终显示（见 [buildMarkerDrawable]）；
  * ③ 拒绝态：引导卡（说明 + 「去开启」重试 + 返回）。
  *
  * **坐标系说明**：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在数百米级偏移；
@@ -317,7 +316,7 @@ private val AmapTileSource: XYTileSource = object : XYTileSource(
  * 坐标系说明：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在偏移——演示标记阶段可接受，
  * **接入真实账单位置时需 WGS-84→GCJ-02 纠偏**后再打点。
  *
- * @param isExpense true = 支出（大头针/气泡字色走 tertiary 红），false = 收入（IncomeGreen）
+ * @param isExpense true = 支出（大头针/标签字色走 tertiary 红），false = 收入（IncomeGreen）
  */
 private data class DemoBillPlace(
     val lat: Double,
@@ -339,24 +338,84 @@ private val DemoBillPlaces = listOf(
 private val DefaultCenter = GeoPoint(31.2304, 121.4737)
 
 /**
- * Canvas 自绘经典水滴大头针：大头圆弧 + 两条切线收拢到针尖 + 中心白点，
- * 颜色随收支类型（支出 tertiary 红 / 收入 IncomeGreen）。
- * 位图按当前屏幕密度绘制，保证各分辨率下大小一致、边缘清晰。
+ * 合成标记图标产物：位图 + 针尖纵向锚点（v）——后者交给 [Marker.setAnchor]，
+ * 使针尖精确压在坐标点上（气泡再高也不影响定位）。
  */
-private fun buildPinDrawable(context: Context, colorArgb: Int): BitmapDrawable {
-    val density = context.resources.displayMetrics.density
-    val width = (34 * density).toInt().coerceAtLeast(1)
-    val height = (46 * density).toInt().coerceAtLeast(1)
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+private class MarkerIcon(val drawable: BitmapDrawable, val tipAnchorV: Float)
+
+/**
+ * Canvas 自绘「常驻标签 + 水滴大头针」合成标记图标：把「分类名 ¥金额」椭圆气泡与水滴针
+ * 画进同一张位图，标签常驻显示、随缩放平移跟手，且无需任何 InfoWindow 状态管理。
+ *
+ * 自上而下绘制：① 椭圆白雾气泡底图（复用 [R.drawable.map_bubble_bg]，白雾底 + 1dp
+ * DefaultCardBorder 描边，观感与原 InfoWindow 气泡一致）；② 12sp 标签文字（支出 tertiary 红 /
+ * 收入 IncomeGreen），宽度按 measureText 自适应、超长省略号截断；③ 经典水滴大头针
+ * （大头圆弧 + 两条切线收拢到针尖 + 中心白点），颜色随收支类型。
+ *
+ * 尺寸按当前屏幕密度绘制（12sp 字号随系统字体缩放换算 px），保证各分辨率下观感一致；
+ * 气泡与针均水平居中，气泡底与针位图顶相接——针头圆弧顶部自身内缩约 4.3dp，即原
+ * InfoWindow 时代气泡与针的视觉间隙。
+ *
+ * 锚点计算：针尖位于针区 96% 高度处（防针尖抗锯齿被位图边缘裁切），故
+ * v = 针尖纵坐标 / 位图实际高（约 0.97，随气泡高度浮动），u 恒为水平居中（针尖在位图中线上）。
+ */
+private fun buildMarkerDrawable(context: Context, colorArgb: Int, label: String): MarkerIcon {
+    val metrics = context.resources.displayMetrics
+    val density = metrics.density
+
+    // —— ② 标签文字：12sp 单行（TextPaint 供 TextUtils.ellipsize 使用）——
+    val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, metrics)
+        color = colorArgb
+    }
+    // 防御性截断：文字最宽约 140dp，超出省略号（演示标签很短，防真实接入后的备注级长文本）
+    val text = TextUtils.ellipsize(
+        label, textPaint, 140f * density, TextUtils.TruncateAt.END
+    ).toString()
+    val textWidth = textPaint.measureText(text)
+    val fontMetrics = textPaint.fontMetrics
+    val textHeight = fontMetrics.descent - fontMetrics.ascent
+
+    // —— 气泡几何：内边距对齐原 InfoWindow 气泡（10dp 水平 / 5dp 垂直）——
+    val bubblePadH = 10f * density
+    val bubblePadV = 5f * density
+    val bubbleWidth = textWidth + 2 * bubblePadH
+    val bubbleHeight = textHeight + 2 * bubblePadV
+
+    // —— 大头针几何：沿用原水滴针（34x46dp，针尖位于针区 96% 高度处）——
+    val pinWidth = 34f * density
+    val pinHeight = 46f * density
+
+    // —— 整体布局：气泡在上、针在下，均水平居中，气泡底与针位图顶相接 ——
+    // 位图尺寸向上取整，避免针尖浮点坐标被截断裁掉
+    val totalWidth = maxOf(bubbleWidth, pinWidth)
+    val totalHeight = bubbleHeight + pinHeight
+    val bitmap = Bitmap.createBitmap(
+        ceil(totalWidth).toInt().coerceAtLeast(1),
+        ceil(totalHeight).toInt().coerceAtLeast(1),
+        Bitmap.Config.ARGB_8888
+    )
     val canvas = Canvas(bitmap)
 
-    val radius = width * 0.36f
-    val cx = width / 2f
-    val cy = height * 0.36f
-    val tipY = height * 0.96f
+    // ① 气泡底图：按「文字宽 + 内边距」撑出的边界绘制（白雾/描边/圆角由 drawable 自带）
+    val bubbleLeft = (totalWidth - bubbleWidth) / 2f
+    ContextCompat.getDrawable(context, R.drawable.map_bubble_bg)?.let { bubble ->
+        bubble.setBounds(
+            bubbleLeft.toInt(), 0,
+            (bubbleLeft + bubbleWidth).toInt(), bubbleHeight.toInt()
+        )
+        bubble.draw(canvas)
+    }
+    // ② 标签文字：水平居中；基线 = 顶边距 + 文字 ascent 绝对值（ascent 为负），垂直居中于气泡
+    canvas.drawText(text, (totalWidth - textWidth) / 2f, bubblePadV - fontMetrics.ascent, textPaint)
 
-    // 水滴轮廓：从圆左下切点起，沿大头圆弧（绕过顶部）到右下切点，再收拢到针尖；
+    // ③ 水滴轮廓：从圆左下切点起，沿大头圆弧（绕过顶部）到右下切点，再收拢到针尖；
     // 切点角 = asin(radius / 针尖距)，保证两段直线与圆弧相切、轮廓平滑无折角
+    val pinLeft = (totalWidth - pinWidth) / 2f
+    val radius = pinWidth * 0.36f
+    val cx = pinLeft + pinWidth / 2f
+    val cy = bubbleHeight + pinHeight * 0.36f
+    val tipY = bubbleHeight + pinHeight * 0.96f
     val drop = Path()
     val tipDistance = (tipY - cy) / radius
     val tangentAngle = Math.toDegrees(Math.asin(1.0 / tipDistance)).toFloat()
@@ -374,56 +433,15 @@ private fun buildPinDrawable(context: Context, colorArgb: Int): BitmapDrawable {
     paint.color = 0xFFFFFFFF.toInt()
     canvas.drawCircle(cx, cy, radius * 0.42f, paint)
 
-    return BitmapDrawable(context.resources, bitmap)
-}
-
-/**
- * 气泡视图：单个 TextView + 椭圆（胶囊圆角）白雾底图（[R.drawable.map_bubble_bg]），
- * 12sp「分类名 ¥金额」，字色随收支类型。
- */
-private fun buildBubbleLabel(context: Context, label: String, textColorArgb: Int): TextView {
-    val density = context.resources.displayMetrics.density
-    return TextView(context).apply {
-        text = label
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        setTextColor(textColorArgb)
-        background = ContextCompat.getDrawable(context, R.drawable.map_bubble_bg)
-        val horizontal = (10 * density).toInt()
-        val vertical = (5 * density).toInt()
-        setPadding(horizontal, vertical, horizontal, vertical)
-    }
-}
-
-/**
- * 账单气泡：osmdroid [InfoWindow] 自定义实现（替代默认灰底 title/snippet 气泡观感）。
- * 每个标记各持一个实例，「分类名 ¥金额」文本随实例固定；
- * 点击标记展开（Marker 默认行为）、点地图空白处收起（MapEventsOverlay 兜底）。
- * 定位：Marker.setInfoWindowAnchor(CENTER, 0f) + InfoWindow 内部 BOTTOM_CENTER 锚定，
- * 使气泡底边中点悬于大头针图标正上方。
- */
-private class BillInfoWindow(
-    context: Context,
-    mapView: MapView,
-    label: String,
-    textColorArgb: Int
-) : InfoWindow(buildBubbleLabel(context, label, textColorArgb), mapView) {
-
-    override fun onOpen(item: Any?) {
-        // 同屏最多一个气泡：open() 内部先于 addView 调用 onOpen，此刻本气泡尚未挂上
-        // MapView，先收起其他已展开的气泡不会误伤自己
-        mMapView?.let { InfoWindow.closeAllInfoWindowsOn(it) }
-    }
-
-    override fun onClose() {
-        // 气泡视图由基类 close() 统一从 MapView 移除，无需额外清理
-    }
+    // 针尖纵向锚点：v = 针尖 y / 位图实际高（u 恒为水平居中），交给 Marker.setAnchor
+    return MarkerIcon(BitmapDrawable(context.resources, bitmap), tipY / bitmap.height)
 }
 
 @Composable
 private fun MapContent(onBack: () -> Unit) {
     val context = LocalContext.current
 
-    // 收支配色一次性转为 android 层 ARGB int（大头针与气泡共用）：
+    // 收支配色一次性转为 android 层 ARGB int（大头针与常驻标签文字共用）：
     // 支出 = tertiary（亮色主题即 ExpenseRed #CA3032），收入 = IncomeGreen #04A433
     val expenseColor = MaterialTheme.colorScheme.tertiary.toArgb()
     val incomeColor = IncomeGreen.toArgb()
@@ -446,33 +464,23 @@ private fun MapContent(onBack: () -> Unit) {
             map.controller.setZoom(11.0)
             map.controller.setCenter(DefaultCenter)
 
-            // 地图空白处单击收起已展开气泡：osmdroid 默认不会自动收起 InfoWindow，
-            // 用 MapEventsOverlay 兜底；先加入（overlay 列表底部），后加的标记获得更高触摸优先级，
-            // 点标记仍由 Marker 自己处理展开
-            map.overlays.add(
-                MapEventsOverlay(object : MapEventsReceiver {
-                    override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
-                        InfoWindow.closeAllInfoWindowsOn(map)
-                        return false
-                    }
-
-                    override fun longPressHelper(p: GeoPoint?): Boolean = false
-                })
-            )
-
             // 演示标记（占位）：账单位置字段接入后替换为真实聚合数据（需 WGS-84→GCJ-02 纠偏）。
-            // 大头针针尖对准坐标点（ANCHOR_CENTER / ANCHOR_BOTTOM），气泡悬于针尖上方
-            // （setInfoWindowAnchor(CENTER, 0f)）；点击标记展开、点其他处收起
+            // 「分类名 ¥金额」标签常驻合成进标记位图，无需点击展开、无 InfoWindow 状态管理；
+            // 针尖对准坐标点：v 锚点取针尖在合成位图中的纵向比例、u 恒为水平居中
+            // （计算方式见 buildMarkerDrawable 注释）。点击标记把该点平移居中（返回 true 消费触摸）
             DemoBillPlaces.forEach { place ->
                 val colorArgb = if (place.isExpense) expenseColor else incomeColor
                 val label = "${place.category} ${Money.format(place.amountMinor)}"
+                val markerIcon = buildMarkerDrawable(context, colorArgb, label)
                 map.overlays.add(
                     Marker(map).apply {
                         position = GeoPoint(place.lat, place.lng)
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                        setInfoWindowAnchor(Marker.ANCHOR_CENTER, 0f)
-                        icon = buildPinDrawable(context, colorArgb)
-                        setInfoWindow(BillInfoWindow(context, map, label, colorArgb))
+                        icon = markerIcon.drawable
+                        setAnchor(Marker.ANCHOR_CENTER, markerIcon.tipAnchorV)
+                        setOnMarkerClickListener { marker, targetMap ->
+                            targetMap.controller.animateTo(marker.position)
+                            true
+                        }
                     }
                 )
             }

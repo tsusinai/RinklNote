@@ -66,11 +66,11 @@ function toggleMode() { mode.value = mode.value === 'login' ? 'register' : 'logi
 .login-card h1 { font-size: 28px; margin: 0; }
 .login-card .sub { color: var(--muted, #888); margin: 0 0 8px; font-size: 13px; }
 .toggle { display: flex; gap: 8px; }
-.toggle button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border, #EEE); background: none; color: var(--muted, #888); font-size: 14px; cursor: pointer; }
+.toggle button { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border, #EEE); background: none; color: var(--muted, #888); font-size: 14px; cursor: pointer; }
 .toggle button.on.exp { background: var(--expense, #CA3032); color: #fff; border-color: transparent; font-weight: 600; }
 input { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border, #EEE); font-size: 16px; background: var(--card, #FFF); color: var(--text, #111); }
 .btn { padding: 12px 18px; border-radius: 12px; border: none; font-size: 15px; cursor: pointer; background: var(--card, #FFF); color: var(--text, #111); border: 1px solid var(--border, #EEE); }
-.btn btn-primary, .btn-primary { background: var(--primary, #7EC1FC); color: #0b2b44; font-weight: 600; }
+.btn btn-primary, .btn-primary { background: var(--primary, #7EC1FC); color: var(--on-primary); font-weight: 600; }
 hr { border: none; border-top: 1px solid var(--border-light, #EEE); margin: 8px 0; }
 .theme-btn { align-self: flex-start; background: none; border: none; color: var(--muted, #888); cursor: pointer; font-size: 13px; }
 </style>

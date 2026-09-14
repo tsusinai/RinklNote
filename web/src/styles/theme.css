@@ -1,8 +1,8 @@
 :root {
-  --primary:#7EC1FC; --expense:#CA3032; --income:#04A433;
+  --primary:#7EC1FC; --on-primary:#0b2b44; --expense:#CA3032; --income:#04A433;
   --bg:#F7F7F9; --card:#FFFFFF; --text:#1f2937; --muted:#6b7280;
   --border:#e5e7eb; --border-light:#f3f4f6;
-  --radius:15px; --radius-sm:10px;
+  --radius:15px;
   --primary-soft:#eff6ff;
   --tag-web-bg:#dcfce7; --tag-web-fg:#16a34a;
   --tag-qq-bg:#dbeafe;  --tag-qq-fg:#2563eb;

@@ -24,8 +24,8 @@ async function toggle() {
 .card { background: var(--card); border-radius: var(--radius); padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
 .card-title { font-weight: 600; margin-bottom: 8px; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
-.btn { padding: 10px 16px; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; }
-.btn.primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn { padding: 10px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; }
+.btn.primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 .btn:disabled { opacity: .6; cursor: default; }
 </style>

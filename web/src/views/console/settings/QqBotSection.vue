@@ -99,12 +99,12 @@ async function doUnbind() {
 .status-text { font-size: 14px; }
 .hint { color: var(--muted); font-size: 13px; margin: 8px 0; }
 .section-label { font-size: 12px; color: var(--muted); margin: 14px 0 8px; }
-.sel { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; margin-bottom: 10px; }
+.sel { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 14px; margin-bottom: 10px; }
 .secret-row { display: flex; gap: 8px; align-items: center; }
 .secret-row .sel { flex: 1; }
 .eye { background: none; border: none; cursor: pointer; font-size: 16px; }
-.btn { padding: 10px 16px; border-radius: 10px; border: none; font-size: 14px; cursor: pointer; margin-top: 4px; }
-.btn.primary { background: var(--primary); color: #0b2b44; font-weight: 600; }
+.btn { padding: 10px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; margin-top: 4px; }
+.btn.primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
 .doc { margin-top: 16px; }
 .doc summary { cursor: pointer; color: var(--muted); font-size: 13px; }
