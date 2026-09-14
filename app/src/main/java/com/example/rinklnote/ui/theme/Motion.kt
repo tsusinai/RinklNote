@@ -23,6 +23,7 @@ object Motion {
     const val DurationChartDraw = 1000
     const val DurationChartUpdate = 500
     const val DurationBreath = 650       // voice-bar breathing loop
+    const val DurationPress = 120        // 按压缩放反馈（PressScale 修饰符）
     // Easing shared with Web's --ease
     val IndicatorEasing = FastOutSlowInEasing
 
@@ -47,6 +48,9 @@ object Motion {
     // In-card expand / collapse (IntSize) and fade / rotate (Float)
     val Expand: FiniteAnimationSpec<IntSize> = tween(DurationExpand, easing = IndicatorEasing)
     val Fade: FiniteAnimationSpec<Float> = tween(DurationExpand, easing = IndicatorEasing)
+
+    // 按压缩放（PressScale 修饰符）：短促干脆的按下/回弹，无过冲
+    val PressScale: FiniteAnimationSpec<Float> = tween(DurationPress, easing = IndicatorEasing)
 
     // Card height auto-resize (drag settle / expand) — same spring feel as row shift
     val ContentResize: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow)

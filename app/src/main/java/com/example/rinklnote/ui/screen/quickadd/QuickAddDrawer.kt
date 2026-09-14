@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +70,7 @@ import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.pressScale
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import com.example.rinklnote.ui.theme.AxisLabelGray
@@ -141,10 +143,13 @@ fun QuickAddDrawer(
                     .then(applyCardGlass(panelShape))
                     .clickable(enabled = false) {} // consume click
                     .pointerInput(Unit) {
+                        // 关闭阈值先按 dp 换算成像素：原实现直接写死 60 像素，
+                        // 不同屏幕密度下手感不一致（高密度屏约 20dp 就触发，低密度屏要拖满 60dp）。
+                        val closeThresholdPx = 60.dp.toPx()
                         var dragOffset = 0f
                         detectHorizontalDragGestures(
                             onDragEnd = {
-                                if (dragOffset > 60) onDismiss()
+                                if (dragOffset > closeThresholdPx) onDismiss()
                                 dragOffset = 0f
                             },
                             onDragCancel = { dragOffset = 0f },
@@ -256,13 +261,19 @@ private fun DrawerContent(
                 .padding(top = 6.dp, bottom = 18.dp),
             contentAlignment = Alignment.Center
         ) {
+            // 抽屉内的主按钮：按压缩放反馈（显式传 LocalIndication 保留原有水波纹，二者叠加不冲突）
+            val voiceInteraction = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
                     .size(42.dp)
+                    .pressScale(voiceInteraction)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
                     .then(applyCardGlass(CircleShape))
-                    .clickable { onVoiceInput() },
+                    .clickable(
+                        interactionSource = voiceInteraction,
+                        indication = LocalIndication.current
+                    ) { onVoiceInput() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -615,6 +626,8 @@ private fun CountBefore(
 ) {
     val isExpense = state.billType == BillType.EXPENSE
     val haptics = rememberPressHaptics()
+    // 金额框是抽屉里最大的可点元素之一：加按压缩放反馈（复用点击手势的 InteractionSource）
+    val amountInteraction = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -624,10 +637,11 @@ private fun CountBefore(
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
                 .height(36.dp)
+                .pressScale(amountInteraction)
                 .clip(RoundedCornerShape(14.dp))
                 .then(applyCardGlass(RoundedCornerShape(14.dp)))
                 .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = amountInteraction,
                     indication = null,
                     onClick = onAmountTap,
                     onLongClick = {

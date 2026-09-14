@@ -77,6 +77,9 @@ dependencies {
     // Coil - 图片加载
     implementation(libs.coil.compose)
 
+    // osmdroid - 开源地图（账单地图预实现，无需 API key）
+    implementation(libs.osmdroid)
+
     // ExifInterface - 背景取景框解码回正
     implementation(libs.androidx.exifinterface)
 

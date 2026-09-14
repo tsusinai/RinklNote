@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -81,6 +82,10 @@ fun NumericKeypad(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            // 自定义数字键盘 + 系统 IME 混合场景：备注输入框唤起系统输入法时，
+            // 键盘面板整体抬升到输入法上方，备注框仍可见可编辑；
+            // 输入法收起时 imePadding 为 0，纯数字键盘场景布局完全不变。
+            .imePadding()
             .clip(panelShape)
             .then(panelSurface)
             .clickable(

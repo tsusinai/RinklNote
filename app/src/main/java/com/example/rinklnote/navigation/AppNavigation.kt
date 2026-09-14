@@ -91,6 +91,7 @@ import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.importbills.BillImportViewModel
 import com.example.rinklnote.ui.screen.importbills.ImportBillsScreen
 import com.example.rinklnote.ui.screen.login.LoginPage
+import com.example.rinklnote.ui.screen.map.BillMapScreen
 import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
 import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
@@ -517,6 +518,15 @@ fun AppNavigation(app: RinklNoteApp) {
                         hazeState = hazeState
                     )
                 }
+                composable("bill-map") {
+                    // 账单地图预实现：开启确认与定位权限在页面内完成。
+                    BillMapScreen(
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onBack = { navController.popBackStack() },
+                        onRequestEnable = { /* 开启动作已由页面内确认卡承担，此处预留埋点 */ }
+                    )
+                }
                 composable("budget-edit") {
                     // bill-edit 同款：编辑目标走共享 VM 状态，路由无参数；target 未就绪前先不渲染。
                     val editState by budgetVM.editState.collectAsStateWithLifecycle()
@@ -562,6 +572,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     }
                 }
                 composable("bookkeeping") {
+                    val authState by authVM.state.collectAsStateWithLifecycle()
                     BookkeepingScreen(
                         onOpenDrawer = openDrawer,
                         onFinanceClick = { navigateTo("assets") },
@@ -571,7 +582,11 @@ fun AppNavigation(app: RinklNoteApp) {
                         onEditBill = { navController.navigate("bill-edit") },
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
-                        viewModel = bookkeepingVM
+                        viewModel = bookkeepingVM,
+                        profileName = authState.accountPhone,
+                        profileLoggedIn = authState.isLoggedIn,
+                        onOpenBillMap = { navController.navigate("bill-map") },
+                        onOpenImport = { navController.navigate("bill-import") }
                     )
 
                 }

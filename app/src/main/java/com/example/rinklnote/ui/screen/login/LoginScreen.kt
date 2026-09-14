@@ -2,6 +2,7 @@ package com.example.rinklnote.ui.screen.login
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 
@@ -54,7 +58,13 @@ fun LoginPage(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        // 输入法弹出时整列上移，避免盖住底部按钮；收起时 imePadding 为 0，布局不变。
+        // enableEdgeToEdge 下系统不会自动避让（manifest 的 adjustResize 已失效），必须显式让位。
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+        ) {
             // Top bar with back arrow
             Row(
                 modifier = Modifier
@@ -125,15 +135,24 @@ fun LoginPage(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // 大按钮按压反馈：按下缩放 0.97，用同一个 InteractionSource 驱动
+                    val loginInteraction = remember { MutableInteractionSource() }
+                    val registerInteraction = remember { MutableInteractionSource() }
                     Button(
                         onClick = { viewModel.onEvent(AuthEvent.Login) },
                         enabled = !state.isLoading,
-                        modifier = Modifier.weight(1f)
+                        interactionSource = loginInteraction,
+                        modifier = Modifier
+                            .weight(1f)
+                            .pressScale(loginInteraction)
                     ) { Text("登录") }
                     OutlinedButton(
                         onClick = { viewModel.onEvent(AuthEvent.Register) },
                         enabled = !state.isLoading,
-                        modifier = Modifier.weight(1f)
+                        interactionSource = registerInteraction,
+                        modifier = Modifier
+                            .weight(1f)
+                            .pressScale(registerInteraction)
                     ) { Text("注册") }
                 }
                 if (state.isLoading) {

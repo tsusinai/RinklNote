@@ -7,6 +7,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,6 +69,7 @@ import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.accountColor
 import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
@@ -250,10 +253,14 @@ private fun CreateAccountContent(
     val nameError = validateAccountName(name, accounts)
     val balanceError = validateBalanceInput(balanceInput)
 
+    // 输入法弹出时整列上移：名称输入框与底部「创建账户」按钮都不被键盘遮挡。
+    // 根列 imePadding 与按钮上的 navigationBarsPadding 经 insets 消费机制协调——
+    // 键盘弹出时 ime 已含导航栏区域，按钮的导航栏内边距会被抵消为 0，不会双重叠加。
     Column(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding()
+            .imePadding()
     ) {
         AccountEditorTopBar(title = "新建账户", onBack = onBack)
 
@@ -330,14 +337,18 @@ private fun CreateAccountContent(
             Spacer(modifier = Modifier.height(4.dp))
         }
 
+        // 主 CTA 的按压缩放反馈：pressScale 放在链尾，缩放只作用于按钮本体绘制
+        val createInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = onCreate,
             enabled = nameError == null && balanceError == null,
+            interactionSource = createInteraction,
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
-                .height(50.dp),
+                .height(50.dp)
+                .pressScale(createInteraction),
             shape = RoundedCornerShape(14.dp)
         ) {
             Text("创建账户", fontSize = 16.sp, fontWeight = FontWeight.Medium)

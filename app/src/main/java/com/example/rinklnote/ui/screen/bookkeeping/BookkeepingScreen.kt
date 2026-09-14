@@ -69,6 +69,7 @@ import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthHeatmap
+import com.example.rinklnote.ui.component.MoreDrawer
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
@@ -87,13 +88,20 @@ import java.time.LocalDate
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
+    // 保留：抽屉「设置」项回调（跳「我的」页）。顶栏「更多」按钮已改为打开「更多」抽屉。
     onMoreClick: () -> Unit,
     onAiClick: () -> Unit,
     onMonthDetailClick: () -> Unit,
     onEditBill: (Bill) -> Unit,
     backgroundUri: String?,
     hazeState: HazeState,
-    viewModel: BookkeepingViewModel
+    viewModel: BookkeepingViewModel,
+    // 「更多」抽屉所需：个人信息（未登录时抽屉显示「未登录」+ 引导副文案）
+    profileName: String = "",
+    profileLoggedIn: Boolean = false,
+    // 「更多」抽屉功能项：账单地图（路由 bill-map）/ 导入账单（路由 bill-import）由主会话接线
+    onOpenBillMap: () -> Unit = {},
+    onOpenImport: () -> Unit = {}
 ) {
     val horizonalPadding = 10.dp
 
@@ -169,6 +177,9 @@ fun BookkeepingScreen(
 
     // 页面根 Box 在 composition 根下的 Y 偏移（换算 ghost 位置用，通常为 0）
     var screenOriginY by remember { mutableStateOf(0f) }
+
+    // 「更多」左抽屉：顶栏左上角「更多」按钮打开（原直接跳「我的」页，2026-09-14 改为抽屉入口）
+    var showMoreDrawer by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier
         .fillMaxSize()
@@ -253,7 +264,7 @@ fun BookkeepingScreen(
             onBackToNow = { viewModel.selectMonth(0) },
             onOpenDrawer = onOpenDrawer,
             onFinanceClick = onFinanceClick,
-            onMoreClick = onMoreClick,
+            onOpenMoreDrawer = { showMoreDrawer = true },
             onAiClick = onAiClick
         )
 
@@ -328,6 +339,20 @@ fun BookkeepingScreen(
                 }
             }
         }
+
+        // 「更多」抽屉：整页最顶层（盖过拖动 ghost）；功能行点击后由组件内部先关抽屉再回调
+        MoreDrawer(
+            isVisible = showMoreDrawer,
+            profileName = profileName,
+            profileLoggedIn = profileLoggedIn,
+            onDismiss = { showMoreDrawer = false },
+            onOpenBillMap = onOpenBillMap,
+            onOpenImport = onOpenImport,
+            onOpenSettings = onMoreClick,
+            onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页
+            hazeState = hazeState,
+            modifier = Modifier.zIndex(20f)
+        )
     }
 }
 
@@ -367,7 +392,7 @@ private fun TopBar(
     onBackToNow: () -> Unit,
     onOpenDrawer: () -> Unit,
     onFinanceClick: () -> Unit,
-    onMoreClick: () -> Unit,
+    onOpenMoreDrawer: () -> Unit,
     onAiClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -383,7 +408,7 @@ private fun TopBar(
         horizontalPadding = 16.dp,
         modifier = modifier
     ) {
-        // 更多 → 我的页；金融 → 资产页；登记 → 记账抽屉
+        // 更多 → 「更多」抽屉；AI → AI 记账（金融/登记在右列）
         Row(
             modifier = Modifier.align(Alignment.CenterStart),
             verticalAlignment = Alignment.CenterVertically
@@ -393,7 +418,7 @@ private fun TopBar(
                 contentDescription = "更多",
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onMoreClick),
+                    .clickable(onClick = onOpenMoreDrawer),
                 tint = iconColor
             )
             Spacer(modifier = Modifier.width(8.dp))

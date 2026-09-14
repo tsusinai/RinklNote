@@ -2,12 +2,14 @@ package com.example.rinklnote.ui.screen.profile
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 
@@ -45,10 +49,13 @@ fun BindQQPage(
     }
     BackHandler { onDismiss() }
 
+    // 输入法弹出时整列上移，避免盖住 QQ 号输入框与绑定按钮；收起时无额外内边距。
+    // enableEdgeToEdge 下系统不会自动避让，必须显式让位。
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .imePadding()
     ) {
         // Top bar with back arrow
         Row(
@@ -106,10 +113,15 @@ fun BindQQPage(
                 )
             }
             Spacer(modifier = Modifier.height(20.dp))
+            // 大按钮按压反馈：按下缩放 0.97，用同一个 InteractionSource 驱动
+            val bindInteraction = remember { MutableInteractionSource() }
             Button(
                 onClick = { viewModel.onEvent(AuthEvent.BindQQ) },
                 enabled = !state.isLoading,
-                modifier = Modifier.fillMaxWidth()
+                interactionSource = bindInteraction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pressScale(bindInteraction)
             ) { Text("绑定") }
             if (state.isLoading) {
                 Spacer(modifier = Modifier.height(16.dp))

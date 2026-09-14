@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -50,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.domain.MessageKind
+import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -131,9 +134,14 @@ fun AiScreen(
         }
 
         // 输入栏：麦克风 + 胶囊输入框（内含右对齐箭头发送图标）
+        // 避让链：navigationBarsPadding 先吃掉导航栏内边距，imePadding 只补键盘剩余高度——
+        // 输入法弹出时输入栏正好落在键盘上沿（ insets 消费机制保证不叠加导航栏高度）；
+        // 收起时仅保留导航栏间距。列表占 weight(1f)，高度变化由它吸收，滚动位置不受影响。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -188,9 +196,13 @@ fun AiScreen(
                         }
                     )
                     val canSend = state.input.isNotBlank() && !state.isWaiting
+                    // 发送主按钮的按压缩放反馈
+                    val sendInteraction = remember { MutableInteractionSource() }
                     IconButton(
                         onClick = { viewModel.onEvent(AiEvent.Send) },
-                        enabled = canSend
+                        enabled = canSend,
+                        interactionSource = sendInteraction,
+                        modifier = Modifier.pressScale(sendInteraction)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
