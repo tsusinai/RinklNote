@@ -102,6 +102,13 @@ data class BudgetState(
         get() = totalBudget != null ||
             categoryBudgets.any { it.amountMinor > 0 || it.subBudgets.any { sub -> sub.amountMinor > 0 } }
 
+    /**
+     * 分类已设预算映射（categoryId → 金额分），供「分类预算设置」页直接取用。
+     * 金额 0 表示该分类未设预算（含仅有支出/子分类预算而被补全出的行）。
+     */
+    val categoryBudgetAmounts: Map<Long, Long>
+        get() = categoryBudgets.associate { it.categoryId to it.amountMinor }
+
     // 本月剩余天数 = 当月总天数 - 今天已过天数 + 1（含今天），仍在计划页顶部展示。
     val remainingDays: Int
         get() {

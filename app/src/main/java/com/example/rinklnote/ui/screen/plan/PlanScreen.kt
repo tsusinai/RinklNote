@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.plan
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,11 +35,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
@@ -69,11 +74,14 @@ import kotlin.math.abs
  *
  * 编辑流：点击总额卡/分类行/子分类行 → 派发 [BudgetEvent.EditBudget] 填充共享编辑状态 →
  * [onEditBudget] 跳转独立路由 `budget-edit`（bill-edit 同款），金额输入/删除都在编辑页完成。
+ * 列表区头部另有「分类预算设置」入口行 → [onOpenCategoryBudgets] 跳转独立路由
+ * `budget-categories`（该路由由主会话接线）。
  *
  * @param viewModel 预算页 ViewModel
  * @param backgroundUri nav 层透传的自选背景照片 URI；`null` 时本页自铺渐变
  * @param hazeState nav 层透传的毛玻璃状态
  * @param onEditBudget 跳转预算编辑页（导航层注入）
+ * @param onOpenCategoryBudgets 进入「分类预算设置」页（导航层注入，路由 `budget-categories`）
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -81,7 +89,8 @@ fun PlanScreen(
     viewModel: BudgetViewModel,
     backgroundUri: String?,
     hazeState: HazeState,
-    onEditBudget: () -> Unit
+    onEditBudget: () -> Unit,
+    onOpenCategoryBudgets: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -141,6 +150,10 @@ fun PlanScreen(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // 列表区头部：进入「分类预算设置」独立页的入口行（路由 budget-categories 由主会话接线）。
+                item(key = "entry-category-budgets") {
+                    CategoryBudgetEntryRow(onClick = onOpenCategoryBudgets)
+                }
                 items(state.categoryBudgets, key = { it.categoryId }) { category ->
                     CategoryBudgetCard(
                         category = category,
@@ -334,6 +347,64 @@ private fun LastMonthSurplusRow(surplusMinor: Long) {
 }
 
 /**
+ * 计划模块共用的分类图标（适应铺满）：图标 Box 尺寸即「行内图标位」尺寸，
+ * 内部 [Image] 以 `ContentScale.Fit` 铺满整个 Box、不留多余 padding。
+ * 分类图标为彩色矢量资源，不走 tint。分类行 / 子分类行 / 快速入口 chip /
+ * 「分类预算设置」页共用本组件。
+ */
+@Composable
+internal fun PlanCategoryIcon(
+    iconRes: Int,
+    size: Dp,
+    contentDescription: String?
+) {
+    Box(modifier = Modifier.size(size)) {
+        Image(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+/**
+ * 「分类预算设置」入口行：全宽卡（15dp 圆角 + rinkShadow + 玻璃描边），
+ * 行高对齐 SettingsRow（48dp），尾部「>」箭头与设置行同款。
+ * 点击 → 跳转「分类预算设置」独立页（路由 `budget-categories`，由主会话接线）。
+ */
+@Composable
+private fun CategoryBudgetEntryRow(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(15.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .rinkShadow(shape)
+            .clip(shape)
+            .then(applyCardGlass(shape))
+            .clickable(onClick = onClick)
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "分类预算设置",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = LocalRinklColors.current.iconButtonColor
+                ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
  * 分类预算选择卡：承载尚未出现在预算列表中的支出分类。
  * 分类完整列表来自 [BudgetState.expenseCategories]，空账本首次进入时也能直接设置。
  */
@@ -401,11 +472,11 @@ private fun CategoryBudgetChip(
         horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            painter = painterResource(categoryIconRes(category.name)),
-            contentDescription = category.name,
-            modifier = Modifier.size(22.dp),
-            tint = Color.Unspecified
+        // 图标适应铺满：22dp 图标位内 Image 按 Fit 铺满，不留多余 padding。
+        PlanCategoryIcon(
+            iconRes = categoryIconRes(category.name),
+            size = 22.dp,
+            contentDescription = category.name
         )
         Text(
             text = category.name,
@@ -418,7 +489,8 @@ private fun CategoryBudgetChip(
 /**
  * 一级分类预算卡（Category Budget Card）：白底 + 毛玻璃，内含分类行 + 子分类行列表。
  *
- * - 分类行：分类名 + 进度条 + 预算额/未设；点击进分类预算键盘。
+ * - 分类行：分类图标（28dp 图标位，[PlanCategoryIcon] 适应铺满）+ 分类名 + 进度条 + 预算额/未设；
+ *   点击进分类预算键盘。
  * - 子分类行：缩进 + 半透明底色（非毛玻璃），点击进子分类预算键盘。
  *
  * @param onClick 点分类行 → 编辑分类预算
@@ -446,6 +518,13 @@ private fun CategoryBudgetCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 分类图标：28dp 图标位，适应铺满不留余白。
+            PlanCategoryIcon(
+                iconRes = categoryIconRes(category.categoryName),
+                size = 28.dp,
+                contentDescription = category.categoryName
+            )
+            Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = category.categoryName,
@@ -488,6 +567,8 @@ private fun CategoryBudgetCard(
         category.subBudgets.forEach { sub ->
             SubCategoryBudgetRow(
                 sub = sub,
+                // 子分类无专属图标：沿用所属一级分类图标（适应铺满 22dp 图标位）。
+                iconRes = categoryIconRes(category.categoryName),
                 onClick = { onSubClick(sub) }
             )
         }
@@ -495,13 +576,14 @@ private fun CategoryBudgetCard(
 }
 
 /**
- * 子分类预算行（Sub-category Budget Row）：缩进 + 半透明底色，名称 + 进度条 + 已花/预算。
+ * 子分类预算行（Sub-category Budget Row）：缩进 + 半透明底色，图标 + 名称 + 进度条 + 已花/预算。
  *
  * 不加 `hazeEffect`：嵌在已毛玻璃的 [CategoryBudgetCard] 内，再加一层会让视觉「玻璃套玻璃」怪异。
  */
 @Composable
 private fun SubCategoryBudgetRow(
     sub: SubCategoryBudgetState,
+    iconRes: Int,
     onClick: () -> Unit
 ) {
     Column(
@@ -513,12 +595,22 @@ private fun SubCategoryBudgetRow(
             .clickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = sub.name,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // 子分类行图标：22dp 图标位，适应铺满。
+            PlanCategoryIcon(
+                iconRes = iconRes,
+                size = 22.dp,
+                contentDescription = sub.name
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = sub.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+        }
         Spacer(modifier = Modifier.height(5.dp))
         BudgetProgressBar(
             expenseMinor = sub.expenseMinor,

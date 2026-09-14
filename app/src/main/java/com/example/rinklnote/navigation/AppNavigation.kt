@@ -88,8 +88,11 @@ import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
+import com.example.rinklnote.ui.screen.importbills.BillImportViewModel
+import com.example.rinklnote.ui.screen.importbills.ImportBillsScreen
 import com.example.rinklnote.ui.screen.login.LoginPage
 import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
+import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
@@ -480,7 +483,38 @@ fun AppNavigation(app: RinklNoteApp) {
                         viewModel = budgetVM,
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
-                        onEditBudget = { navController.navigate("budget-edit") }
+                        onEditBudget = { navController.navigate("budget-edit") },
+                        onOpenCategoryBudgets = { navController.navigate("budget-categories") }
+                    )
+                }
+                composable("budget-categories") {
+                    // 分类预算设置独立页：从计划页入口进入，点分类跳预算编辑（共享 VM 编辑态）。
+                    val budgetState by budgetVM.state.collectAsStateWithLifecycle()
+                    CategoryBudgetScreen(
+                        categories = budgetState.expenseCategories,
+                        existingBudgets = budgetState.categoryBudgetAmounts,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onBack = { navController.popBackStack() },
+                        onCategoryClick = { categoryId, categoryName ->
+                            budgetVM.onEvent(
+                                BudgetEvent.EditBudget(BudgetEditTarget.Category(categoryId, categoryName))
+                            )
+                            navController.navigate("budget-edit")
+                        }
+                    )
+                }
+                composable("bill-import") {
+                    // 导入账单：VM 仅在路由存续期间持有解析结果，离开即销毁。
+                    val importContext = LocalContext.current
+                    val importVM: BillImportViewModel = viewModel(
+                        factory = BillImportViewModel.Factory(importContext.applicationContext, app.repository)
+                    )
+                    ImportBillsScreen(
+                        viewModel = importVM,
+                        onBack = { navController.popBackStack() },
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState
                     )
                 }
                 composable("budget-edit") {

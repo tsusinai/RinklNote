@@ -76,7 +76,8 @@ import kotlinx.coroutines.launch
  *
  * **文件职责（2026-09-11 重构后）**：本文件只保留「页面骨架」——
  * 收集状态 → 组装 LazyColumn → 分发弹窗，外加顶栏/头部两个私有组件。
- * - 四张设置卡 → `ProfileCards.kt`（SyncCard / DailyReportCard / AccountCard / AboutCard）
+ * - 四张设置卡 → `ProfileCards.kt`（SyncCard / DailyReportCard / AccountCard / AboutCard），
+ *   编排自上而下按使用逻辑分组：数据与同步 → 通知 → 账户与安全 → 通用
  * - 七个弹窗 → `ProfileDialogs.kt`，状态由本文件的 [ProfileDialog] 单状态机统一管理
  * - 纯格式化函数 → `ProfileFormat.kt`
  * - CSV 导出 → `util/BillCsvExporter.kt`

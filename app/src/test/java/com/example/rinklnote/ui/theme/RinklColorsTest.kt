@@ -12,39 +12,42 @@ import org.junit.Test
  */
 class RinklColorsTest {
 
-    /** 未自定义时：边框=内置默认浅灰、分割线=「每日账单」灰、图标色未指定（各处用自己的默认）。 */
+    /** 未自定义时：边框=透明（2026-09-14 拍板默认无边框）、分割线=「每日账单」灰、图标色未指定（各处用自己的默认）。 */
     @Test
     fun defaultsUseProfileBorderAndDailyBillDivider() {
         val c = rinklColorsOf(dark = false)
-        assertEquals(DefaultCardBorder, c.borderColor)
+        assertEquals(Color.Transparent, c.borderColor)
         assertEquals(DefaultDividerGray, c.dividerColor)
         assertNull(c.iconButtonColor)
         assertEquals(Blue80, c.themeColor)
         assertEquals(Color.Black, c.fontColor)
+        // 2026-09-14 新增两槽：热力图 / 折线柱状（饼图不走主题槽）。
+        assertEquals(Blue40, c.heatmapColor)
+        assertEquals(DefaultChartColor, c.chartColor)
     }
 
     /**
-     * 默认边框必须是一档**可辨识的中性灰** `#CFCFCF`。
+     * 默认边框 = 透明（无边框）。
      *
-     * 缘由：边框规则已统一为「有/无自选背景同一套色」，而 `#EAEAEA` 这类近白灰在自选照片上
-     * 几乎看不出边界（2026-09-11 用户实测后拍板抬深一档）。默认值一动即影响全 App 卡片边界，
-     * 所以在这里用色值钉死，避免被顺手改回去。
+     * 缘由：2026-09-11 曾拍板默认灰 `#CFCFCF`；2026-09-14 目标文档改为「边框颜色默认无边框」，
+     * 透明即用户显式「不描边」，`applyCardGlass` 对 alpha==0 不挂 1dp 线，分割线回落默认灰不受影响。
+     * [DefaultCardBorder] 常量保留，仅供自定义主题页色板圆点描边等 UI 元素使用。
      */
     @Test
-    fun defaultBorderIsVisibleNeutralGray() {
-        assertEquals(Color(0xFFCFCFCF), DefaultCardBorder)
-        assertEquals(DefaultCardBorder, rinklColorsOf(dark = false).borderColor)
-        // 中性灰：三通道相等，加在照片上不会被照片色相带跑。
+    fun defaultBorderIsTransparent() {
+        assertEquals(Color.Transparent, rinklColorsOf(dark = false).borderColor)
+        assertEquals(Color.Transparent, rinklColorsOf(dark = true).borderColor)
+        // 色板描边常量仍是中性灰（三通道相等），仅作 UI 元素用。
         assertEquals(DefaultCardBorder.red, DefaultCardBorder.green, 0.001f)
         assertEquals(DefaultCardBorder.green, DefaultCardBorder.blue, 0.001f)
     }
 
-    /** 深色模式默认：字体色反白、边框改用白色低透明度（暗底上黑框线不可见）。 */
+    /** 深色模式默认：字体色反白；边框与浅色一致为透明（无边框）。 */
     @Test
     fun darkDefaultsFlipFontAndBorder() {
         val c = rinklColorsOf(dark = true)
         assertEquals(Color.White, c.fontColor)
-        assertTrue("深色底需要浅色边框", c.borderColor.red > 0.5f)
+        assertEquals(Color.Transparent, c.borderColor)
     }
 
     /** 用户改了边框色 → 分割线跟随（用户已确认要「跟随边框色」）。 */

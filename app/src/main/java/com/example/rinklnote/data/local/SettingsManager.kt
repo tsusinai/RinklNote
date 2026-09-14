@@ -30,12 +30,14 @@ class SettingsManager(private val context: Context) {
         private val KEY_DAILY_REPORT_HOUR = intPreferencesKey("daily_report_hour")
         private val KEY_DAILY_REPORT_MINUTE = intPreferencesKey("daily_report_minute")
         private val KEY_DAILY_REPORT_QQ_BOT = booleanPreferencesKey("daily_report_qq_bot")
-        // 自定义主题：5 个颜色槽，均存 "#AARRGGBB"；缺省 = 未自定义（回落到默认色）。
+        // 自定义主题：7 个颜色槽，均存 "#AARRGGBB"；缺省 = 未自定义（回落到默认色）。
         private val KEY_THEME_FONT_COLOR = stringPreferencesKey("theme_font_color")
         private val KEY_THEME_PRIMARY_COLOR = stringPreferencesKey("theme_primary_color")
         private val KEY_THEME_TOPBAR_COLOR = stringPreferencesKey("theme_topbar_color")
         private val KEY_THEME_ICON_COLOR = stringPreferencesKey("theme_icon_color")
         private val KEY_THEME_BORDER_COLOR = stringPreferencesKey("theme_border_color")
+        private val KEY_THEME_HEATMAP_COLOR = stringPreferencesKey("theme_heatmap_color")
+        private val KEY_THEME_CHART_COLOR = stringPreferencesKey("theme_chart_color")
 
         /** 槽位 → DataStore 键 的映射（读写共用，避免两处各写一遍 when）。 */
         private fun keyOf(slot: RinklThemeSlot) = when (slot) {
@@ -44,12 +46,15 @@ class SettingsManager(private val context: Context) {
             RinklThemeSlot.TOP_BAR -> KEY_THEME_TOPBAR_COLOR
             RinklThemeSlot.ICON -> KEY_THEME_ICON_COLOR
             RinklThemeSlot.BORDER -> KEY_THEME_BORDER_COLOR
+            RinklThemeSlot.HEATMAP -> KEY_THEME_HEATMAP_COLOR
+            RinklThemeSlot.CHART -> KEY_THEME_CHART_COLOR
         }
 
         /** 全部自定义主题键（清空用，顺序与 keyOf 无关）。 */
         private val THEME_COLOR_KEYS = listOf(
             KEY_THEME_FONT_COLOR, KEY_THEME_PRIMARY_COLOR, KEY_THEME_TOPBAR_COLOR,
-            KEY_THEME_ICON_COLOR, KEY_THEME_BORDER_COLOR
+            KEY_THEME_ICON_COLOR, KEY_THEME_BORDER_COLOR,
+            KEY_THEME_HEATMAP_COLOR, KEY_THEME_CHART_COLOR
         )
     }
 
@@ -73,7 +78,7 @@ class SettingsManager(private val context: Context) {
     val dailyReportMinute: Flow<Int> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_MINUTE] ?: 0 }
     val dailyReportQqBot: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_QQ_BOT] ?: false }
 
-    /** 自定义主题的 5 个颜色槽；未自定义的槽不会出现在 map 里。 */
+    /** 自定义主题的 7 个颜色槽；未自定义的槽不会出现在 map 里。 */
     val customThemeColors: Flow<Map<RinklThemeSlot, Color>> = context.settingsDataStore.data.map { prefs ->
         buildMap {
             RinklThemeSlot.entries.forEach { slot ->

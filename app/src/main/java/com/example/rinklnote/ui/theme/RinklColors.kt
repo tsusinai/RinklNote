@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 /**
- * 「自定义主题」可调的 5 个槽位。与设置项一一对应，也是 DataStore 的存储键。
+ * 「自定义主题」可调的 7 个槽位。与设置项一一对应，也是 DataStore 的存储键。
  *
  * 设计约束：
  * - 每个槽位**默认为 null**（未自定义）→ 渲染时回落到各处的既有默认色，保证「不动设置 = 观感不变」。
@@ -17,7 +17,9 @@ enum class RinklThemeSlot {
     PRIMARY, // 2. 主题色（按钮、开关、选中态、指示条）
     TOP_BAR, // 3. 顶栏标题色（无自选背景时）
     ICON,    // 4. 图标 / 按钮色
-    BORDER   // 5. 边框色（分割线跟随）
+    BORDER,  // 5. 边框色（分割线跟随）
+    HEATMAP, // 6. 热力图颜色（月历格子按支出强度自动分配深浅/透明度）
+    CHART    // 7. 折线/柱状图颜色（不影响饼图配色）
 }
 
 /**
@@ -27,6 +29,8 @@ enum class RinklThemeSlot {
  *   由 [rinklColorsOf] 按「用户覆盖 ?: 默认」算出。
  * - [iconButtonColor] 允许为 null：默认不加 tint，各处按自己的既有默认色（设置页图标=主题色、
  *   底栏图标=文字色），一旦用户自定义则全 App 统一生效。
+ * - [heatmapColor] / [chartColor] 一定非空：未自定义时取各自的现状默认色
+ *   （热力=Blue40、图表=折线红 [DefaultChartColor]），深浅/高亮由使用方组件处理。
  */
 @Immutable
 data class RinklColors(
@@ -35,7 +39,9 @@ data class RinklColors(
     val topBarTitleColor: Color,
     val iconButtonColor: Color?,
     val borderColor: Color,
-    val dividerColor: Color
+    val dividerColor: Color,
+    val heatmapColor: Color,
+    val chartColor: Color
 ) {
     /** 无自选背景（纯白/纯黑底）时顶栏标题色；滚动后略淡，保留层级。 */
     val topBarTitleColorScrolled: Color get() = topBarTitleColor.copy(alpha = 0.62f)
@@ -47,22 +53,26 @@ data class RinklColors(
  */
 val LocalRinklColors = staticCompositionLocalOf { defaultRinklColors(dark = false) }
 
-/** 默认（未自定义）配色。[dark] 只影响字体色/边框色这类需要随明暗反转的槽位。 */
+/** 默认（未自定义）配色。[dark] 只影响字体色/顶栏色这类需要随明暗反转的槽位。 */
 fun defaultRinklColors(dark: Boolean): RinklColors = RinklColors(
     fontColor = if (dark) Color.White else Color.Black,
     themeColor = Blue80,
     topBarTitleColor = if (dark) Color.White else Color.Black,
     iconButtonColor = null,
-    borderColor = if (dark) Color(0x1FFFFFFF) else DefaultCardBorder,
-    dividerColor = DefaultDividerGray
+    // 2026-09-14 起未自定义 = 卡片默认**不描边**（透明）；想要框线在自定义主题 → 边框色里选。
+    borderColor = Color.Transparent,
+    dividerColor = DefaultDividerGray,
+    // 热力/图表两槽不随明暗反转：热力图浅底→槽色做深浅渐变、图表色本身够深，明暗底上都可读。
+    heatmapColor = Blue40,
+    chartColor = DefaultChartColor
 )
 
 /**
  * 按用户覆盖算出最终配色。
  *
  * - 分割线**跟随边框色**：用户没改边框 → 用「每日账单」的同款灰；改了 → 与边框同色。
- * - 例外：边框色被设为**透明**（用户显式「不描边」）时，分割线**回落到默认灰**——
- *   分割线是行与行之间的可读性依赖，不能跟着一起消失。
+ * - 例外：边框色被设为**透明**（用户显式「不描边」，也是未自定义时的默认值）时，
+ *   分割线**回落到默认灰**——分割线是行与行之间的可读性依赖，不能跟着一起消失。
  */
 fun rinklColorsOf(
     dark: Boolean,
@@ -70,7 +80,9 @@ fun rinklColorsOf(
     fontColor: Color? = null,
     topBarTitleColor: Color? = null,
     iconButtonColor: Color? = null,
-    borderColor: Color? = null
+    borderColor: Color? = null,
+    heatmapColor: Color? = null,
+    chartColor: Color? = null
 ): RinklColors {
     val baseFont = if (dark) Color.White else Color.Black
     val resolvedFont = fontColor ?: baseFont
@@ -80,26 +92,35 @@ fun rinklColorsOf(
         // 未单独设顶栏色时跟随字体色——顶栏标题本身就是正文。
         topBarTitleColor = topBarTitleColor ?: resolvedFont,
         iconButtonColor = iconButtonColor,
-        borderColor = borderColor ?: if (dark) Color(0x1FFFFFFF) else DefaultCardBorder,
-        dividerColor = borderColor?.takeIf { it.alpha > 0f } ?: DefaultDividerGray
+        // 未自定义 = 不描边（透明）；显式透明时分割线回落默认灰（见上）。
+        borderColor = borderColor ?: Color.Transparent,
+        dividerColor = borderColor?.takeIf { it.alpha > 0f } ?: DefaultDividerGray,
+        // 热力/图表两槽不随明暗反转，未自定义取现状默认观感（热力 Blue40、图表折线红）。
+        heatmapColor = heatmapColor ?: Blue40,
+        chartColor = chartColor ?: DefaultChartColor
     )
 }
 
 /**
- * 卡片边框的**内置默认色**：一档可辨识的浅灰 `#CFCFCF`。
+ * 「色板/圆点」的**内置描边灰**：一档可辨识的浅灰 `#CFCFCF`。
  *
- * 语义 = 「未自定义主题」时、以及「恢复默认」后，全 App 卡片框线用的色值
- * （[defaultRinklColors] / [rinklColorsOf] 都引用本常量，保证只有一处定义）。
- *
- * 为什么不是更浅的 `#EAEAEA`（2026-09-11 用户拍板调整）：`#EAEAEA` 在纯白底上尚可，
- * 但在**自选背景照片**上几乎看不出边界——而边框规则已统一为「有无背景同一套色」，
- * 所以整体抬深一档到 `#CFCFCF`，白底上仍克制、照片上也能立住。
- * 想要更浅/更深直接在「自定义主题 → 边框色」里覆盖，或选「透明」不描边。
+ * 2026-09-14 起：未自定义时全 App 卡片默认**不描边**（边框槽默认透明），本常量不再作为
+ * 卡片默认框线，仅保留两处用途——
+ * 1. 「自定义主题」页色点/透明棋盘格的描边（保证白色/浅色圆点在浅底上有边界）；
+ * 2. 「推荐配色」预设里的边框色（预设显式给卡片配同色系浅框）。
+ * 想要卡片框线直接在「自定义主题 → 边框色」里选色，或选「透明」恢复不描边。
  */
 val DefaultCardBorder = Color(0xFFCFCFCF)
 
 /** 「每日账单」卡片里那根分割线的同款色值（#A5A5A5 发丝灰）。 */
 val DefaultDividerGray = Color(0xFFA5A5A5)
+
+/**
+ * 折线/柱状图槽（[RinklThemeSlot.CHART]）的**默认色**：月度明细图表现用的深红 `#CA3032`。
+ * 取现值是为了「未自定义 = 观感不变」（今天的 primary 高亮不受本槽影响）；饼图配色
+ * （PiePalette）独立于本槽，永远不跟随。
+ */
+val DefaultChartColor = Color(0xFFCA3032)
 
 // ---------------------------------------------------------------------------
 // 颜色与十六进制字符串互转（DataStore 存储用 "#AARRGGBB"）

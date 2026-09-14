@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.domain.PieSlice
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -274,7 +275,9 @@ private fun TrendPage(
     val values = daySeries
     val maxVal = maxSeries
     val primary = MaterialTheme.colorScheme.primary
-    val tertiary = MaterialTheme.colorScheme.tertiary
+    // 折线/柱状主色走「图表颜色」槽（自定义主题 CHART，默认折线红 #CA3032，观感同旧 tertiary）；
+    // 今天仍用主色 primary 高亮；饼图配色 PiePalette 与本槽无关。
+    val seriesColor = LocalRinklColors.current.chartColor
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
 
     // 今天的 day-of-month；仅当展示的是当月，且今天在月内才高亮
@@ -319,7 +322,7 @@ private fun TrendPage(
                     val y = xAxisTop - chartHeight * (disp(i) / maxVal)
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
-                drawPath(path = path, color = tertiary, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+                drawPath(path = path, color = seriesColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
 
                 values.indices.forEach { i ->
                     val x = chartLeft + step * i
@@ -344,7 +347,7 @@ private fun TrendPage(
                             )
                         }
                     } else {
-                        drawCircle(color = tertiary, radius = 3.dp.toPx(), center = Offset(x, y))
+                        drawCircle(color = seriesColor, radius = 3.dp.toPx(), center = Offset(x, y))
                     }
                 }
             }
@@ -358,7 +361,7 @@ private fun TrendPage(
                     val y = xAxisTop - barHeight
                     val isToday = (i + 1) == todayInMonth
                     drawRoundRect(
-                        color = if (isToday) primary else tertiary,
+                        color = if (isToday) primary else seriesColor,
                         topLeft = Offset(x, y),
                         size = Size(barWidth, barHeight.coerceAtLeast(2.dp.toPx())),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())

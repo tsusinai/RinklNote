@@ -35,7 +35,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.rinklnote.ui.theme.Blue40
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -80,7 +80,9 @@ fun HeatmapBox(
     selectedDay: Int? = null,
     onDayTap: ((Int) -> Unit)? = null
 ) {
-    val hotColor = Blue40
+    // 热力深色端走「热力图颜色」槽（自定义主题 HEATMAP，默认 Blue40）；
+    // 浅色端固定 EmptyBlue，强度 0..1 在两端间自动 lerp 出深浅，未自定义时观感不变。
+    val hotColor = LocalRinklColors.current.heatmapColor
     // 缓存重计算：maxExpense / rangeTotals / rangeMax / today 只随 heatmap 变化，重组时不重复算。
     val maxExpense = remember(heatmap) {
         heatmap.dailyExpense.values.maxOrNull()?.coerceAtLeast(1f) ?: 1f

@@ -47,6 +47,23 @@ interface BillRepository {
     /** 拖动重排：同日新序整批落库（VM 已统一盖章 dirty/updatedAt/sortOrder）。 */
     suspend fun reorderBills(bills: List<Bill>)
 
+    // ── CSV 导入（ui/screen/import 的 BillImportViewModel 使用）──
+    // 这几个方法带默认空实现：既有测试里的 FakeBillRepository 无需逐个补实现即可编译；
+    // 真正实现见 BillRepositoryImpl（事务批量插入 + 账户余额联动）。
+    /**
+     * 批量导入账单：统一盖章 dirty=1 / createdAt / updatedAt 后整批插入（单事务，失败全回滚），
+     * 并按账户归集回补余额增量（支出减、收入加）。server_id 置空 → SyncManager 既有推送自动上传。
+     * @return 成功插入条数
+     */
+    suspend fun importBills(bills: List<Bill>): Int = 0
+    /** 全部一级分类（支出 + 收入）快照，供导入预检按名匹配。 */
+    suspend fun getAllCategories(): List<Category> = emptyList()
+    /** 全部活跃账户快照，供导入预检按名匹配 / 取兜底账户。 */
+    suspend fun getActiveAccounts(): List<Account> = emptyList()
+    /** 某天（[dayStart, dayEnd)）未删除账单，供导入按「同日 + 同额 + 同分类」查重。 */
+    suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill> = emptyList()
+
+
     // Accounts — reactive source + per-user CRUD/sync
     fun observeAccounts(): Flow<List<Account>>
     suspend fun insertAccount(account: Account): Long

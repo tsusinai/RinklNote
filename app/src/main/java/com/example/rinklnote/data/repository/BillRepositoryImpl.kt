@@ -101,6 +101,52 @@ internal class BillRepositoryImpl(
         bills.forEach { billDao.update(it) }
     }
 
+    // ── CSV 导入 ──
+
+    override suspend fun getAllCategories(): List<Category> =
+        categoryDao.getAllByType("EXPENSE") + categoryDao.getAllByType("INCOME")
+
+    override suspend fun getActiveAccounts(): List<Account> = accountDao.getAllActive()
+
+    override suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill> =
+        billDao.getBillsByDay(dayStart, dayEnd)
+
+    /**
+     * 批量导入账单（CSV 导入落库）：
+     * - 与 [addBill] 相同的语义：本地插入即待同步（dirty=1 且 server_id 为空，
+     *   SyncManager 既有推送逻辑会自动上传，这里不直接调 SyncManager）；
+     * - 账户余额按收支方向回补（支出减、收入加），与记账入口保持一致；
+     * - 金额/日期/分类/账户已由 VM 解析装配好，这里统一盖章 createdAt / updatedAt / dirty，
+     *   并把 id / server_id / sort_order 清零，避免调用方漏填带入脏值；
+     * - 单事务整批：中途失败全部回滚，不会出现半批脏数据；余额增量按账户归集，只 nudge 一次。
+     */
+    override suspend fun importBills(bills: List<Bill>): Int {
+        if (bills.isEmpty()) return 0
+        val now = System.currentTimeMillis()
+        return db.withTransaction {
+            val deltaByAccount = mutableMapOf<Long, Long>()
+            var inserted = 0
+            for (bill in bills) {
+                billDao.insert(
+                    bill.copy(
+                        id = 0,
+                        serverId = null,
+                        sortOrder = null,
+                        createdAt = now,
+                        updatedAt = now,
+                        dirty = true
+                    )
+                )
+                val delta = balanceDelta(bill)
+                deltaByAccount[bill.accountId] = (deltaByAccount[bill.accountId] ?: 0L) + delta
+                inserted++
+            }
+            deltaByAccount.forEach { (accountId, delta) -> nudgeAccount(accountId, delta) }
+            inserted
+        }.also { onBillMutated() }
+    }
+
+
     /** 记账对目标账户余额的增量：支出为负、收入为正。 */
     private fun balanceDelta(bill: Bill): Long =
         if (bill.billType == BillType.EXPENSE) -bill.amountMinor else bill.amountMinor

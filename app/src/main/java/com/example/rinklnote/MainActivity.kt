@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            // 「自定义主题」的用户覆盖：5 个颜色槽读自 DataStore，未自定义的槽回落默认色。
+            // 「自定义主题」的用户覆盖：7 个颜色槽读自 DataStore，未自定义的槽回落默认色。
             val customColors by app.settingsManager.customThemeColors
                 .collectAsStateWithLifecycle(initialValue = emptyMap())
             val rinklColors = rinklColorsOf(
@@ -38,7 +38,9 @@ class MainActivity : ComponentActivity() {
                 fontColor = customColors[RinklThemeSlot.FONT],
                 topBarTitleColor = customColors[RinklThemeSlot.TOP_BAR],
                 iconButtonColor = customColors[RinklThemeSlot.ICON],
-                borderColor = customColors[RinklThemeSlot.BORDER]
+                borderColor = customColors[RinklThemeSlot.BORDER],
+                heatmapColor = customColors[RinklThemeSlot.HEATMAP],
+                chartColor = customColors[RinklThemeSlot.CHART]
             )
             RinklNoteTheme(darkTheme = darkTheme, rinklColors = rinklColors) {
                 AppNavigation(app = app)
