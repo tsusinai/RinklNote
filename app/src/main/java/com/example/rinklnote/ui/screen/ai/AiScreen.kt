@@ -55,6 +55,7 @@ import com.example.rinklnote.domain.MessageKind
 import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
+import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
@@ -162,7 +163,7 @@ fun AiScreen(
                     .border(
                         width = 1.dp,
                         color = if (aiFocused) MaterialTheme.colorScheme.primary
-                                else LocalRinklColors.current.borderColor,
+                                else LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder,
                         shape = RoundedCornerShape(24.dp)
                     )
                     .clip(RoundedCornerShape(24.dp))

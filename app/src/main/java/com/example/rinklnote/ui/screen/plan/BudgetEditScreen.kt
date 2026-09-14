@@ -498,7 +498,8 @@ private fun TrendCard(
 private fun TrendMiniChart(trend: List<DailySpend>, modifier: Modifier = Modifier) {
     val maxVal = trend.maxOfOrNull { it.amountMinor }?.coerceAtLeast(1L) ?: 1L
     val barColor = MaterialTheme.colorScheme.primary
-    val baselineColor = LocalRinklColors.current.borderColor
+    // 边框槽默认透明后，基线改用分割线色（始终可见、随主题）。
+    val baselineColor = LocalRinklColors.current.dividerColor
     Canvas(modifier = modifier.fillMaxWidth().height(88.dp)) {
         val n = trend.size
         if (n == 0) return@Canvas

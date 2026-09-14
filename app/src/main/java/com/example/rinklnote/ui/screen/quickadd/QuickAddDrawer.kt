@@ -75,6 +75,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.IncomeGreen
@@ -484,7 +485,7 @@ private fun CategoryRow(
                 .clip(CircleShape)
                 .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                 .then(
-                    if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
+                    if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                     else Modifier
                 )
         )
@@ -527,7 +528,7 @@ private fun SubCategoryPopup(
                         .clip(CircleShape)
                         .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                         .then(
-                            if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
+                            if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                             else Modifier
                         )
                 )
@@ -609,7 +610,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
                     .clip(CircleShape)
                     .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
                     .then(
-                        if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor, CircleShape)
+                        if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
                         else Modifier
                     )
             )
