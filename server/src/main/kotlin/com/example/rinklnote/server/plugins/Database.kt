@@ -77,7 +77,7 @@ private fun Transaction.ensureAccountIconKeyColumn() {
     exec(
         """
         UPDATE accounts
-        SET icon_key = CASE name
+        SET icon_key = CASE "name"
             WHEN '微信' THEN 'WECHAT'
             WHEN '支付宝' THEN 'ALIPAY'
             WHEN '无账户' THEN 'OTHER'
