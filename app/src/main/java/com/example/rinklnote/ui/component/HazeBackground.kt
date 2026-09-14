@@ -6,11 +6,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.util.DisplayPreferences
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -58,14 +62,32 @@ val RinklCardFrostedStyle: HazeStyle = HazeStyle(
  *
  * 调用方式：`Modifier.clip(shape).then(applyCardGlass(shape))`。
  *
+ * **卡片白色蒙版开关**（「我的 → 个性化」组，[DisplayPreferences.cardOverlayEnabled]）：
+ * - 关闭（默认）：行为与 2026-09-11 版完全一致——只有边框、无任何蒙版。
+ * - 开启：在边框**之前**铺一层雾蒙版压住照片背景，保证正文可读。浅色主题用白雾
+ *   （`White.copy(alpha = 0.55f)`）；暗色主题用黑雾（`Black.copy(alpha = 0.35f)`）——
+ *   暗底下白雾会把卡片抬亮、白字读不清。
+ * - 蒙版与边框相互独立：即使槽位是「不描边」（透明边框），蒙版照常生效。
+ *
  * @param shape 卡片圆角（与调用方 `clip` 用同一 shape，保证边框贴合圆角）
  */
 @Composable
 fun applyCardGlass(shape: Shape): Modifier {
+    // 蒙版开关：collectAsState 读取（DisplayPreferences 由 MainActivity 从 DataStore 桥接进来）。
+    val overlayEnabled by DisplayPreferences.cardOverlayEnabled.collectAsState()
+    // 明暗判断不用 isSystemInDarkTheme：App 支持「设置 → 深色模式」在应用内强制 LIGHT/DARK，
+    // 系统明暗可能与实际渲染主题相反；当前主题 background 的亮度在三种模式下都如实反映明暗。
+    val overlayColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+        Color.Black.copy(alpha = 0.35f) // 暗色：黑雾
+    } else {
+        Color.White.copy(alpha = 0.55f) // 浅色：白雾
+    }
     val border = LocalRinklColors.current.borderColor
+    val overlay = if (overlayEnabled) Modifier.background(overlayColor) else Modifier
     // 透明 = 用户选了「不描边」：直接不挂 border，别画一条看不见的 1dp 线。
-    if (border.alpha == 0f) return Modifier
-    return Modifier.border(width = 1.dp, color = border, shape = shape)
+    if (border.alpha == 0f) return overlay
+    // 蒙版挂在 border 之前：先铺雾、再描边，边框不被雾盖淡。
+    return overlay.then(Modifier.border(width = 1.dp, color = border, shape = shape))
 }
 
 /**

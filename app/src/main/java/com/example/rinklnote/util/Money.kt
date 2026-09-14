@@ -1,5 +1,6 @@
 package com.example.rinklnote.util
 
+import com.example.rinklnote.ui.util.DisplayPreferences
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.abs
@@ -48,9 +49,16 @@ object Money {
     fun formatPlain(minor: Long): String =
         (if (minor < 0) "-" else "") + formatAbs(abs(minor))
 
-    /** 分 → 「¥1,234.56」；负数形如「-¥12.30」。 */
-    fun format(minor: Long): String =
-        (if (minor < 0) "-¥" else "¥") + formatAbs(abs(minor))
+    /**
+     * 分 → 「¥1,234.56」；负数形如「-¥12.30」。
+     * 是否带 ¥ 由展示偏好 [DisplayPreferences.currencySymbolVisible] 决定
+     * （设置页关闭货币符号后，本函数输出与 [formatPlain] 完全相同；[formatPlain] 不受影响）。
+     * 读内存单例而非 Flow：调用点大量出现在 ViewModel / Canvas 等非组合上下文，只能同步取值。
+     */
+    fun format(minor: Long): String {
+        val symbol = if (DisplayPreferences.currencySymbolVisible.value) "¥" else ""
+        return (if (minor < 0) "-$symbol" else symbol) + formatAbs(abs(minor))
+    }
 
     /** 绝对值的「1,234.56」形态：纯整数拆分 + 手工千分位，不依赖 Locale。 */
     private fun formatAbs(absMinor: Long): String {

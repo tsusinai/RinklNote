@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 /**
- * 「自定义主题」可调的 7 个槽位。与设置项一一对应，也是 DataStore 的存储键。
+ * 「自定义主题」可调的 8 个槽位。与设置项一一对应，也是 DataStore 的存储键。
  *
  * 设计约束：
  * - 每个槽位**默认为 null**（未自定义）→ 渲染时回落到各处的既有默认色，保证「不动设置 = 观感不变」。
@@ -19,7 +19,8 @@ enum class RinklThemeSlot {
     ICON,    // 4. 图标 / 按钮色
     BORDER,  // 5. 边框色（分割线跟随）
     HEATMAP, // 6. 热力图颜色（月历格子按支出强度自动分配深浅/透明度）
-    CHART    // 7. 折线/柱状图颜色（不影响饼图配色）
+    CHART,   // 7. 折线/柱状图颜色（不影响饼图配色）
+    NAV_ICON // 8. 底栏导航图标色（独立于字体色/图标按钮色）
 }
 
 /**
@@ -29,6 +30,8 @@ enum class RinklThemeSlot {
  *   由 [rinklColorsOf] 按「用户覆盖 ?: 默认」算出。
  * - [iconButtonColor] 允许为 null：默认不加 tint，各处按自己的既有默认色（设置页图标=主题色、
  *   底栏图标=文字色），一旦用户自定义则全 App 统一生效。
+ * - [navIconColor] 允许为 null：底栏导航图标的独立色槽。null = 未自定义，消费端回落现状
+ *   （`iconButtonColor ?: onSurface`）；不随 dark 反转（null 时消费端自会按当前明暗取色）。
  * - [heatmapColor] / [chartColor] 一定非空：未自定义时取各自的现状默认色
  *   （热力=Blue40、图表=折线红 [DefaultChartColor]），深浅/高亮由使用方组件处理。
  */
@@ -41,7 +44,8 @@ data class RinklColors(
     val borderColor: Color,
     val dividerColor: Color,
     val heatmapColor: Color,
-    val chartColor: Color
+    val chartColor: Color,
+    val navIconColor: Color? = null
 ) {
     /** 无自选背景（纯白/纯黑底）时顶栏标题色；滚动后略淡，保留层级。 */
     val topBarTitleColorScrolled: Color get() = topBarTitleColor.copy(alpha = 0.62f)
@@ -64,7 +68,9 @@ fun defaultRinklColors(dark: Boolean): RinklColors = RinklColors(
     dividerColor = DefaultDividerGray,
     // 热力/图表两槽不随明暗反转：热力图浅底→槽色做深浅渐变、图表色本身够深，明暗底上都可读。
     heatmapColor = Blue40,
-    chartColor = DefaultChartColor
+    chartColor = DefaultChartColor,
+    // 导航图标槽默认 null（未自定义）：消费端回落现状，不随 dark 反转（回落色由消费端按明暗自取）。
+    navIconColor = null
 )
 
 /**
@@ -82,7 +88,8 @@ fun rinklColorsOf(
     iconButtonColor: Color? = null,
     borderColor: Color? = null,
     heatmapColor: Color? = null,
-    chartColor: Color? = null
+    chartColor: Color? = null,
+    navIconColor: Color? = null
 ): RinklColors {
     val baseFont = if (dark) Color.White else Color.Black
     val resolvedFont = fontColor ?: baseFont
@@ -97,7 +104,9 @@ fun rinklColorsOf(
         dividerColor = borderColor?.takeIf { it.alpha > 0f } ?: DefaultDividerGray,
         // 热力/图表两槽不随明暗反转，未自定义取现状默认观感（热力 Blue40、图表折线红）。
         heatmapColor = heatmapColor ?: Blue40,
-        chartColor = chartColor ?: DefaultChartColor
+        chartColor = chartColor ?: DefaultChartColor,
+        // 导航图标槽：null = 未自定义（消费端回落现状），透传即可，不随 dark 反转。
+        navIconColor = navIconColor
     )
 }
 

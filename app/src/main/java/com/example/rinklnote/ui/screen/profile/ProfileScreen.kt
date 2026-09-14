@@ -26,9 +26,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -41,11 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.data.local.TokenManager
@@ -76,9 +81,11 @@ import kotlinx.coroutines.launch
  *
  * **文件职责（2026-09-11 重构后）**：本文件只保留「页面骨架」——
  * 收集状态 → 组装 LazyColumn → 分发弹窗，外加顶栏/头部两个私有组件。
- * - 四张设置卡 → `ProfileCards.kt`（SyncCard / DailyReportCard / AccountCard / AboutCard），
- *   编排自上而下按使用逻辑分组：数据与同步 → 通知 → 账户与安全 → 通用
+ * - 五张设置卡 → `ProfileCards.kt`（SyncCard / DailyReportCard / PersonalizationCard /
+ *   AccountCard / AboutCard），编排自上而下按使用逻辑分组：
+ *   数据与同步 → 通知 → 个性化 → 账户与安全 → 通用
  * - 七个弹窗 → `ProfileDialogs.kt`，状态由本文件的 [ProfileDialog] 单状态机统一管理
+ *   （昵称编辑弹窗不入该状态机，用本文件局部状态承载，见 [NicknameEditDialog]）
  * - 纯格式化函数 → `ProfileFormat.kt`
  * - CSV 导出 → `util/BillCsvExporter.kt`
  *
@@ -86,7 +93,7 @@ import kotlinx.coroutines.launch
  * 本页签名只 +`backgroundUri` +`hazeState` 两个透传参数（nav 层提供）。
  *
  * @param authViewModel 登录态 VM
- * @param settingsManager 主题/自动同步/背景/日报本地设置
+ * @param settingsManager 主题/自动同步/背景/日报/头像/昵称/卡片蒙版等本地设置
  * @param tokenManager 上次同步时间
  * @param syncManager 同步入口
  * @param repository 账单仓库（导出 / 登出清数据）
@@ -124,6 +131,10 @@ fun ProfileScreen(
     val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
     val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
     val dailyReportQqBot by settingsManager.dailyReportQqBot.collectAsStateWithLifecycle(initialValue = false)
+    // 个性化：头像 / 昵称 / 卡片白色蒙版（DataStore 持久化；默认无头像、无昵称、蒙版关闭）。
+    val avatarUri by settingsManager.avatarUri.collectAsStateWithLifecycle(initialValue = null)
+    val nickname by settingsManager.nickname.collectAsStateWithLifecycle(initialValue = null)
+    val cardOverlay by settingsManager.cardOverlay.collectAsStateWithLifecycle(initialValue = false)
 
     // 弹窗：全页共用一个状态（同时最多一个弹窗）。
     var dialog by remember { mutableStateOf<ProfileDialog?>(null) }
@@ -183,6 +194,16 @@ fun ProfileScreen(
     ) { uri ->
         if (uri != null) onCropBackground(uri)
     }
+
+    // 图库选头像：选完直接写入 DataStore（不做裁剪，ProfileHeader 内按圆形裁切显示）。
+    val pickAvatarLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) coroutineScope.launch { settingsManager.setAvatarUri(uri.toString()) }
+    }
+
+    // 昵称编辑弹窗：不入全局 ProfileDialog 状态机（ProfileDialogs.kt 不在本任务文件集内），用局部状态。
+    var showNicknameDialog by remember { mutableStateOf(false) }
 
     // 登出「先推后清」：尽力同步未同步项 → 成功则清本地 per-user 数据。
     val finishLogout: () -> Unit = {
@@ -248,7 +269,12 @@ fun ProfileScreen(
             item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
 
             item(key = "header") {
-                ProfileHeader(state = state, onLogin = onLoginClick)
+                ProfileHeader(
+                    state = state,
+                    nickname = nickname,
+                    avatarUri = avatarUri,
+                    onLogin = onLoginClick
+                )
             }
             item(key = "sync") {
                 SyncCard(
@@ -279,11 +305,13 @@ fun ProfileScreen(
                     onQqBotChange = onDailyReportQqBotChange
                 )
             }
-            item(key = "account") {
-                AccountCard(
-                    state = state,
+            item(key = "personalization") {
+                PersonalizationCard(
                     themeMode = themeMode,
                     backgroundUri = backgroundUri,
+                    avatarUri = avatarUri,
+                    nickname = nickname,
+                    cardOverlay = cardOverlay,
                     onThemeClick = { dialog = ProfileDialog.Theme },
                     onCustomThemeClick = onCustomThemeClick,
                     onBackgroundClick = {
@@ -292,6 +320,19 @@ fun ProfileScreen(
                         )
                     },
                     onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
+                    onAvatarClick = {
+                        pickAvatarLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onRemoveAvatar = { coroutineScope.launch { settingsManager.setAvatarUri(null) } },
+                    onNicknameClick = { showNicknameDialog = true },
+                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } }
+                )
+            }
+            item(key = "account") {
+                AccountCard(
+                    state = state,
                     onPasswordClick = { dialog = ProfileDialog.Password },
                     onBindQQClick = onBindQQClick,
                     onUnbindQQ = { dialog = ProfileDialog.UnbindQQ },
@@ -392,6 +433,18 @@ fun ProfileScreen(
                 onDismiss = dismissDialog
             )
     }
+
+    // 昵称编辑弹窗：确认时空串视为清除（写 null，回落显示掩码手机号）。
+    if (showNicknameDialog) {
+        NicknameEditDialog(
+            current = nickname,
+            onConfirm = { value ->
+                showNicknameDialog = false
+                coroutineScope.launch { settingsManager.setNickname(value) }
+            },
+            onDismiss = { showNicknameDialog = false }
+        )
+    }
 }
 
 /** 我的页悬浮顶栏：极简，仅居中「我的」标题 + scrim 渐隐（滚动后渐显）。 */
@@ -417,9 +470,20 @@ private fun ProfileTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolle
     }
 }
 
-/** 通栏宽头：左大号头像 + 右昵称/副行；未登录给「登录/注册」胶囊按钮。 */
+/**
+ * 通栏宽头：左大号头像 + 右昵称/副行；未登录给「登录/注册」胶囊按钮。
+ *
+ * 头像显示：设置了自定义头像（DataStore `avatarUri`）时用 Coil 圆形裁切显示；
+ * 未设置回落「首字符徽章」（登录态优先取自定义昵称首字，其次手机号首字，兜底「账」）。
+ * 名称显示优先级：自定义昵称 > 掩码手机号；未登录固定「未登录」。
+ */
 @Composable
-private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
+private fun ProfileHeader(
+    state: AuthState,
+    nickname: String?,
+    avatarUri: String?,
+    onLogin: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -429,18 +493,35 @@ private fun ProfileHeader(state: AuthState, onLogin: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AvatarBadge(
-            character = if (state.isLoggedIn) {
-                state.accountPhone.firstOrNull()?.toString() ?: "账"
-            } else {
-                "账"
-            },
-            size = 56.dp
-        )
+        if (avatarUri != null) {
+            // 自定义头像：按 56dp 圆形裁切显示（Coil 加载 content:// URI）。
+            AsyncImage(
+                model = avatarUri,
+                contentDescription = "头像",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+            )
+        } else {
+            AvatarBadge(
+                character = if (state.isLoggedIn) {
+                    nickname?.trim()?.firstOrNull()?.toString()
+                        ?: state.accountPhone.firstOrNull()?.toString()
+                        ?: "账"
+                } else {
+                    "账"
+                },
+                size = 56.dp
+            )
+        }
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = if (state.isLoggedIn) maskPhone(state.accountPhone) else "未登录",
+                text = when {
+                    !state.isLoggedIn -> "未登录"
+                    else -> nickname?.takeIf { it.isNotBlank() } ?: maskPhone(state.accountPhone)
+                },
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -490,4 +571,40 @@ private fun AvatarBadge(character: String, size: androidx.compose.ui.unit.Dp = 5
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
+}
+
+/**
+ * 昵称编辑弹窗：确认时 trim 后为空则回调 `null`（清除自定义昵称，名称回落显示掩码手机号）。
+ *
+ * 不并入 [ProfileDialog] 状态机：ProfileDialogs.kt 不在本任务文件集内，
+ * 由 ProfileScreen 用局部 `showNicknameDialog` 状态承载（同时至多一个弹窗的约束仍成立）。
+ */
+@Composable
+private fun NicknameEditDialog(
+    current: String?,
+    onConfirm: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(current.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置昵称") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("昵称") },
+                placeholder = { Text("留空恢复显示手机号") },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(text.trim().takeIf { it.isNotEmpty() }) }) {
+                Text("确定")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }

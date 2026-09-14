@@ -96,6 +96,8 @@ import com.example.rinklnote.ui.screen.map.BillMapScreen
 import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
 import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
+import com.example.rinklnote.ui.screen.search.BillSearchViewModel
+import com.example.rinklnote.ui.screen.search.SearchBillsScreen
 import com.example.rinklnote.ui.screen.web.WebScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
@@ -538,6 +540,22 @@ fun AppNavigation(app: RinklNoteApp) {
                         onBack = { navController.popBackStack() }
                     )
                 }
+                composable("bill-search") {
+                    // 搜索账单：全量 Flow 内存过滤，结果行点击跳账单编辑。
+                    val searchVM: BillSearchViewModel = viewModel(
+                        factory = BillSearchViewModel.Factory(app.repository)
+                    )
+                    SearchBillsScreen(
+                        viewModel = searchVM,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onEditBill = { bill ->
+                            bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                            navController.navigate("bill-edit")
+                        },
+                        onBack = { navController.popBackStack() }
+                    )
+                }
                 composable(
                     route = "web-view?url={url}&title={title}",
                     arguments = listOf(
@@ -614,7 +632,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         profileLoggedIn = authState.isLoggedIn,
                         onOpenBillMap = { navController.navigate("bill-map") },
                         onOpenImport = { navController.navigate("bill-import") },
-                        onOpenMultiCurrency = { navController.navigate("multi-currency") }
+                        onOpenMultiCurrency = { navController.navigate("multi-currency") },
+                        onOpenSearch = { navController.navigate("bill-search") }
                     )
 
                 }
@@ -1039,7 +1058,10 @@ private fun CustomBottomBar(
         Modifier.background(MaterialTheme.colorScheme.surface)
     }
 
-    // 图标/按钮色：自定义主题第 4 项；未自定义时跟随字体色（深色模式自动反白）。
+    // 图标色分离（2026-09-15）：底栏**图标**走 NAV_ICON 槽（独立于字体色），未自定义时回落
+    // 「图标/按钮色」槽 → 字体色；底栏**文字**仍跟随原 iconTint 链（FONT 语义）。
+    val navIconTint = LocalRinklColors.current.navIconColor
+        ?: (LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurface)
     val iconTint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurface
 
     Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp, start = 10.dp, end = 10.dp)) {
@@ -1063,7 +1085,7 @@ private fun CustomBottomBar(
                         Icon(
                             painter = painterResource(label.iconId),
                             contentDescription = label.string,
-                            tint = iconTint,
+                            tint = navIconTint,
                             modifier = Modifier.size(17.dp)
                         )
                         Text(

@@ -60,6 +60,8 @@ import dev.chrisbanes.haze.hazeEffect
  * @param profileName 登录昵称/手机号；未登录时忽略，显示「未登录」
  * @param profileLoggedIn 是否已登录
  * @param onDismiss 关闭抽屉
+ * @param onOpenSearch 「搜索账单」项回调（路由 `bill-search` 由主会话接线）；
+ *   默认空实现——现调用点（BookkeepingScreen）未传参也能编译，主会话集成时再接通
  * @param onOpenBillMap 「账单地图」项回调（路由 `bill-map` 由主会话接线）
  * @param onOpenImport 「导入账单」项回调（路由 `bill-import` 由主会话接线）
  * @param onOpenSettings 「设置」项回调（当前跳「我的」页）
@@ -74,6 +76,7 @@ fun MoreDrawer(
     profileName: String,
     profileLoggedIn: Boolean,
     onDismiss: () -> Unit,
+    onOpenSearch: () -> Unit = {},
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -134,6 +137,7 @@ fun MoreDrawer(
                     profileName = profileName,
                     profileLoggedIn = profileLoggedIn,
                     onDismiss = onDismiss,
+                    onOpenSearch = onOpenSearch,
                     onOpenBillMap = onOpenBillMap,
                     onOpenImport = onOpenImport,
                     onOpenMultiCurrency = onOpenMultiCurrency,
@@ -154,6 +158,7 @@ private fun DrawerContent(
     profileName: String,
     profileLoggedIn: Boolean,
     onDismiss: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenMultiCurrency: () -> Unit,
@@ -165,6 +170,8 @@ private fun DrawerContent(
             .fillMaxSize()
             // 个人信息区避让状态栏：面板上缘可能顶进状态栏，内容整体下压
             .statusBarsPadding()
+            // 顶部呼吸：状态栏避让后再垫 12dp，头像区不顶死状态栏
+            .padding(top = 12.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         // ---- 顶部个人信息区 ----
@@ -210,11 +217,23 @@ private fun DrawerContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        // 信息区与操作区之间拉开 12dp 层次（分割线上下各 6dp）
+        Spacer(modifier = Modifier.height(6.dp))
         RinklDivider(endInset = 6.dp)
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // ---- 功能模块列表（行高 48dp，SettingsRow 风格）----
+        MoreDrawerRow(
+            icon = { tint ->
+                Icon(
+                    painter = painterResource(R.drawable.ic_search),
+                    contentDescription = null,
+                    tint = tint
+                )
+            },
+            label = "搜索账单",
+            onClick = closeThen(onDismiss, onOpenSearch)
+        )
         MoreDrawerRow(
             icon = { tint -> Icon(Icons.Filled.LocationOn, contentDescription = null, tint = tint) },
             label = "账单地图",

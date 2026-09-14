@@ -103,3 +103,41 @@ WebView 屏 WebScreen（路由 web-view?url={url}，Url 编解码；顶部 Arrow
 ProfileCards 的引导入口是否改跳由主会话集成时定。
 
 ## 集成 R2（主会话）：AppNavigation 接 multi-currency / web-view 路由与回调；编译 + 测试 + 提交。
+
+---
+
+# 最终轮（2026-09-15，用户 8 项，完成后提交合并 main）
+
+## 跨代理契约（A1 实现，其余按此消费，主会话编译兜底）
+SettingsManager 新增：`avatarUri: Flow<String?>`/`setAvatarUri`、`nickname: Flow<String?>`/`setNickname`、
+`showCurrencySymbol: Flow<Boolean>`(默认 true)/`setShowCurrencySymbol`、`cardOverlay: Flow<Boolean>`(默认 false)/`setCardOverlay`、
+NAV_ICON 主题槽键（RinklThemeSlot 加 NAV_ICON，RinklColors 加 `navIconColor: Color?` 默认 null）。
+新建 ui/util/DisplayPreferences.kt（仿 BalancePrivacy 全局态）：currencySymbolVisible/cardOverlayEnabled 两个 StateFlow；
+MainActivity collect SettingsManager 两流同步；Money.format 按 DisplayPreferences 决定是否带 ¥（关闭=输出 formatPlain 观感）。
+applyCardGlass 读 cardOverlayEnabled，开启时 border 前插白色蒙版 background(White.copy(alpha=0.55f))。
+
+## R3 批 1
+- **A1 个性化系统**（RinklColors.kt/SettingsManager.kt/CustomThemeScreen.kt/HazeBackground.kt/util/Money.kt/新建 ui/util/DisplayPreferences.kt/MainActivity.kt）：
+  6.1 NAV_ICON 第 8 槽（底栏图标色独立于字体色，默认 null 回落现状）；所有可独立设置图标色的消费点在报告里列出；
+  货币符号开关生效于 Money.format；6.2 卡片白蒙版开关生效于 applyCardGlass；SettingsManager 全部新键与持久化；CustomThemeScreen 补 NAV_ICON 槽行。
+- **A2 我的页分组与头像昵称**（ProfileScreen.kt/ProfileCards.kt）：
+  3. 分组调整：「账户与安全」拆出「个性化」（主题/自定义主题/选择背景/移除背景 + 新增昵称行 + 头像行）；
+  4. 头像：行点击 ActivityResult PickVisualMedia → 存 DataStore avatarUri（ProfileHeader 圆形显示，未选=首字符徽章）；昵称：行点击弹输入 AlertDialog → setNickname；ProfileHeader 显示优先级 自定义昵称 > 手机号。
+  6.2 开关行「卡片白色蒙版」放「个性化」组尾（Switch 读/写 cardOverlay 流）。
+- **A3 搜索账单**（新建 ui/screen/search/、MoreDrawer.kt）：
+  5. MoreDrawer 加「搜索账单」行（onOpenSearch 回调，默认 {}）+ **顶部 padding 再优化**（7：statusBarsPadding 后顶部再加 12dp 呼吸、头像区与功能区间距拉开）。
+  SearchBillsScreen（路由 bill-search 主会话接线）：搜索框（分类/备注/金额/子分类/标签按 Bill 实际字段，agent 自查）+
+  筛选（种类 收入/支出/全部；日期 按天/按月/自定义起止范围）+ 结果账单行（点击 onEditBill 回调进编辑）。
+  数据：repository.observeAllBills() 内存过滤（不动 Dao/schema）。VM 模式 State+Event。
+- 集成 R3-1：编译测试提交。
+
+## R3 批 2
+- **A4 登录升级**（LoginScreen.kt 独占，可小改 AuthViewModel.kt）：
+  2. UI 升级（品牌区/间距/按钮 pressScale 已有体系）、手机号验证（^1[3-9]\d{9}$，错误提示 12sp）、「忘记密码」入口：
+     服务端若无对应端点则 UI 占位（AlertDialog 说明 + AuthEvent/接口预留注释「暂留接口」）。
+- **A5 地图金额常驻**（BillMapScreen.kt 独占）：8. 标签气泡常驻显示（合成进 marker bitmap 或 addOverlay 后直接 open），保留点击交互不回退。
+- **A6 Web 同步优化**（web/ 独占，可跑 npm build）：1. --on-primary 令牌化（消灭 #0b2b44 硬编码 16 处）、
+  图表色板对齐 App PiePalette、border-radius 10px→12px 收敛、grid gap 统一 12px、.card padding 18→16、card-title 15→14px。
+- 集成 R3-2：AppNavigation 接 bill-search 路由与 CustomBottomBar navIconColor；编译 + 测试 + 提交。
+
+## 终局：真机安装 + web build 验证 + 合并 main + 推送。

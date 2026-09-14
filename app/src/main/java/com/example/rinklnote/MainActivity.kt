@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.data.local.ThemeMode
@@ -13,6 +14,7 @@ import com.example.rinklnote.navigation.AppNavigation
 import com.example.rinklnote.ui.theme.RinklNoteTheme
 import com.example.rinklnote.ui.theme.RinklThemeSlot
 import com.example.rinklnote.ui.theme.rinklColorsOf
+import com.example.rinklnote.ui.util.DisplayPreferences
 import com.example.rinklnote.widget.RinklNoteAppWidgetReceiver.Companion.EXTRA_CATEGORY_ID
 import com.example.rinklnote.widget.RinklNoteAppWidgetReceiver.Companion.EXTRA_OPEN_QUICK_ADD
 
@@ -29,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            // 「自定义主题」的用户覆盖：7 个颜色槽读自 DataStore，未自定义的槽回落默认色。
+            // 「自定义主题」的用户覆盖：8 个颜色槽读自 DataStore，未自定义的槽回落默认色。
             val customColors by app.settingsManager.customThemeColors
                 .collectAsStateWithLifecycle(initialValue = emptyMap())
             val rinklColors = rinklColorsOf(
@@ -40,8 +42,21 @@ class MainActivity : ComponentActivity() {
                 iconButtonColor = customColors[RinklThemeSlot.ICON],
                 borderColor = customColors[RinklThemeSlot.BORDER],
                 heatmapColor = customColors[RinklThemeSlot.HEATMAP],
-                chartColor = customColors[RinklThemeSlot.CHART]
+                chartColor = customColors[RinklThemeSlot.CHART],
+                navIconColor = customColors[RinklThemeSlot.NAV_ICON]
             )
+            // 展示偏好桥接：DataStore → DisplayPreferences 内存单例（Money.format 等
+            // 非组合上下文同步读取；initialValue 与 DisplayPreferences 默认值一致，首帧不跳变）。
+            val showCurrencySymbol by app.settingsManager.showCurrencySymbol
+                .collectAsStateWithLifecycle(initialValue = true)
+            val cardOverlay by app.settingsManager.cardOverlay
+                .collectAsStateWithLifecycle(initialValue = false)
+            LaunchedEffect(showCurrencySymbol) {
+                DisplayPreferences.setCurrencySymbolVisible(showCurrencySymbol)
+            }
+            LaunchedEffect(cardOverlay) {
+                DisplayPreferences.setCardOverlay(cardOverlay)
+            }
             RinklNoteTheme(darkTheme = darkTheme, rinklColors = rinklColors) {
                 AppNavigation(app = app)
             }

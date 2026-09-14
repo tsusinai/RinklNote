@@ -99,10 +99,11 @@ fun BookkeepingScreen(
     // 「更多」抽屉所需：个人信息（未登录时抽屉显示「未登录」+ 引导副文案）
     profileName: String = "",
     profileLoggedIn: Boolean = false,
-    // 「更多」抽屉功能项：账单地图（路由 bill-map）/ 导入账单（路由 bill-import）/ 多币种（路由 multi-currency）由主会话接线
+    // 「更多」抽屉功能项：账单地图（路由 bill-map）/ 导入账单（路由 bill-import）/ 多币种（路由 multi-currency）/ 搜索账单（路由 bill-search）由主会话接线
     onOpenBillMap: () -> Unit = {},
     onOpenImport: () -> Unit = {},
-    onOpenMultiCurrency: () -> Unit = {}
+    onOpenMultiCurrency: () -> Unit = {},
+    onOpenSearch: () -> Unit = {}
 ) {
     val horizonalPadding = 10.dp
 
@@ -350,6 +351,7 @@ fun BookkeepingScreen(
             onOpenBillMap = onOpenBillMap,
             onOpenImport = onOpenImport,
             onOpenMultiCurrency = onOpenMultiCurrency,
+            onOpenSearch = onOpenSearch,
             onOpenSettings = onMoreClick,
             onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页
             hazeState = hazeState,

@@ -24,6 +24,22 @@ class RinklColorsTest {
         // 2026-09-14 新增两槽：热力图 / 折线柱状（饼图不走主题槽）。
         assertEquals(Blue40, c.heatmapColor)
         assertEquals(DefaultChartColor, c.chartColor)
+        // 2026-09-14 第 8 槽 NAV_ICON：默认 null（未自定义，消费端回落现状），明暗两种模式下都不反转。
+        assertNull(c.navIconColor)
+        assertNull(rinklColorsOf(dark = true).navIconColor)
+    }
+
+    /** 用户给 NAV_ICON 槽选了色 → navIconColor 原样透传（不与图标/按钮色、字体色联动）。 */
+    @Test
+    fun navIconColorPassesThroughIndependently() {
+        val nav = Color(0xFF00AA66)
+        val c = rinklColorsOf(dark = false, navIconColor = nav)
+        assertEquals(nav, c.navIconColor)
+        // 独立槽：未同时设置 ICON/FONT 时不得互相串色。
+        assertNull(c.iconButtonColor)
+        assertEquals(Color.Black, c.fontColor)
+        // 数据类默认值兜底：不传 navIconColor 的旧调用点拿到 null，行为不变。
+        assertNull(rinklColorsOf(dark = false, iconButtonColor = Color(0xFF112233)).navIconColor)
     }
 
     /**
