@@ -145,6 +145,15 @@ class UserService(
     /** 企业微信：把 userid 绑到既有账号（已被其他账号占用时拒绝）。 */
     fun bindWecomByUserid(userId: Long, userid: String): Boolean = bindByChannelColumn(userId, UsersTable.wecomUserid, userid)
 
+    /** 企业微信：解绑（Phase D 管理路由用，与 [unbindFeishu] 同构）。 */
+    fun unbindWecom(userId: Long) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.wecomUserid] = null
+            }
+        }
+    }
+
     /** 订阅号：按 openid 查用户。 */
     fun findByWechatOpenid(openid: String): UserInfo? = findByChannelColumn(UsersTable.wechatOpenid, openid)
 

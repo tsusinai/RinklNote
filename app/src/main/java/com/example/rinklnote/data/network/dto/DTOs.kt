@@ -10,8 +10,26 @@ data class LoginRequest(val phone: String, val password: String)
 @Serializable
 data class LoginResponse(val userId: Long, val token: String)
 
+/** 机器人绑定码请求：对应 /api/{qq,feishu,wecom}-bot/bind 的 `{"code": "6位码"}`。 */
 @Serializable
-data class BindQQRequest(val qqNumber: String)
+data class BotBindCodeRequest(val code: String)
+
+/**
+ * 机器人绑定状态：对应 /api/{qq,feishu,wecom}-bot/bind-status。
+ * 服务端 `bound` 以字符串布尔下发（照 QQ 管理路由现状）；掩码取通道身份后 6 位，
+ * QQ 返回字段名 `openid`，飞书/企微返回 `openId`，两者取其一。
+ */
+@Serializable
+data class BotBindStatusResponse(
+    val bound: String = "false",
+    val openid: String? = null,
+    val openId: String? = null,
+    val message: String? = null
+) {
+    val isBound: Boolean get() = bound == "true"
+    /** 掩码身份（后 6 位），未绑定为空串。 */
+    val maskedId: String get() = openid ?: openId ?: ""
+}
 
 @Serializable
 data class MessageResponse(val message: String)

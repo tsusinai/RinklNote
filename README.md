@@ -88,7 +88,7 @@ RinklNote/
 ### API 端点
 
 认证（JWT 保护除健康检查外的业务接口）：`/api/auth/*`
-- `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/bind-qq`、`POST /api/auth/unbind-qq`
+- `POST /api/auth/register`、`POST /api/auth/login`
 - `GET /api/auth/me`、`POST /api/auth/password`、`GET/PUT /api/auth/ai`（AI 主动推送开关）
 
 账单：`/api/bills/*`
@@ -103,7 +103,7 @@ RinklNote/
 - `GET /api/insights/suggest`、`GET/PUT /api/insights/suggest-config`（习惯推荐与配置）
 - `GET /api/insights/habit`（习惯提醒）
 
-QQ 机器人：`/api/qq-bot/*`、`/api/qq/webhook/*`（Bot 配置管理 + 消息处理，走 `member_openid`/`user_openid` 身份作用域）。
+QQ / 飞书 / 企微机器人：`/api/qq-bot/*`、`/api/feishu-bot/*`、`/api/wecom-bot/*`（三通道同构：status/config/bind/unbind/bind-status 管理面 + 官方回调 webhook）、`/api/qq/webhook/*`（**已废弃**的旧共享密钥协议，仅为未知外部旧客户端保留运行，新接入勿用）。
 
 ## LLM / NLU
 

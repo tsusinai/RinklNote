@@ -12,6 +12,12 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.*
 import java.security.MessageDigest
 
+/**
+ * ⚠️ 已废弃（Phase D，2026-09）：本路由是旧的 QQ webhook（共享密钥 X-Webhook-Secret 协议，
+ * 按 users.qq_number 识别用户），与现行 QQ 官方机器人 webhook（QQBotWebhookRoutes，Ed25519 验签）
+ * 不是一回事。为未知的外部旧客户端**保留运行**，新接入一律走官方通道，勿再引用本路由。
+ * 背景见 docs/bot渠道机制调研与选型.md。
+ */
 fun Route.qqWebhookRoutes(webhookSecret: String, userService: UserService, billService: BillService, nluService: NLUService) {
     route("/api/qq") {
         post("/webhook") {

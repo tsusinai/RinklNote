@@ -164,6 +164,12 @@ class WecomBotService(
     fun getEncodingAesKey(): String? = encodingAesKey
     fun getPushWebhookUrl(): String? = pushWebhookUrl
 
+    /** 管理端掩码展示（照 FeishuBotService.getMaskedAppId 的口径：前 4 位 + ****）。 */
+    fun getMaskedToken(): String? {
+        val t = token ?: return null
+        return if (t.length <= 4) t else t.take(4) + "****"
+    }
+
     // ── 主动推送 ──
     // 向「消息推送」webhook URL POST JSON（官方消息推送配置，无需 token）：
     //   {"msgtype":"text","text":{"content":"..."}}

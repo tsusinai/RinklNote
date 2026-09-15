@@ -101,7 +101,7 @@ import com.example.rinklnote.ui.screen.search.BillSearchViewModel
 import com.example.rinklnote.ui.screen.search.SearchBillsScreen
 import com.example.rinklnote.ui.screen.day.DayBillsScreen
 import com.example.rinklnote.ui.screen.web.WebScreen
-import com.example.rinklnote.ui.screen.profile.BindQQPage
+import com.example.rinklnote.ui.screen.profile.BotBindPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
 import com.example.rinklnote.ui.screen.profile.CustomThemeScreen
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
@@ -192,7 +192,7 @@ fun AppNavigation(app: RinklNoteApp) {
     val currentRoute = navBackStackEntry?.destination?.route
     var quickAddSurface by remember { mutableStateOf(QuickAddSurface.Closed) }
     var showLogin by remember { mutableStateOf(false) }
-    var showBindQQ by remember { mutableStateOf(false) }
+    var showBotBind by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
     var showQqBotGuide by remember { mutableStateOf(false) }
@@ -766,7 +766,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         repository = app.repository,
                         aiTokenViewModel = aiTokenVM,
                         onLoginClick = { showLogin = true },
-                        onBindQQClick = { showBindQQ = true },
+                        onBindBotClick = { showBotBind = true },
                         onQqBotGuideClick = { showQqBotGuide = true },
                         onCustomThemeClick = { navController.navigate("custom-theme") },
                         onCropBackground = { uri ->
@@ -901,12 +901,12 @@ fun AppNavigation(app: RinklNoteApp) {
             }
         }
 
-        // Full-screen login / bind-QQ pages — top-most so they cover the bottom nav
+        // Full-screen login / bot-bind pages — top-most so they cover the bottom nav
         if (showLogin) {
             LoginPage(viewModel = authVM, onDismiss = { showLogin = false })
         }
-        if (showBindQQ) {
-            BindQQPage(viewModel = authVM, onDismiss = { showBindQQ = false })
+        if (showBotBind) {
+            BotBindPage(viewModel = authVM, onDismiss = { showBotBind = false })
         }
 
         // Bottom floating voice bar — no full-screen page. Device recognizer streams

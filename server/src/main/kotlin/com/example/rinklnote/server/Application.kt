@@ -287,6 +287,7 @@ fun Application.module() {
         feishuBotWebhookRoutes(feishuBotService, userService, billService, nluService, budgetService, insightService)
         feishuBotManageRoutes(feishuBotService, userService)
         wecomBotWebhookRoutes(wecomBotService, userService, billService, nluService, budgetService, insightService)
+        wecomBotManageRoutes(wecomBotService, userService)
         mpWebhookRoutes(mpBotService, userService, billService, nluService, budgetService, insightService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
