@@ -46,6 +46,16 @@ class WxCryptUtilTest {
         assertFalse(WxCryptUtil.verifySignature(sig, "rinklToken", "1726400000", "nonce123456", encrypt + "x"))
     }
 
+    @Test
+    fun `三参数明文验签命中独立计算的官方拼接顺序向量`() {
+        // 公众号明文模式：signature = SHA1(sorted(token,timestamp,nonce) 拼接)。
+        // 外部独立计算（shell sha1sum）：sorted → "1726400000" + "nonce123456" + "rinklToken"
+        val sig = WxCryptUtil.signature3("rinklToken", "1726400000", "nonce123456")
+        assertEquals("51d328455886414e4808503a7b740f30835ef033", sig)
+        // 与 4 参验签传空串严格一致（空串字典序恒最先且零宽）
+        assertEquals(WxCryptUtil.signature("rinklToken", "1726400000", "nonce123456", ""), sig)
+    }
+
     // ── 加解密 ──
 
     @Test

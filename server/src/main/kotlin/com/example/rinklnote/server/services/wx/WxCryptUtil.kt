@@ -51,6 +51,14 @@ object WxCryptUtil {
         encryptMsg: String
     ): Boolean = signature.equals(signature(token, timestamp, nonce, encryptMsg), ignoreCase = true)
 
+    /**
+     * 公众号明文模式验签（C-W2 订阅号用）：`signature = SHA1(字典序排序(token, timestamp, nonce) 拼接)`。
+     * 与企微 / 安全模式的 4 参验签（[signature]）差异仅在「无密文参与」——实现上复用 4 参逻辑
+     * 传空串：空串字典序恒排最先且不贡献字符，拼接结果与三参数官方规则逐字节一致（含参数为空的退化情形）。
+     */
+    fun signature3(token: String, timestamp: String, nonce: String): String =
+        signature(token, timestamp, nonce, "")
+
     // ── 加解密 ──
 
     /** 解密结果：msg 为明文消息（XML 或 echostr），receiveId 为尾部校验串（企微 corpid / 公众号 appid）。 */
