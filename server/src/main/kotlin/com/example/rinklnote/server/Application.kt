@@ -8,6 +8,7 @@ import com.example.rinklnote.server.services.BotCommands
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
+import com.example.rinklnote.server.services.FeishuBotService
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
@@ -124,6 +125,16 @@ fun Application.module() {
     val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
     qqWsClient.start(appScope)
 
+    // 飞书自建应用机器人（B2）——配置存 bot_config，经 Web 管理端维护；
+    // 事件收口 webhook（FeishuBotWebhookRoutes），消息处理走 FeishuMessageProcessor。
+    val feishuBotService = FeishuBotService()
+    feishuBotService.loadFromDb()
+    if (feishuBotService.isConfigured()) {
+        log.info("飞书 Bot 已加载配置（AppID: ${feishuBotService.getMaskedAppId()}）")
+    } else {
+        log.info("飞书 Bot 未配置 —— 可在 Web 设置页维护")
+    }
+
     // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
     // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
     // 目标通道已在调度器内按 飞书 > 企业微信 > QQ 取第一个已绑定，这里只做「通道 → 发送实现」的映射。
@@ -139,12 +150,13 @@ fun Application.module() {
         },
         // QQ 通道：接现有发送实现。主动推送 msg_id 传空串 → QQ 会省略该字段
         // （随机 UUID 会被拒 40034024）；被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
-        // FEISHU / WECOM 分支为 B2（飞书）/ C（企业微信）阶段接线占位：B1 阶段不可能有用户
-        // 绑定新通道（无任何路由会写 feishu_open_id / wecom_userid），故返回 false 不可达，行为零变化。
+        // FEISHU 通道（B2 已接线）：sendText 不传消息 id 即主动发送（tenant_access_token 由服务内缓存）。
+        // WECOM 分支仍为 C（企业微信）阶段接线占位：不可能有用户绑定（无任何路由会写 wecom_userid），
+        // 返回 false 不可达，行为零变化。
         send = { channel, targetId, content, _ ->
             when (channel) {
                 BotCommands.SOURCE_QQ -> qqBotService.sendC2CMessage(targetId, content, "")
-                BotCommands.SOURCE_FEISHU -> false // B2 阶段接线：feishuBotService.sendText(targetId, content)
+                BotCommands.SOURCE_FEISHU -> feishuBotService.sendText(targetId, content)
                 BotCommands.SOURCE_WECOM -> false  // C 阶段接线：企业微信「消息推送」webhook 主动推
                 else -> false
             }
@@ -225,6 +237,7 @@ fun Application.module() {
         llmParser.shutdown()
         qqWsClient.shutdown()
         qqBotService.shutdown()
+        feishuBotService.shutdown()
         asrService.shutdown()
     }
 
@@ -241,6 +254,8 @@ fun Application.module() {
         insightRoutes(insightService)
         qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
         qqBotManageRoutes(qqBotService, userService)
+        feishuBotWebhookRoutes(feishuBotService, userService, billService, nluService, budgetService, insightService)
+        feishuBotManageRoutes(feishuBotService, userService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
     }

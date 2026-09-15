@@ -103,7 +103,12 @@ class UserService(
         }
     }
 
-    /** 所有已绑定 QQ（qqOpenid 非空）的用户，用于主动推送枚举。 */
+    /**
+     * 所有已绑定 QQ（qqOpenid 非空）的用户，用于主动推送枚举。
+     * 已被多通道版 [findAllPushUsers] 取代（B1 通道底座后主代码无调用方，仅测试保留）；
+     * 保留只读，勿在新代码中调用。
+     */
+    @Deprecated("用 findAllPushUsers()（按 飞书 > 企业微信 > QQ 选目标通道）", ReplaceWith("findAllPushUsers()"))
     fun findAllBoundQq(): List<UserInfo> = transaction {
         UsersTable.selectAll().where { UsersTable.qqOpenid.isNotNull() }.map { it.toUserInfo() }
     }
@@ -121,6 +126,15 @@ class UserService(
 
     /** 飞书：把 open_id 绑到既有账号（open_id 已被其他账号占用时拒绝）。 */
     fun bindFeishuByOpenId(userId: Long, openId: String): Boolean = bindByChannelColumn(userId, UsersTable.feishuOpenId, openId)
+
+    /** 飞书：解绑（B2 管理路由用，与 [unbindQq] 同构）。 */
+    fun unbindFeishu(userId: Long) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.feishuOpenId] = null
+            }
+        }
+    }
 
     /** 企业微信：按 userid 查用户。 */
     fun findByWecomUserid(userid: String): UserInfo? = findByChannelColumn(UsersTable.wecomUserid, userid)

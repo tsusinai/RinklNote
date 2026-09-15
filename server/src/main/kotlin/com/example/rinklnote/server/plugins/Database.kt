@@ -98,6 +98,13 @@ private fun Transaction.runMigrations() {
         "CREATE INDEX IF NOT EXISTS idx_templates_user ON bill_templates(user_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_push_log_user_type_day ON push_log(user_id, type, day_key)",
         "CREATE INDEX IF NOT EXISTS idx_ai_tokens_user ON ai_api_tokens(user_id)",
+        // B1 通道底座补索引：feishu_open_id / wechat_openid / wecom_userid 三列在 UsersTable 里声明的
+        // uniqueIndex 只对「新建库」生效 —— createMissingTablesAndColumns 给既有库加列时不会建唯一索引
+        // （Exposed 的已知限制）。这里照上方幂等模式手动补齐，保证既有库的多通道身份列同样唯一。
+        // 语义安全：Postgres/H2 的唯一索引均允许多行 NULL（未绑定用户不受影响）。
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_feishu_open_id ON users(feishu_open_id)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_wechat_openid ON users(wechat_openid)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_wecom_userid ON users(wecom_userid)",
         // v13 补充：各层预算的唯一性约束（部分唯一索引，Postgres/H2 均支持）。
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_total_month ON budgets(user_id, month_start) WHERE category_id IS NULL AND sub_category_id IS NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_category_month ON budgets(user_id, month_start, category_id) WHERE category_id IS NOT NULL AND sub_category_id IS NULL",
