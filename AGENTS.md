@@ -2,7 +2,7 @@
 
 本文件为 AI 编码代理（Codex / Claude Code / WorkBuddy 等）提供本仓库的工作指引。**动手改代码前请先通读。**
 
-> 最后校正：2026-09-14（相对上版的主要变化：`:server` 重新 include 进 Gradle、金额三端统一为整数分（Room v13）、快速记账两段式确认已改为一步确认、导航新增 bill-edit / month-detail / custom-theme / background-crop 路由、新增主题令牌系统 RinklColors）。
+> 最后校正：2026-09-16（相对上版的主要变化：新增省钱挑战 + 成就徽章 + 主题解锁（Room v15 `challenges` 表、三端同步）、bills 增加 lat/lng（Room v16，账单地图真实数据 + 定位聚焦）、当天账单页 `day-detail` 与分享图导出、AI 快捷询问 chips、新账号种子收敛为仅「无账户」账户、WebView 引导深链修正为 `/console/settings`）。
 
 ## 项目
 
@@ -77,7 +77,7 @@ npm run test        # vitest run
 
 | 端 | 技术 |
 |---|------|
-| App | Kotlin 2.0.21 · Compose（BOM 2024.09.00）· Material 3 · Room 2.6.1 (KSP) · Retrofit/OkHttp · kotlinx-serialization · DataStore · Haze（毛玻璃）· Coil · Glance（桌面小组件） |
+| App | Kotlin 2.0.21 · Compose（BOM 2024.09.00）· Material 3 · Room 2.6.1 (KSP) · Retrofit/OkHttp · kotlinx-serialization · DataStore · Haze（毛玻璃）· Coil · Glance（桌面小组件）· osmdroid 6.1.20（地图） |
 | Server | Ktor 2.3.13 (Netty) · Exposed 0.51.1 · HikariCP · PostgreSQL / H2 · java-jwt (HMAC256) · jBCrypt · BouncyCastle (Ed25519) · DeepSeek LLM |
 | Web | Vue 3.5 · Vite 6 · Pinia · vue-router 4 · ECharts 5 · TypeScript 5.6 · Vitest |
 | 构建 | Gradle 8.13 + Kotlin DSL + version catalog · AGP 8.13.0 |
@@ -110,13 +110,13 @@ Compose UI（collectAsStateWithLifecycle）
 | `data/repository/` | 仓库接口 + `*Impl` |
 | `domain/` | `BillType`、`Source`、`MessageKind`、`MonthlyChart` |
 | `navigation/` | `AppNavigation`（NavHost 编排）、`BookingOrchestrator` |
-| `ui/` | `component/`、`screen/{bookkeeping,plan,assets,ai,profile,login,quickadd}`、`viewmodel/`、`theme/`（含 `RinklColors` 主题令牌）、`util/` |
+| `ui/` | `component/`（含 `MoreDrawer` 更多抽屉、`RinklTopBar`、`PressScale`）、`screen/{bookkeeping,plan,assets,ai,profile,login,quickadd,currency,importbills,map,search,web,challenge,day}`、`viewmodel/`、`theme/`（含 `RinklColors` 主题令牌）、`util/`（含 `DisplayPreferences`、`LocationGrabber` 一次性定位、`BillImageExporter` 分享图绘制）。注意：`screen/import/` 目录名与包名 `...screen.importbills` **不一致是有意的，别"修"**；搜索 / 导入的 ViewModel 就近放在各自 screen 包（路由级短生命周期），其余 VM 在 `viewmodel/` |
 | `sync/` | `SyncManager`（双向同步，Mutex 单飞） |
 | `notification/` | `DailyReportReceiver`、`NotificationHelper` |
 | `widget/` | `RinklNoteAppWidget`（Glance 桌面小组件） |
 | `util/` | `DateUtil`（业务时区）、`Money`（分⇄元换算/格式化）、`ReorderRanks`（拖动排序）、`BillCsvExporter`、`VoiceInputUtil`、`VoiceRecorder` |
 
-**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**；flat route 还有 记账页下属的 `ai`、`bill-edit`（编辑账单独立页）、`month-detail`、`profile` 下的 `custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
+**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**。flat route 全集：`ai`、`bill-edit`（编辑账单独立页）、`budget-categories`（分类预算）、`budget-edit`、`account-editor/{accountId}`、`month-detail`、`challenges`（省钱挑战，计划 tab 摘要卡进入）、`day-detail/{dayStart}`（当天账单页，Long 参数）、`bill-map`（账单地图，可选 `?focusBillId=` 聚焦指定账单）、`bill-import`（CSV 导入）、`multi-currency`（多币种）、`bill-search`（搜索账单）、`custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）、`web-view?url={url}&title={title}`（内嵌网页，参数 URL 编码）。记账页「更多抽屉」`MoreDrawer` 是 地图 / 导入 / 多币种 / 搜索 的统一入口。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判（有 `NavigationTransitionDirectionTest` 把关）。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
 
 **关键模式**
 
@@ -124,10 +124,14 @@ Compose UI（collectAsStateWithLifecycle）
 - **一次性副作用**：用 `Channel`（如 `QuickAddEffect`），由 `AppNavigation.kt` 里的 `LaunchedEffect` 消费。
 - **快速记账确认是一步制**：数字键盘点确认 → 校验分类/账户/金额 → `finalConfirm()` 直接落库关抽屉（`QuickAddViewModel.confirm()`）。曾经的「两段式确认」已**有意移除**，不要按旧文档给加回来。
 - **金额一律整数分**：三端存储与运算都是 `Long` 分（`amountMinor` / `amount_minor` / `amountMinor`）。App 走 `util/Money.kt`（`parseMinor`/`format`/`formatPlain`），服务端走 `services/Money.kt`（`toMinor`/`fromMinor`/`format`/`resolve*Minor`），Web 走 `utils/money.ts`（`formatMoney`/`formatMoneyPlain`/`parseMoneyToMinor`）。**展示契约**：`formatMoney` 输出带 `¥` + 千分位，模板里已手写 `¥` 字面量的地方必须用 `formatMoneyPlain`，否则渲染成「¥¥」。
-- **主题令牌**：颜色不直接写死，走 `ui/theme/RinklColors.kt` 的 5 个令牌（`FONT / PRIMARY / TOP_BAR / ICON / BORDER`），卡片描边、分割线统一取 `BORDER`（分割线跟随边框色），经 `LocalRinklColors` 组合局部注入；自定义色以 `#AARRGGBB` 存 DataStore。
+- **主题令牌**：颜色不直接写死，走 `ui/theme/RinklColors.kt` 的 **10 个槽位**（`RinklThemeSlot`：`FONT / PRIMARY / TOP_BAR / ICON / BORDER` + `HEATMAP / CHART / NAV_ICON / EXPENSE / INCOME`，后五个是 2026-09 个性化偏好新增，EXPENSE/INCOME 即「收支色」），经 `LocalRinklColors` 组合局部注入；自定义色以 `#AARRGGBB` 存 DataStore，是固定色**不再随暗色主题反转**。**BORDER 默认 `Color.Transparent`（无边框默认）**：分割线在透明时回落 `DefaultDividerGray`，`DefaultCardBorder` 不再是卡片默认描边。
+- **展示偏好桥**：`ui/util/DisplayPreferences.kt` 是进程级单例，MainActivity 把 DataStore 的 `show_currency_symbol` / `card_overlay` **单向**镜像进内存，供 `Money.format`、Canvas 等**非组合代码同步读取**；改这类偏好键别绕过这条桥。
+- **挑战与成就**：`challenges` 表只存「承诺」（type / period_start / goal / status），全部进度由 bills **实时派生**（`domain/ChallengeEngine.kt` + `Achievements.kt`，纯 JVM 函数）；**goal 单位由 type 决定**（无消费日 / 连续记账 = 天数，每周预算 = 整数分，不加 goalUnit 列）。周期结束的 ACHIEVED/MISSED 回写是任意设备派生时懒更新（值确定一致，LWW 无冲突）。成就与主题解锁**零存储**，删账单会实时回退进度——是特性不是 bug。
+- **账单位置打点与地图坐标系**：bills 的 `latitude/longitude`（**WGS-84**）只在用户**主动打点**时写入（快速记账「位置」chip / 编辑页位置区，`util/LocationGrabber` 一次性定位），语音 / QQ / AI 来源一律不带；账单地图的高德瓦片是 **GCJ-02**，未做纠偏（大陆视觉偏移数百米，纠偏 TODO 在 `BillMapScreen`）。当天账单页分享图由 `util/BillImageExporter` Canvas 绘制，经 FileProvider（`cacheDir/share/`）出 `content://`。
+- **更多抽屉二级页**：搜索账单是**本地查询** —— `BillSearchViewModel`（就在 `screen/search/` 包里）拿 `observeAllBills()` 全量 Room Flow 内存过滤，无服务端搜索，结果行跳 `bill-edit`。多币种页 `base_currency` 存 DataStore（默认 CNY），汇率是 `DEMO_RATES_VS_CNY` **演示表** —— 不动 Room、不动整数分约定，接真汇率时只换表。地图用 osmdroid + `BillMapScreen` 私有 `AmapTileSource`（高德 webrd 瓦片、**无 key**，因 OSM MAPNIK 屏 osmdroid 默认 UA）；**UA 与缓存路径必须在首个 `MapView` 前设置**（缓存在 `context.cacheDir/osmdroid`）；金额直接合成进标记位图，InfoWindow 已移除。内嵌网页一律走 `web-view` 路由（`WebViewScreen`），**别再开外部浏览器 Intent**。
 - **图表**：`ChartBox` 用单个 `Canvas` 手绘折线/柱状，无第三方图表库；`Animatable` 用 `snapTo(0f)` → `animateTo(1f)`。**缩放用的 `maxVal` 必须取目标 `expenseData.max()`，不能用动画中的值**，否则动画比例会漂移。
 
-**数据库**：`rinklnote.db`，**Room version 13**，7 张表 —— `bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`；bills 外键指向 categories / accounts。`exportSchema = true`，schema 落在 `app/schemas`。首次启动 `seedIfNeeded()` 幂等填充 7 支出 + 4 收入分类（含子分类）与 3 账户（微信 / 支付宝 / 默认）。**`MIGRATION_1_2` … `MIGRATION_12_13` 全链路都在**：v12 给 bills 加 `sort_order`（同日拖动重排，NULL = 按 `COALESCE(sort_order, created_at)` 兜底），v13 重建四张含金额的表把 REAL 换成 INTEGER 分（**重建顺序有讲究**：bills 外键引用 accounts，必须先搬走 bills 数据再重建 accounts，顺序错会撞外键约束）。但 `buildDatabase()` 末尾仍挂着 `fallbackToDestructiveMigration()` 兜底 —— 没覆盖到的路径会直接清库。
+**数据库**：`rinklnote.db`，**Room version 16**，8 张表 —— `bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`、`challenges`；bills 外键指向 categories / accounts。`exportSchema = true`，schema 落在 `app/schemas`。首次启动 `seedIfNeeded()` 幂等填充 25 个主分类（含子分类）与 **仅 1 个「无账户」账户**（微信 / 支付宝不再预置，用户自建；v14 起带 `icon_key`）。**`MIGRATION_1_2` … `MIGRATION_15_16` 全链路都在**：v12 给 bills 加 `sort_order`（同日拖动重排，NULL = 按 `COALESCE(sort_order, created_at)` 兜底），v13 重建四张含金额的表把 REAL 换成 INTEGER 分（**重建顺序有讲究**：bills 外键引用 accounts，必须先搬走 bills 数据再重建 accounts，顺序错会撞外键约束），v14 给 accounts 加 `icon_key`，v15 建 `challenges` 表（`server_id` 唯一索引），v16 给 bills 加 `latitude/longitude REAL`。但 `buildDatabase()` 末尾仍挂着 `fallbackToDestructiveMigration()` 兜底 —— 没覆盖到的路径会直接清库。
 
 **金额与时间**：金额存储与传输统一**整数分**（App `amountMinor: Long` / 服务端 `amount_minor BIGINT` / Web `amountMinor`）；API 对旧端保留 `amount`（元，Double）兼容字段，序列化时必须 `@EncodeDefault(EncodeDefault.Mode.ALWAYS)`，否则 kotlinx-serialization 会把恒等于默认值的兼容字段整个省略导致旧客户端解析失败。业务时区统一 `Asia/Shanghai`（`DateUtil.bookkeepingZone()`）；`Bill.date` 只存「当日 0 点」作为天分组键。
 
@@ -136,14 +140,15 @@ Compose UI（collectAsStateWithLifecycle）
 ### Server —— Ktor + Exposed
 
 - `Application.kt` 组装插件与路由；`plugins/` 放 `Database`（含自动迁移 + `seedIfNeeded`）、`Security`（JWT）、`Serialization`、`ErrorHandling`。
-- `routes/`：认证、账单、账户、预算、模板、洞察、纠正、关键词、AI 助手、QQ Bot（管理 + Webhook）、ASR 转写。
+- `routes/`：认证、账单、账户、预算、模板、挑战（GET/PUT `/api/challenges`）、洞察、纠正、关键词、AI 助手、QQ Bot（管理 + Webhook）、ASR 转写。
 - `services/`：`nlu/`（规则 + LLM 双引擎）、`insight/`、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`PushScheduler`、`Money`。
 - `tables/`：Exposed 表定义（users / bills / budgets / bot_config / push_log …）。
+- 分类种子：`BillService.seedCategories()` 启动时**无条件幂等回填**；其清单**必须与 App `BillRepositoryImpl.seedCategories()` 逐字同序、只增不改**（id 按列表顺序续编），改分类种子两侧要同步改。默认账户两侧均**仅预置「无账户」**（`ensureDefaultAccounts` / App `seedAccounts` 已同步收敛，勿再预置微信 / 支付宝）。
 - 认证：JWT 保护除健康检查外的业务接口；限流见 `InMemoryRateLimiter`。
 
 ### Web —— Vue 3 SPA
 
-`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,console/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。
+`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,console/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。主题令牌是 `src/styles/theme.css` 的 CSS 变量（含 `--on-primary`，图表色已对齐 App 的 PiePalette）；提交信息里的「Web 端令牌同步」指 **CSS 设计令牌**，不是登录态同步，别会错意。**App 内 WebView 深链必须用 `/console/*`**：settings 等是 console 子路由，根路径没有 catch-all，深链打错（如 `/settings`）vue-router 会空渲染 → WebView 白屏（2026-09-16 已修的真实案例）。
 
 ## 硬性约定
 

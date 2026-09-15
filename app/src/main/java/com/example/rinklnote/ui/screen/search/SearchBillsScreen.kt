@@ -152,18 +152,18 @@ fun SearchBillsScreen(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
-            item(key = "category-filter") {
-                CategoryFilterRow(
-                    categories = state.categories,
-                    selected = state.filter.categoryName,
-                    onSelect = { name ->
-                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
-                        viewModel.onEvent(
-                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
-                        )
-                    }
-                )
-            }
+//            item(key = "category-filter") {
+//                CategoryFilterRow(
+//                    categories = state.categories,
+//                    selected = state.filter.categoryName,
+//                    onSelect = { name ->
+//                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
+//                        viewModel.onEvent(
+//                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
+//                        )
+//                    }
+//                )
+//            }
 
             item(key = "search-field") {
                 SearchField(

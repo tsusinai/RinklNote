@@ -7,7 +7,7 @@
 
 ### 当前实现
 - 自定义数字键盘（NumericKeypad），无系统 IME、无 Material ripple
-- 两段式确认流程：键盘确认 → CountAfter 金额展示 + 绿勾动画 → 最终入库
+- 一步制确认：键盘确认 → 校验分类/账户/金额 → 直接落库；可选「位置」chip 主动打点（账单上账单地图）
 - 支出/收入切换，一级分类 + 二级子分类（长按弹出）
 - 备注输入（系统 IME 的 RemarkInputSheet）
 - 右侧抽屉式快捷记账（QuickAddDrawer）：模板 / NLP / 智能推荐 / 常用模板一键录入
@@ -81,7 +81,7 @@
 ## 5. 资产管理
 
 ### 当前实现
-- [x] 账户卡片（微信 / 支付宝 / 默认），品牌色图标
+- [x] 账户卡片（自定义增删改，新账号仅预置「无账户」），品牌色图标
 - [x] 余额隐私占位（`BalancePrivacy`，资产页 + 抽屉共用眼睛开关）
 - [x] 增 / 改名 / 改余额 / 删除（软删除同步）
 - [x] 总资产统计卡
@@ -116,6 +116,7 @@
 - [x] 月切换；Room Flow 响应式刷新
 - [x] 月度明细（月度总额 + 分类分组）
 - [x] Web 端搜索（备注/分类/日期范围）+ CSV 导出
+- [x] App 端搜索账单（文本 / 种类 / 日期筛选，`bill-search` 路由）+ CSV 导入（`bill-import`）
 
 ### 升级规划
 - [ ] App 端列表筛选 / 搜索 / 导出
@@ -144,7 +145,7 @@
 ## 9. 数据管理
 
 ### 当前实现
-- [x] Room v10（App）+ 服务端多表（users / categories / bills / budgets / bot_config / push_log …）
+- [x] Room v16（App，8 表含 challenges）+ 服务端多表（users / categories / bills / budgets / challenges / bot_config / push_log …）
 - [x] Web CSV 导出（BOM 头 + 公式注入防护）
 - [ ] 仍用 `fallbackToDestructiveMigration` — 升级丢数据（债务）
 
@@ -210,6 +211,7 @@
 - [x] 规则 + LLM 双引擎（`RuleBasedParser` + DeepSeek）；优先级：用户关键词 > 系统默认 > LLM
 - [x] `voice_keywords` 自学习（`LearningService` 记录修正反馈）
 - [x] 解析端点 `/api/bills/parse` + 转写 `/api/bills/transcribe`
+- [x] AI 页快捷询问 chips（支出总结 / 支出异常 / 支出分析一键发送）+ 顶栏返回键
 - [x] 月度总结 / 异常检查 / 自然问账（按月解析 `resolveYearMonth`，历史月按窗口聚合喂 LLM）/ 智能推荐
 - [x] 习惯提醒（`habitReminder` → `polishHabitCopy`，App / QQ 一套文案）
 - [x] 隐私 NFR：只喂 LLM「分类 + 金额 + 日期」聚合，不送明细备注
@@ -220,13 +222,46 @@
 
 ---
 
+## 14. 省钱挑战与成就（2026-09-16）
+
+### 当前实现
+- [x] 三类挑战：无消费日（月，目标天数）/ 连续记账（滚动 7~100 天档位）/ 每周预算（周支出上限，默认 = 月总预算×7÷当月天数向上取整）
+- [x] 进度全部由账单实时派生（`ChallengeEngine` 纯函数），`challenges` 表只存承诺；断签 / 周期结束懒回写 ACHIEVED / MISSED
+- [x] 结余预测器（日均外推 + 预计结余 / 超支预警）+ 少买计算器（月内分类排行 × 10%~100% 滑杆）
+- [x] 15 枚成就徽章墙（记账 / 省钱 / 预算 / 挑战四类，锁定态显示进度 x/y；防刷 = 删账单实时回退）
+- [x] 3 个解锁预设主题（晨曦 / 薄荷 / 琥珀，解锁态纯派生自成就，`CustomThemeScreen` 锁定行一键应用）
+- [x] 入口：计划 tab 首位「省钱挑战」摘要卡 → 独立挑战页（`challenges` 路由）
+- [x] 三端同步：Room v15 `challenges` 表 + GET/PUT `/api/challenges` + SyncManager 挑战段（LWW + 软删复活）
+
+---
+
+## 15. 当天账单页与分享（2026-09-16）
+
+### 当前实现
+- [x] `day-detail/{dayStart}` 独立页：单日账单列表 + 当日收支汇总，点行进编辑
+- [x] 分享按钮：Canvas 绘制 1080px 账单分享图（FileProvider `content://`，超长截断提示），可分享至 QQ / 微信等
+- [x] 入口：记账页「一天一张卡」日期头 / 账单地图
+
+---
+
+## 16. 账单地图真实化（2026-09-16）
+
+### 当前实现
+- [x] bills 增加 `latitude/longitude`（Room v16 + 服务端列 + API 透传，三端同步）
+- [x] 主动打点来源：快速记账「位置」chip、编辑页位置区（`LocationGrabber` 一次性定位）；语音 / QQ / AI 不打点
+- [x] 地图仅显示真实打点账单，按 ~11m 网格聚合标记（「分类 ¥金额 ×N」），点标记 → 编辑账单；支持 `focusBillId` 聚焦指定账单
+- [x] 「回到我的位置」按钮 + 首次进入自动定位
+- 已知取舍：账单存 WGS-84，高德瓦片为 GCJ-02，未纠偏（大陆视觉偏移数百米，纠偏 TODO 在 `BillMapScreen`）
+
+---
+
 ## 架构演进方向
 
 ```
 现在 (2026-09)
 ─────────────────────────────────────────
-单 Activity + HorizontalPager
-Room v10 本地 DB + H2/Ktor 服务端
+单 Activity + Navigation Compose
+Room v16 本地 DB + H2/Ktor 服务端
 双向同步 (Last-Writer-Wins + 复合游标)
 Retrofit + JWT + DataStore + TokenCipher
 StateFlow 缓存 + Flow 响应式
