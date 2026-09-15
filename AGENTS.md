@@ -140,9 +140,9 @@ Compose UI（collectAsStateWithLifecycle）
 ### Server —— Ktor + Exposed
 
 - `Application.kt` 组装插件与路由；`plugins/` 放 `Database`（含自动迁移 + `seedIfNeeded`）、`Security`（JWT）、`Serialization`、`ErrorHandling`。
-- `routes/`：认证、账单、账户、预算、模板、挑战（GET/PUT `/api/challenges`）、洞察、纠正、关键词、AI 助手、QQ Bot（管理 + Webhook）、ASR 转写。
-- `services/`：`nlu/`（规则 + LLM 双引擎）、`insight/`、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`PushScheduler`、`Money`。
-- `tables/`：Exposed 表定义（users / bills / budgets / bot_config / push_log …）。
+- `routes/`：认证、账单、账户、预算、模板、挑战（GET/PUT `/api/challenges`）、洞察、纠正、关键词、AI 助手、ASR 转写、多通道 Bot（QQ / 飞书 / 企微 / 订阅号的 webhook 回调 + `/api/{qq,feishu,wecom}-bot/*` 三通道同构管理面；旧 `/api/qq/webhook` 共享密钥协议已废弃但保留运行）。
+- `services/`：`nlu/`（规则 + LLM 双引擎）、`insight/`、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`FeishuBotService` / `WecomBotService` / `MpBotService`（三通道收发与 bot_config KV，配置走 Web 管理页非 env）、`BotCommands`（多通道共享指令常量：推送开关 / 登录码正则 / source 词表）、`wx/WxCryptUtil`（微信系 SHA1 验签 + AES-256-CBC/PKCS7 + 手写 XML，零依赖）、`PushScheduler`（分通道 send，目标通道 飞书>企微>QQ）、`Money`。
+- `tables/`：Exposed 表定义（users / bills / budgets / bot_config / push_log …）。`users` 的多通道 bot 身份列（均可空 + 唯一索引）：`qq_openid`、`feishu_open_id`、`wechat_openid`（订阅号）、`wecom_userid`（企业微信）。
 - 分类种子：`BillService.seedCategories()` 启动时**无条件幂等回填**；其清单**必须与 App `BillRepositoryImpl.seedCategories()` 逐字同序、只增不改**（id 按列表顺序续编），改分类种子两侧要同步改。默认账户两侧均**仅预置「无账户」**（`ensureDefaultAccounts` / App `seedAccounts` 已同步收敛，勿再预置微信 / 支付宝）。
 - 认证：JWT 保护除健康检查外的业务接口；限流见 `InMemoryRateLimiter`。
 

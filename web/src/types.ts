@@ -54,5 +54,11 @@ export interface MonthlyReview {
   topCategories: MonthlyReviewTopCategory[];
 }
 export interface SuggestConfig { enabled: boolean; lookbackDays: number; minOccurrences: number; displayDuration: number }
-export interface QqBotStatus { configured: string; maskedAppId: string }
-export interface QqBotBindStatus { bound: string; openid: string }
+// ── 多通道机器人（QQ / 飞书 / 企业微信）管理面：三通道端点同构，字段随通道差异 ──
+export type BotChannel = 'qq' | 'feishu' | 'wecom'
+export interface BotChannelStatus { configured: string; maskedAppId?: string; maskedToken?: string; message?: string }
+export interface BotChannelConfig {
+  configured: string; maskedAppId?: string; maskedToken?: string
+  hasSaved?: string; hasEncryptKey?: string; hasPushWebhook?: string
+}
+export interface BotChannelBindStatus { bound: string; openid?: string; openId?: string; message?: string }

@@ -211,11 +211,11 @@ QQ 通道已在生产运行，其结构是新通道的模板。以下全部为�
 |---|---|---|
 | **A** | 本调研文档 | ✅ 本文 |
 | **B1** | 通道底座（QQ 行为零变化）：`UsersTable` 三通道身份列 / `BotCommands` 共享常量 / `PhoneIntentRouter` source 参数 / `UserService` 每通道三件套 + `findAllPushUsers` / `PushScheduler` 分通道 send + 目标通道选择（飞书>企微>QQ）/ `Application.kt` 分通道 send 分发 | ✅ 同批完成 |
-| **B2** | 飞书：`FeishuBotService` / `FeishuMessageProcessor` / `FeishuBotWebhookRoutes` / `FeishuBotManageRoutes` + 测试 | 待后续 |
-| **C** | 微信：W0 `WxCryptUtil` → W1 企业微信主线 → W2 订阅号可选 | 待后续 |
-| **D** | QQ 遗留收敛（App/Web 绑定迁官方流程，旧 webhook 保留运行标注废弃） | 待后续 |
-| **E** | Web 控制台多通道配置卡片 | 待后续 |
-| **F** | 测试 + 冒烟 + 文档收尾 | 待后续 |
+| **B2** | 飞书：`FeishuBotService` / `FeishuMessageProcessor` / `FeishuBotWebhookRoutes` / `FeishuBotManageRoutes` + 测试 | ✅ 已完成 |
+| **C** | 微信：W0 `WxCryptUtil` → W1 企业微信主线 → W2 订阅号可选 | ✅ 已完成 |
+| **D** | QQ 遗留收敛（App/Web 绑定迁官方流程，旧 webhook 保留运行标注废弃） | ✅ 已完成 |
+| **E** | Web 控制台多通道配置卡片（`web/src/api/bots.ts` + `BotChannelsSection.vue`） | ✅ 已完成 |
+| **F** | 测试全绿 + 文档收尾（冒烟需线上环境，见第 8 节部署冒烟清单） | ✅ 代码侧完成，真机冒烟待线上执行 |
 
 **风险备忘**（转交后续阶段）：飞书加密常量（SHA256(EncryptKey) 作 key、密文前 16 字节作 IV）与企微回调细节（SHA1 验签、PKCS7、msg_len 头）实施时必须逐字对照官方文档，不得凭记忆写；订阅号 LLM 兜底需 4s 硬超时（5s 窗口预留 1s 组包）。
 
@@ -227,3 +227,42 @@ QQ 通道已在生产运行，其结构是新通道的模板。以下全部为�
 - 企业微信：[智能机器人概述](https://developer.work.weixin.qq.com/document/path/101039) · [接收消息](https://developer.work.weixin.qq.com/document/path/100719) · [消息推送（webhook）配置](https://developer.work.weixin.qq.com/document/path/91770) · [应用推送消息/加解密](https://developer.work.weixin.qq.com/document/path/90248)
 - 微信公众号：[接入指南（echostr/SHA1）](https://developers.weixin.qq.com/doc/subscription/guide/product/message/Passive_user_reply_message.html) · [发送客服消息（认证限制）](https://developers.weixin.qq.com/doc/subscription/api/customer/message/api_sendcustommessage.html) · [接收语音消息（Recognition）](https://developers.weixin.qq.com/doc/subscription/guide/product/message/Receiving_standard_messages.html)
 - 仓库内基准实现：`server/src/main/kotlin/com/example/rinklnote/server/` 下 `services/QQMessageProcessor.kt`、`services/QQBotService.kt`、`services/QQBotWebSocketClient.kt`、`services/PushScheduler.kt`、`services/UserService.kt`、`services/PhoneIntentRouter.kt`、`routes/QQBotWebhookRoutes.kt`、`routes/QQBotManageRoutes.kt`
+
+---
+
+## 8. 部署冒烟清单（Phase F 收尾时补，待线上执行）
+
+> 真实飞书 / 企微后台的回调配置需要线上环境与对应平台账号，**代码侧已就绪但未真机验证**。以下步骤在服务器（`118.31.184.221`）部署后按序执行。
+
+### 前置
+
+- [ ] 按现有部署流程打包部署最新服务端（`./gradlew :server:installDist` 或 jar），重启后确认日志无启动报错、8080 端口监听正常
+- [ ] Web 控制台「设置 → 多通道机器人」填入对应通道凭证并保存（配置存 `bot_config` 表，非环境变量）
+
+### 飞书（主线，优先冒烟）
+
+- [ ] 飞书开放平台 → 自建应用 → 事件与回调 → 请求地址配置填 `http://118.31.184.221/api/feishu/bot/webhook`
+  - 平台会先发 `url_verification`：服务端回 challenge 即通过（若配了 Encrypt Key，先在 Web 卡片填入再配回调）
+- [ ] 订阅事件 `im.message.receive_v1`
+- [ ] 飞书 App 内向机器人发「午餐20元」→ App/Web 账单列表出现该笔，`source = FEISHU`
+- [ ] 发「登录」→ 收到 6 位绑定码 → Web「多通道机器人 · 飞书」页签提交 → 显示已绑定
+- [ ] 发「查询今天花了多少」「开启每日推送」→ 回复正常且推送开关落库
+- [ ] 等日报推送时刻（或临时触发）→ 飞书收到日报（推送通道优先级 飞书 > 企微 > QQ）
+
+### 企业微信智能机器人
+
+- [ ] 企微管理端 → 机器人回调 URL 填 `http://118.31.184.221/api/wecom/bot/webhook`（GET echostr 验证需先通过）
+- [ ] Token / EncodingAESKey 与 Web 卡片所填一致
+- [ ] 企微 App 内发「午餐20元」→ 落库 `source = WECOM`；发「登录」走绑定码流程
+- [ ] 在 Web 卡片填「消息推送」webhook URL → 日报能推到企微群/会话
+
+### 微信订阅号（可选支线）
+
+- [ ] 公众平台 → 基本配置 → 服务器配置 URL `http://118.31.184.221/api/mp/bot/webhook`，Token 与 Web 卡片一致（订阅号暂无 Web 管理卡片时直接写 `bot_config` 表 `mp_token` / `mp_encoding_aes_key`）
+- [ ] 微信内发「午餐20元」→ 5 秒内收到被动回复且落库 `source = MP`；发语音 → Recognition 转写后记账
+- [ ] 确认订阅号**不参与**日报主动推送（无推送能力，属预期）
+
+### 回归线
+
+- [ ] QQ 通道收发记账 / 日报推送不回归；旧 `/api/qq/webhook` 仍可访问（废弃保留）
+- [ ] 三通道 `/api/{qq,feishu,wecom}-bot/status` 掩码回显正常，Web 卡片三页签切换正常
