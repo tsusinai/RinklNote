@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToast } from '../composables/useToast'
 import { useThemeStore } from '../stores/theme'
+import { sanitizeRedirect } from '../router/guards'
 
 const router = useRouter()
+const route = useRoute()
 const store = useAuthStore()
 const theme = useThemeStore()
 const toast = useToast()
@@ -15,6 +17,9 @@ const phone = ref('')
 const pwd = ref('')
 const qqCode = ref('')
 const busy = ref(false)
+/* 401/掉登录后的回跳地址（guards.ts / http.ts 写入；仅接受站内路径）。
+ * 注意：W3c 翻新登录页时请保留该回跳逻辑（登录与 QQ 登录成功后都要用 redirect ?? '/console'）。 */
+const redirect = sanitizeRedirect(route.query.redirect)
 
 async function submit() {
   if (!phone.value || !pwd.value) { toast.push('手机号或密码不能为空', 'err'); return }
@@ -24,7 +29,7 @@ async function submit() {
     if (mode.value === 'login') await store.login(phone.value, pwd.value)
     else await store.login(phone.value, pwd.value) // register 返回同结构 token
     toast.push('登录成功')
-    router.replace('/console')
+    router.replace(redirect ?? '/console')
   } catch (e: any) {
     toast.push(e?.message || '登录失败', 'err')
   } finally { busy.value = false }
@@ -33,9 +38,10 @@ async function submit() {
 async function qqLogin() {
   if (!qqCode.value) { toast.push('请输入 QQ 登录码', 'err'); return }
   busy.value = true
-  try { await store.loginByQq(qqCode.value); toast.push('QQ登录成功'); router.replace('/console') }
-  catch (e: any) { toast.push(e?.message || 'QQ 登录失败', 'err') }
-  finally { busy.value = false }
+  try { await store.loginByQq(qqCode.value); toast.push('QQ登录成功'); router.replace(redirect ?? '/console') }
+  catch (e: any) {
+    toast.push(e?.message || 'QQ 登录失败', 'err')
+  } finally { busy.value = false }
 }
 function toggleMode() { mode.value = mode.value === 'login' ? 'register' : 'login' }
 </script>

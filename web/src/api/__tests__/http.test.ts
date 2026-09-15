@@ -20,15 +20,28 @@ describe('api', () => {
     expect(r).toEqual({ ok: true })
   })
 
-  it('clears token and redirects on 401 with a token', async () => {
+  it('clears token and redirects to login with redirect param on 401 with a token', async () => {
     setToken('abc')
     const f = mockFetch(401, {})
     globalThis.fetch = f as any
     let redirected = ''
-    const orig = window.location; Object.defineProperty(window, 'location', { value: { ...orig, href: '' }, configurable: true })
+    // 显式 mock pathname，验证回跳地址携带当前页面（修「401 丢回跳」）
+    const orig = window.location; Object.defineProperty(window, 'location', { value: { pathname: '/console/bills', search: '', hash: '' }, configurable: true })
     Object.defineProperty(window.location, 'href', { set: (v: string) => { redirected = v }, get: () => '' })
     await api('/api/x')
     expect(localStorage.getItem('rkl_token')).toBeNull()
+    expect(redirected).toBe('/login?redirect=%2Fconsole%2Fbills')
+    Object.defineProperty(window, 'location', { value: orig, configurable: true })
+  })
+
+  it('redirects to plain /login on 401 when already on the login page', async () => {
+    setToken('abc')
+    const f = mockFetch(401, {})
+    globalThis.fetch = f as any
+    let redirected = ''
+    const orig = window.location; Object.defineProperty(window, 'location', { value: { pathname: '/login', search: '', hash: '' }, configurable: true })
+    Object.defineProperty(window.location, 'href', { set: (v: string) => { redirected = v }, get: () => '' })
+    await api('/api/x')
     expect(redirected).toBe('/login')
     Object.defineProperty(window, 'location', { value: orig, configurable: true })
   })

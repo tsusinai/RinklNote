@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '../../stores/auth'
-import { authGuard } from '../guards'
+import { authGuard, sanitizeRedirect } from '../guards'
 
 beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()) })
 
@@ -10,21 +10,34 @@ describe('authGuard', () => {
     const s = useAuthStore(); s.token = null; s.ready = true
     expect(await authGuard({ path: '/' })).toBe(true)
   })
-  it('redirects unauthenticated /console to /login', async () => {
+  it('redirects unauthenticated /console to /login with redirect query', async () => {
     const s = useAuthStore(); s.token = null; s.ready = true
-    expect(await authGuard({ path: '/console' })).toBe('/login')
+    expect(await authGuard({ path: '/console' })).toEqual({ path: '/login', query: { redirect: '/console' } })
   })
   it('redirects authenticated /login to /console', async () => {
     const s = useAuthStore(); s.token = 't'; s.ready = true
     expect(await authGuard({ path: '/login' })).toBe('/console')
   })
+  it('authenticated /login with in-app redirect goes back to the target', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true
+    expect(await authGuard({ path: '/login', query: { redirect: '/console/bills' } })).toBe('/console/bills')
+  })
+  it('authenticated /login with unsafe redirect falls back to /console', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true
+    expect(await authGuard({ path: '/login', query: { redirect: 'https://evil.example' } })).toBe('/console')
+  })
   it('allows authenticated /console', async () => {
     const s = useAuthStore(); s.token = 't'; s.ready = true
     expect(await authGuard({ path: '/console' })).toBe(true)
   })
-  it('redirects unauthenticated /console/bills to /login', async () => {
+  it('redirects unauthenticated /console/bills to /login carrying fullPath', async () => {
     const s = useAuthStore(); s.token = null; s.ready = true
-    expect(await authGuard({ path: '/console/bills' })).toBe('/login')
+    expect(await authGuard({ path: '/console/bills' })).toEqual({ path: '/login', query: { redirect: '/console/bills' } })
+  })
+  it('carries query string via fullPath on redirect', async () => {
+    const s = useAuthStore(); s.token = null; s.ready = true
+    expect(await authGuard({ path: '/console/bills', fullPath: '/console/bills?month=2026-09' }))
+      .toEqual({ path: '/login', query: { redirect: '/console/bills?month=2026-09' } })
   })
   it('allows authenticated /console/bills', async () => {
     const s = useAuthStore(); s.token = 't'; s.ready = true
@@ -34,6 +47,21 @@ describe('authGuard', () => {
     localStorage.setItem('rkl_token', 'undefined')
     const s = useAuthStore() // state initializes token via getToken()
     expect(s.token).toBeNull()
-    expect(await authGuard({ path: '/console' })).toBe('/login')
+    expect(await authGuard({ path: '/console' })).toEqual({ path: '/login', query: { redirect: '/console' } })
+  })
+})
+
+describe('sanitizeRedirect', () => {
+  it('accepts in-app absolute paths', () => {
+    expect(sanitizeRedirect('/console/bills')).toBe('/console/bills')
+  })
+  it('rejects protocol-relative and external URLs', () => {
+    expect(sanitizeRedirect('//evil.example')).toBeNull()
+    expect(sanitizeRedirect('https://evil.example')).toBeNull()
+    expect(sanitizeRedirect('javascript:alert(1)')).toBeNull()
+  })
+  it('rejects non-string values', () => {
+    expect(sanitizeRedirect(undefined)).toBeNull()
+    expect(sanitizeRedirect(['//x'])).toBeNull()
   })
 })

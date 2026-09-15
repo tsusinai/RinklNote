@@ -51,7 +51,11 @@ export async function api<T = any>(path: string, opts: ApiOptions = {}): Promise
       try { body = await r.json() } catch { /* 无 body */ }
       throw new HttpError(401, (body as { message?: string } | null)?.message ?? 'HTTP 401', body)
     }
-    clearToken(); window.location.href = '/login'
+    clearToken()
+    // 401 掉登录：带当前地址回登录页，登录成功后原路返回（Login.vue 读取 redirect）；
+    // 本就在登录页时不带参数，避免回跳到 /login 自身
+    const here = window.location.pathname + window.location.search + window.location.hash
+    window.location.href = here.startsWith('/login') ? '/login' : '/login?redirect=' + encodeURIComponent(here)
     return r.json() as Promise<T>
   }
   if (r.status === 409) {

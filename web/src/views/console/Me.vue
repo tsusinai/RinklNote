@@ -95,14 +95,20 @@ function logout() {
       </div>
 
       <div class="card">
-        <div class="card-title">设置</div>
-        <router-link class="row link" to="/console/settings"><span class="k">设置</span><span class="v arrow">进入 ›</span></router-link>
-      </div>
-
-      <div class="card">
-        <button class="btn danger block" @click="logout">退出登录</button>
+        <div class="card-title">修改密码</div>
+        <input class="sel" type="password" placeholder="原密码" v-model="oldPwd" />
+        <input class="sel" type="password" placeholder="新密码(至少6位)" v-model="newPwd" />
+        <div v-if="pwdMsg" :class="['msg', /原密码错误/.test(pwdMsg) ? 'err' : 'ok']">{{ pwdMsg }}</div>
+        <button class="btn primary" :disabled="busy" @click="changePwd">修改密码</button>
       </div>
     </template>
+
+    <!-- 结构入口：设置 / 退出行（移动端无侧栏，统一从这里进；样式从简，视觉精修在 W3。
+         注意：W3b 改造身份卡/视觉时请保留本块结构，勿并回上方 v-else） -->
+    <div class="card">
+      <router-link class="row link" to="/console/settings"><span class="k">设置</span><span class="v arrow">进入 ›</span></router-link>
+      <button class="row link row-btn" @click="logout"><span class="k text-expense">退出登录</span><span class="v arrow">退出 ›</span></button>
+    </div>
   </div>
 </template>
 
@@ -116,6 +122,8 @@ function logout() {
 .v { font-weight: 500; }
 .row.link { cursor: pointer; }
 .arrow { color: var(--primary); }
+/* 结构行按钮（退出行）：对齐 .row 的排版，去掉按钮默认样式 */
+.row-btn { width: 100%; background: none; border: none; font-family: inherit; font-size: 14px; cursor: pointer; padding: 8px 0; text-align: left; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; margin-bottom: 10px; }
 .btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; }
