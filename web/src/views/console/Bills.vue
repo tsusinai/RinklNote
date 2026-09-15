@@ -142,7 +142,7 @@ function downloadCsv() {
       <StatCard label="笔数" :value="String(summary.count)" />
       <StatCard label="总支出" :value="formatMoney(summary.exp)" tone="expense" />
       <StatCard label="总收入" :value="formatMoney(summary.inc)" tone="income" />
-      <StatCard label="结余" :value="formatMoney(summary.bal)" :tone="summary.bal < 0 ? 'expense' : 'default'" />
+      <StatCard label="结余" :value="formatMoney(summary.bal)" :tone="summary.bal < 0 ? 'expense' : 'default'" :glow="summary.bal < 0 ? 'negative' : 'positive'" />
     </div>
 
     <div class="filters">
