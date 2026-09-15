@@ -21,8 +21,10 @@ import java.time.format.DateTimeFormatter
  *
  * This class is a pure computation unit — it never sends messages. The caller
  * ([QQMessageProcessor]) resolves openid, binding, and delivery (C2C vs group).
- * Phone AI assistants (小爱同学等) pass `source="AI"` so the created bill records
- * the correct source.
+ * [route] 的 `source` 参数一路透传到 [BillService.createBill] 落库（`bills.bill_source`）：
+ * QQ 处理器用默认值 `BotCommands.SOURCE_QQ`（"QQ"，行为不变）；手机 AI 助手传
+ * `BotCommands.SOURCE_AI`（"AI"）；飞书 / 企业微信 / 订阅号处理器后续分别传
+ * `SOURCE_FEISHU` / `SOURCE_WECOM` / `SOURCE_MP`（词表见 [BotCommands]）。
  */
 class PhoneIntentRouter(
     private val billService: BillService,
@@ -33,7 +35,7 @@ class PhoneIntentRouter(
 ) {
     private val shanghai = ZoneId.of("Asia/Shanghai")
 
-    suspend fun route(content: String, userId: Long, source: String = "QQ"): String {
+    suspend fun route(content: String, userId: Long, source: String = BotCommands.SOURCE_QQ): String {
         // Greeting — say hi back; never fall into bookkeeping/「请补金额」.
         if (isGreeting(content)) return greetingText()
 

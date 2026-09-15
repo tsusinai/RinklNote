@@ -22,13 +22,13 @@ import java.security.MessageDigest
  */
 object QQMessageProcessor {
     private val logger = LoggerFactory.getLogger("QQMessageProcessor")
-    private val LOGIN_CODE = Regex("登录|登录码|验证码|网页登录|扫码", RegexOption.IGNORE_CASE)
 
-    // 「每日推送」指令：在 QQ 里直接开/关/查日报主动推送（写的就是 App「我的」页那个字段）。
-    // 网关只认这三种句式——单独的「推送」两字不算，避免把「外卖推送20元」这类记账消息误当指令。
-    internal val PUSH_ON = Regex("开启(每日|日报|主动)?推送")
-    internal val PUSH_OFF = Regex("(关闭|取消|停止|停用)(每日|日报|主动)?推送")
-    internal val PUSH_STATUS = Regex("(每日|日报)?推送(状态|设置)|查询(每日|日报)?推送")
+    // 指令正则统一收口到 BotCommands（多通道共享，B1 通道底座）；
+    // 以下 internal 别名保持既有引用点（含 QQMessageProcessorTest 回归测试）不变。
+    private val LOGIN_CODE get() = BotCommands.LOGIN_CODE
+    internal val PUSH_ON get() = BotCommands.PUSH_ON
+    internal val PUSH_OFF get() = BotCommands.PUSH_OFF
+    internal val PUSH_STATUS get() = BotCommands.PUSH_STATUS
 
     suspend fun process(
         eventType: String,

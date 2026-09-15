@@ -4,6 +4,7 @@ import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
+import com.example.rinklnote.server.services.BotCommands
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
@@ -123,7 +124,9 @@ fun Application.module() {
     val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
     qqWsClient.start(appScope)
 
-    // QQ 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）
+    // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
+    // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
+    // 目标通道已在调度器内按 飞书 > 企业微信 > QQ 取第一个已绑定，这里只做「通道 → 发送实现」的映射。
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
@@ -134,9 +137,18 @@ fun Application.module() {
             val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
             insightService.dailyPushCopy(userId, dayStart - 86_400_000L, dayStart)
         },
-        // 主动推送：msg_id 传空串 → QQ 会省略该字段（随机 UUID 会被拒 40034024）。
-        // 被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
-        send = { openid, content, _ -> qqBotService.sendC2CMessage(openid, content, "") },
+        // QQ 通道：接现有发送实现。主动推送 msg_id 传空串 → QQ 会省略该字段
+        // （随机 UUID 会被拒 40034024）；被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
+        // FEISHU / WECOM 分支为 B2（飞书）/ C（企业微信）阶段接线占位：B1 阶段不可能有用户
+        // 绑定新通道（无任何路由会写 feishu_open_id / wecom_userid），故返回 false 不可达，行为零变化。
+        send = { channel, targetId, content, _ ->
+            when (channel) {
+                BotCommands.SOURCE_QQ -> qqBotService.sendC2CMessage(targetId, content, "")
+                BotCommands.SOURCE_FEISHU -> false // B2 阶段接线：feishuBotService.sendText(targetId, content)
+                BotCommands.SOURCE_WECOM -> false  // C 阶段接线：企业微信「消息推送」webhook 主动推
+                else -> false
+            }
+        },
         monthlyProvider = { userId, month ->
             val (y, m) = month.split("-").map { it.toInt() }
             val zone = java.time.ZoneId.of("Asia/Shanghai")

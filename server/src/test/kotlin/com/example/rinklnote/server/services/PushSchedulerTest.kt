@@ -34,7 +34,10 @@ class PushSchedulerTest {
         aiDisabled: Boolean = false,
         dailyReportEnabled: Boolean = false,
         dailyReportHour: Int = 9,
-        dailyReportMinute: Int = 0
+        dailyReportMinute: Int = 0,
+        feishuOpenId: String? = null,
+        wechatOpenid: String? = null,
+        wecomUserid: String? = null
     ) {
         transaction {
             UsersTable.insert {
@@ -44,6 +47,9 @@ class PushSchedulerTest {
                 it[UsersTable.createdAt] = "2026-01-01"
                 it[UsersTable.qqNumber] = openid
                 it[UsersTable.qqOpenid] = openid
+                it[UsersTable.feishuOpenId] = feishuOpenId
+                it[UsersTable.wechatOpenid] = wechatOpenid
+                it[UsersTable.wecomUserid] = wecomUserid
                 it[UsersTable.aiDisabled] = aiDisabled
                 it[UsersTable.dailyReportEnabled] = dailyReportEnabled
                 it[UsersTable.dailyReportHour] = dailyReportHour
@@ -58,7 +64,7 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> "📊 本月总结\n..." },
             anomalyProvider = { _ -> null },
             habitProvider = { _ -> null },
@@ -77,7 +83,7 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> "📊 本月总结" },
             anomalyProvider = { _ -> "⚠️ 今天超支" },
             habitProvider = { _ -> "该记午餐了" },
@@ -95,7 +101,7 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> null },
             anomalyProvider = { _ -> null },
             habitProvider = { _ -> null },   // 常态：今天没有习惯提醒
@@ -114,7 +120,7 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> "monthly" },   // 月中不应推
             anomalyProvider = { _ -> "⚠️ 今天超支" },
             habitProvider = { _ -> null },
@@ -134,7 +140,7 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         fun schedAt(hour: Int, minute: Int) = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> null },
             anomalyProvider = { _ -> null },
             habitProvider = { _ -> null },
@@ -155,7 +161,71 @@ class PushSchedulerTest {
         val sent = mutableListOf<String>()
         val sched = PushScheduler(
             userService,
-            send = { _, content, _ -> sent.add(content); true },
+            send = { _, _, content, _ -> sent.add(content); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(0, sent.size)
+    }
+
+    // ── B1 通道底座：分通道推送目标选择 ──
+
+    @Test
+    fun `qq-only user pushes over QQ channel unchanged`() {
+        // QQ 单通道用户：行为与改造前一致，channel=QQ、target=qqOpenid
+        insertUser(1, "openid-1", dailyReportEnabled = true)
+        val pushed = mutableListOf<Pair<String, String>>() // channel to targetId
+        val sched = PushScheduler(
+            userService,
+            send = { channel, targetId, _, _ -> pushed.add(channel to targetId); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(1, pushed.size)
+        assertEquals(BotCommands.SOURCE_QQ to "openid-1", pushed[0])
+    }
+
+    @Test
+    fun `push channel priority is feishu over wecom over qq`() {
+        // 同时绑定三通道 → 只落飞书（优先级最高）
+        insertUser(1, "openid-1", dailyReportEnabled = true, feishuOpenId = "ou-feishu", wecomUserid = "wecom-1")
+        // 只绑企微+QQ → 落企微
+        insertUser(2, "openid-2", dailyReportEnabled = true, wecomUserid = "wecom-2")
+        val pushed = mutableListOf<Pair<String, String>>()
+        val sched = PushScheduler(
+            userService,
+            send = { channel, targetId, _, _ -> pushed.add(channel to targetId); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(2, pushed.size)
+        assertEquals(BotCommands.SOURCE_FEISHU to "ou-feishu", pushed[0])
+        assertEquals(BotCommands.SOURCE_WECOM to "wecom-2", pushed[1])
+    }
+
+    @Test
+    fun `wechat-mp-only user is never pushed`() {
+        // 只绑订阅号（只收不推）的用户不参与任何主动推送
+        insertUser(1, openid = null, wechatOpenid = "mp-openid-1", dailyReportEnabled = true)
+        val sent = mutableListOf<String>()
+        val sched = PushScheduler(
+            userService,
+            send = { _, _, content, _ -> sent.add(content); true },
             monthlyProvider = { _, _ -> null },
             anomalyProvider = { _ -> null },
             habitProvider = { _ -> null },

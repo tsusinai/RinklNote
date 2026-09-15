@@ -163,4 +163,59 @@ class UserServiceTest {
         val token = service.generateToken(u.id, u.phone)
         assertEquals(3, token.split(".").size)
     }
+
+    // ── B1 通道底座：每通道三件套 + findAllPushUsers ──
+
+    @Test
+    fun `feishu trio find create bind roundtrip`() {
+        // 自动开户：open_id 即账号，phone 为空，幂等
+        val u1 = service.createByFeishuOpenId("ou-feishu-1")
+        assertNull(u1.phone)
+        assertEquals("ou-feishu-1", u1.feishuOpenId)
+        assertEquals(u1.id, service.createByFeishuOpenId("ou-feishu-1").id)
+        assertEquals(u1.id, service.findByFeishuOpenId("ou-feishu-1")!!.id)
+        assertNull(service.findByFeishuOpenId("ou-other"))
+
+        // 绑定到既有账号 + 抢占拒绝
+        val (id2, _) = service.register("13800000010", "pass123456")
+        assertTrue(service.bindFeishuByOpenId(id2, "ou-feishu-2"))
+        assertEquals("ou-feishu-2", service.findById(id2)!!.feishuOpenId)
+        assertFalse("open_id 已被其他账号占用时应拒绝", service.bindFeishuByOpenId(u1.id, "ou-feishu-2"))
+    }
+
+    @Test
+    fun `wecom and wechat trios find create bind roundtrip`() {
+        val wu = service.createByWecomUserid("wecom-user-1")
+        assertEquals("wecom-user-1", wu.wecomUserid)
+        assertEquals(wu.id, service.createByWecomUserid("wecom-user-1").id)
+        assertEquals(wu.id, service.findByWecomUserid("wecom-user-1")!!.id)
+
+        val mu = service.createByWechatOpenid("mp-openid-1")
+        assertEquals("mp-openid-1", mu.wechatOpenid)
+        assertEquals(mu.id, service.createByWechatOpenid("mp-openid-1").id)
+        assertEquals(mu.id, service.findByWechatOpenid("mp-openid-1")!!.id)
+
+        val (id2, _) = service.register("13800000011", "pass123456")
+        assertTrue(service.bindWecomByUserid(id2, "wecom-user-2"))
+        assertTrue(service.bindWechatByOpenid(id2, "mp-openid-2"))
+        assertFalse(service.bindWecomByUserid(id2, "wecom-user-1"))
+        assertFalse(service.bindWechatByOpenid(id2, "mp-openid-1"))
+    }
+
+    @Test
+    fun `findAllPushUsers includes any push channel but excludes mp-only`() {
+        // 用户1 仅飞书；用户2 仅企微；用户3 仅 QQ；用户4 仅订阅号（只收不推，应排除）
+        val u1 = service.createByFeishuOpenId("ou-p1")
+        val u2 = service.createByWecomUserid("wecom-p2")
+        val u3 = service.createByQqOpenid("openid-p3")
+        val u4 = service.createByWechatOpenid("mp-p4")
+
+        val pushUsers = service.findAllPushUsers()
+        val ids = pushUsers.map { it.id }.toSet()
+        assertTrue(ids.contains(u1.id))
+        assertTrue(ids.contains(u2.id))
+        assertTrue(ids.contains(u3.id))
+        assertFalse("仅订阅号用户不应进入推送枚举", ids.contains(u4.id))
+        assertEquals(3, pushUsers.size)
+    }
 }

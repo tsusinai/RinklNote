@@ -14,6 +14,10 @@ data class UserInfo(
     val phone: String?,
     val qqNumber: String?,
     val qqOpenid: String?,
+    // 多通道 bot 身份（B1 通道底座）：与 qqOpenid 同构，一个用户可同时绑定多个通道。
+    val feishuOpenId: String? = null,
+    val wechatOpenid: String? = null,
+    val wecomUserid: String? = null,
     val createdAt: String? = null,
     val aiDisabled: Boolean = false,
     val dailyReportEnabled: Boolean = false,
@@ -104,6 +108,74 @@ class UserService(
         UsersTable.selectAll().where { UsersTable.qqOpenid.isNotNull() }.map { it.toUserInfo() }
     }
 
+    // ── 多通道 bot 身份（B1 通道底座）──
+    // 每通道照 QQ 三件套（findBy* / createBy* / bind*）各补一套，实现走下方通用私有助手；
+    // 飞书 open_id / 企业微信 userid / 订阅号 openid 与 QQ openid 同构：openid 即账号，
+    // 自动开户 phone/passwordHash 为空。
+
+    /** 飞书：按 open_id 查用户。 */
+    fun findByFeishuOpenId(openId: String): UserInfo? = findByChannelColumn(UsersTable.feishuOpenId, openId)
+
+    /** 飞书：open_id 自动开户（幂等，已存在则返回既有用户）。 */
+    fun createByFeishuOpenId(openId: String): UserInfo = createByChannelColumn(UsersTable.feishuOpenId, openId)
+
+    /** 飞书：把 open_id 绑到既有账号（open_id 已被其他账号占用时拒绝）。 */
+    fun bindFeishuByOpenId(userId: Long, openId: String): Boolean = bindByChannelColumn(userId, UsersTable.feishuOpenId, openId)
+
+    /** 企业微信：按 userid 查用户。 */
+    fun findByWecomUserid(userid: String): UserInfo? = findByChannelColumn(UsersTable.wecomUserid, userid)
+
+    /** 企业微信：userid 自动开户（幂等）。 */
+    fun createByWecomUserid(userid: String): UserInfo = createByChannelColumn(UsersTable.wecomUserid, userid)
+
+    /** 企业微信：把 userid 绑到既有账号（已被其他账号占用时拒绝）。 */
+    fun bindWecomByUserid(userId: Long, userid: String): Boolean = bindByChannelColumn(userId, UsersTable.wecomUserid, userid)
+
+    /** 订阅号：按 openid 查用户。 */
+    fun findByWechatOpenid(openid: String): UserInfo? = findByChannelColumn(UsersTable.wechatOpenid, openid)
+
+    /** 订阅号：openid 自动开户（幂等）。 */
+    fun createByWechatOpenid(openid: String): UserInfo = createByChannelColumn(UsersTable.wechatOpenid, openid)
+
+    /** 订阅号：把 openid 绑到既有账号（已被其他账号占用时拒绝）。 */
+    fun bindWechatByOpenid(userId: Long, openid: String): Boolean = bindByChannelColumn(userId, UsersTable.wechatOpenid, openid)
+
+    /**
+     * 任一「可主动推送」通道（飞书 / 企业微信 / QQ）已绑定的用户，供 PushScheduler 枚举日报等推送。
+     * 订阅号只收不推（wechat_openid 不参与判定）。
+     */
+    fun findAllPushUsers(): List<UserInfo> = transaction {
+        UsersTable.selectAll().where {
+            UsersTable.feishuOpenId.isNotNull() or UsersTable.wecomUserid.isNotNull() or UsersTable.qqOpenid.isNotNull()
+        }.map { it.toUserInfo() }
+    }
+
+    private fun findByChannelColumn(column: Column<String?>, value: String): UserInfo? = transaction {
+        UsersTable.selectAll().where { column eq value }.singleOrNull()?.toUserInfo()
+    }
+
+    private fun createByChannelColumn(column: Column<String?>, value: String): UserInfo {
+        return findByChannelColumn(column, value) ?: transaction {
+            val userId = UsersTable.insert {
+                it[column] = value
+                it[createdAt] = LocalDateTime.now().toString()
+            } get UsersTable.id
+            UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
+        }
+    }
+
+    private fun bindByChannelColumn(userId: Long, column: Column<String?>, value: String): Boolean {
+        return transaction {
+            val existing = UsersTable.selectAll().where { column eq value }.singleOrNull()
+            if (existing != null && existing[UsersTable.id] != userId) return@transaction false
+
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[column] = value
+            }
+            true
+        }
+    }
+
     fun setAiDisabled(userId: Long, disabled: Boolean) {
         transaction { UsersTable.update({ UsersTable.id eq userId }) { it[aiDisabled] = disabled } }
     }
@@ -128,6 +200,9 @@ class UserService(
         phone = this[UsersTable.phone],
         qqNumber = this[UsersTable.qqNumber],
         qqOpenid = this[UsersTable.qqOpenid],
+        feishuOpenId = this[UsersTable.feishuOpenId],
+        wechatOpenid = this[UsersTable.wechatOpenid],
+        wecomUserid = this[UsersTable.wecomUserid],
         createdAt = this[UsersTable.createdAt],
         aiDisabled = this[UsersTable.aiDisabled],
         dailyReportEnabled = this[UsersTable.dailyReportEnabled],
