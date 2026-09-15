@@ -2,12 +2,16 @@
 .card { background: var(--card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
 .card-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
 
+/* 按压缩放（仅 CTA 用，对齐 App 0.97/120ms） */
+.pressable { transition: transform var(--dur-press) var(--ease); }
+.pressable:active { transform: scale(var(--press-scale)); }
+
 /* 按钮 */
-.btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; font-family: inherit; transition: transform .12s var(--ease); }
-.btn:active { transform: scale(.98); }
+.btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; font-family: inherit; transition: transform var(--dur-press) var(--ease); }
+.btn:active { transform: scale(var(--press-scale)); }
 .btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
 .btn-ghost, .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-.btn.danger { background: var(--expense); color: #fff; }
+.btn.danger { background: var(--expense); color: var(--on-expense); }
 .block { width: 100%; }
 
 /* 收支/语义 */
@@ -57,6 +61,16 @@
 .summary-card { background: var(--card); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
 .summary-card .label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
 .summary-card .val { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Skeleton 骨架屏（组件 <Skeleton.vue> 与直接挂类均可） */
+.ui-skeleton { position: relative; overflow: hidden; background: var(--surface-2); border-radius: 8px; }
+.ui-skeleton.round { border-radius: 999px; }
+.ui-skeleton::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--skeleton-sheen), transparent);
+  animation: ui-shimmer 1.4s var(--ease) infinite;
+}
+@keyframes ui-shimmer { to { transform: translateX(100%); } }
 
 /* 页面居中（Bookkeeping/Me 有 scoped .page 覆盖，其余控制台页面共用） */
 .page { max-width: 960px; margin: 0 auto; }
