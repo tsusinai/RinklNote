@@ -82,6 +82,13 @@ interface ApiService {
     @GET("api/budgets/summary")
     suspend fun getBudgetSummary(@Query("periodStart") periodStart: Long): BudgetSummaryDTO
 
+    // Challenges（v1 无删除端点，软删行随全量列表下发供 pull 清理）
+    @GET("api/challenges")
+    suspend fun getChallenges(): List<ChallengeDTO>
+
+    @PUT("api/challenges")
+    suspend fun upsertChallenge(@Body request: UpsertChallengeRequest): ChallengeDTO
+
     @POST("api/bills/parse")
     suspend fun parseBill(@Body request: ParseRequest): ParseResponse
 

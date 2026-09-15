@@ -18,6 +18,8 @@ import com.example.rinklnote.data.network.dto.HabitResponse
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
 import com.example.rinklnote.data.network.dto.BindQQRequest
+import com.example.rinklnote.data.network.dto.ChallengeDTO
+import com.example.rinklnote.data.network.dto.UpsertChallengeRequest
 import com.example.rinklnote.data.network.dto.BudgetDTO
 import com.example.rinklnote.data.network.dto.BudgetSummaryDTO
 import com.example.rinklnote.data.network.dto.DailyReportResponse
@@ -414,6 +416,9 @@ class AiViewModelTest {
         override suspend fun revokeAiToken(id: Long): MessageResponse = MessageResponse("")
         override suspend fun revokeAllAiTokens(): MessageResponse = MessageResponse("")
         override suspend fun getHabit(): HabitResponse = HabitResponse(habitContent)
+        override suspend fun getChallenges(): List<ChallengeDTO> = emptyList()
+        override suspend fun upsertChallenge(request: UpsertChallengeRequest): ChallengeDTO =
+            ChallengeDTO(id = 0, type = request.type, periodStart = request.periodStart, goal = request.goal, status = request.status, createdAt = 0L)
     }
 
     private class FakeAccountRepository : AccountRepository {

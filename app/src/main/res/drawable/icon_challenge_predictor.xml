@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 结余预测器 · 常驻卡图标（蓝环圆规）：转自 resource/challenge/icon-challenge-predictor.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#EAF5FE" />
+    <!-- 表盘 -->
+    <path
+        android:pathData="M342,480 A170,170 0 1 1 682,480 A170,170 0 1 1 342,480 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M382,480 A130,130 0 1 1 642,480 A130,130 0 1 1 382,480 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 指针星形（translate(512,480) scale(2.2) → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="480"
+        android:scaleX="2.2"
+        android:scaleY="2.2">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+    <!-- 点缀 -->
+    <path
+        android:pathData="M394,410 A16,16 0 1 1 426,410 A16,16 0 1 1 394,410 Z"
+        android:fillColor="#F8B62D" />
+    <path
+        android:pathData="M600,556 A14,14 0 1 1 628,556 A14,14 0 1 1 600,556 Z"
+        android:fillColor="#F8B62D" />
+    <!-- 表座 -->
+    <path
+        android:pathData="M450,660 H574 A28,28 0 0 1 602,688 V712 A28,28 0 0 1 574,740 H450 A28,28 0 0 1 422,712 V688 A28,28 0 0 1 450,660 Z"
+        android:fillColor="#555555" />
+</vector>

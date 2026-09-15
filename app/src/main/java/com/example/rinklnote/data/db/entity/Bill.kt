@@ -49,5 +49,9 @@ data class Bill(
     // 同日内显式排序名次（拖动重排写入）；NULL = 未显式排序，查询按 COALESCE(sort_order, created_at) 兜底。
     @ColumnInfo(name = "sort_order") val sortOrder: Long? = null,
     val deleted: Boolean = false,
-    val dirty: Boolean = false // true = local edit/delete not yet pushed to server
+    val dirty: Boolean = false, // true = local edit/delete not yet pushed to server
+    // 经纬度（度）：仅用户在记/编账单时主动点「位置」打点的账单才有值；
+    // null = 未打点（老账单、语音/QQ/AI 来源恒为 null），账单地图只展示有值的账单。
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )

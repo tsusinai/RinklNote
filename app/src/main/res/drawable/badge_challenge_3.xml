@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 完成 3 次挑战徽章（金杯，单星）：转自 resource/challenge/badge-challenge-3.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#F8B62D" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#FDF3DC" />
+    <!-- 左右杯耳 -->
+    <path
+        android:pathData="M348,350 A46,46 0 1 1 440,350 A46,46 0 1 1 348,350 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M368,350 A26,26 0 1 1 420,350 A26,26 0 1 1 368,350 Z"
+        android:fillColor="#FDF3DC" />
+    <path
+        android:pathData="M584,350 A46,46 0 1 1 676,350 A46,46 0 1 1 584,350 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M604,350 A26,26 0 1 1 656,350 A26,26 0 1 1 604,350 Z"
+        android:fillColor="#FDF3DC" />
+    <!-- 杯身 -->
+    <path
+        android:pathData="M422,270 H602 V390 A90,90 0 0 1 422,390 Z"
+        android:fillColor="#555555" />
+    <!-- 杯身金星（translate+scale → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="345"
+        android:scaleX="1.4"
+        android:scaleY="1.4">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+    <!-- 杯柄与底座 -->
+    <path
+        android:pathData="M504,470 H520 A8,8 0 0 1 528,478 V542 A8,8 0 0 1 520,550 H504 A8,8 0 0 1 496,542 V478 A8,8 0 0 1 504,470 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M436,550 H588 A14,14 0 0 1 602,564 A14,14 0 0 1 588,578 H436 A14,14 0 0 1 422,564 A14,14 0 0 1 436,550 Z"
+        android:fillColor="#555555" />
+    <!-- 底部单星（translate+scale → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="736"
+        android:scaleX="1.5"
+        android:scaleY="1.5">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+</vector>

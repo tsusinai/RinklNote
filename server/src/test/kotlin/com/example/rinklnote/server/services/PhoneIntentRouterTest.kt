@@ -219,7 +219,8 @@ class PhoneIntentRouterTest {
 
     @Test
     fun `balance intent sums all accounts`() = runBlocking {
-        billService.accountsFor(1L)   // ensureDefaultAccounts -> 微信/支付宝/无账户
+        // 新账号只预置「无账户」兜底桶；显式建一个微信钱包，验证多账户合计与名称展示。
+        billService.createAccount(1L, "微信", "#28C145", 0L)
         val reply = router.route("看看我的余额", 1L)
         assertTrue("reply=$reply", reply.contains("余额合计"))
         assertTrue(reply.contains("微信"))

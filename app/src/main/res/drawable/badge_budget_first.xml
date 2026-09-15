@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 设置首笔预算徽章（绿）：转自 resource/challenge/badge-budget-first.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#04A433" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#E4F4E7" />
+    <!-- 旗杆 -->
+    <path
+        android:pathData="M512,280 A10,10 0 0 1 522,290 V430 A10,10 0 0 1 512,440 A10,10 0 0 1 502,430 V290 A10,10 0 0 1 512,280 Z"
+        android:fillColor="#555555" />
+    <!-- 旗面 -->
+    <path
+        android:pathData="M512,290 L648,330 L512,370 Z"
+        android:fillColor="#04A433" />
+    <!-- 钱包主体 -->
+    <path
+        android:pathData="M392,430 H632 A40,40 0 0 1 672,470 V630 A40,40 0 0 1 632,670 H392 A40,40 0 0 1 352,630 V470 A40,40 0 0 1 392,430 Z"
+        android:fillColor="#555555" />
+    <!-- 钱包翻盖 -->
+    <path
+        android:pathData="M404,458 H620 A24,24 0 0 1 644,482 V618 A24,24 0 0 1 620,642 H404 A24,24 0 0 1 380,618 V482 A24,24 0 0 1 404,458 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 搭扣 -->
+    <path
+        android:pathData="M542,550 A30,30 0 1 1 602,550 A30,30 0 1 1 542,550 Z"
+        android:fillColor="#04A433" />
+</vector>

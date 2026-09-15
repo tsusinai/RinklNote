@@ -6,6 +6,7 @@ import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
+import com.example.rinklnote.server.services.ChallengeService
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
@@ -63,6 +64,7 @@ fun Application.module() {
     val userService = UserService(jwtSecret, jwtIssuer, jwtAudience)
     val billService = BillService()
     val budgetService = BudgetService()
+    val challengeService = ChallengeService()
 
     val deepseekApiKey = System.getenv("DEEPSEEK_API_KEY")
         ?: environment.config.propertyOrNull("deepseek.apiKey")?.getString()
@@ -220,6 +222,7 @@ fun Application.module() {
         accountRoutes(billService)
         transcribeRoutes(asrService)
         budgetRoutes(budgetService)
+        challengeRoutes(challengeService)
         correctionRoutes()
         keywordRoutes()
         qqWebhookRoutes(webhookSecret, userService, billService, nluService)

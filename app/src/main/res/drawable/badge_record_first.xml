@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首笔账单徽章（蓝）：转自 resource/challenge/badge-record-first.svg（viewBox 1024，纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#EAF5FE" />
+    <!-- 账本封皮 -->
+    <path
+        android:pathData="M418,292 H606 A36,36 0 0 1 642,328 V696 A36,36 0 0 1 606,732 H418 A36,36 0 0 1 382,696 V328 A36,36 0 0 1 418,292 Z"
+        android:fillColor="#555555" />
+    <!-- 账本内页 -->
+    <path
+        android:pathData="M432,322 H592 A20,20 0 0 1 612,342 V682 A20,20 0 0 1 592,702 H432 A20,20 0 0 1 412,682 V342 A20,20 0 0 1 432,322 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 书签三角 -->
+    <path
+        android:pathData="M462,400 L512,468 L562,400 L536,400 L512,434 L488,400 Z"
+        android:fillColor="#555555" />
+    <!-- 书脊竖条 -->
+    <path
+        android:pathData="M512,448 A11,11 0 0 1 523,459 V557 A11,11 0 0 1 512,568 A11,11 0 0 1 501,557 V459 A11,11 0 0 1 512,448 Z"
+        android:fillColor="#555555" />
+    <!-- 记账横线两根 -->
+    <path
+        android:pathData="M462,486 H562 A10,10 0 0 1 572,496 A10,10 0 0 1 562,506 H462 A10,10 0 0 1 452,496 A10,10 0 0 1 462,486 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M462,540 H562 A10,10 0 0 1 572,550 A10,10 0 0 1 562,560 H462 A10,10 0 0 1 452,550 A10,10 0 0 1 462,540 Z"
+        android:fillColor="#555555" />
+</vector>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 无消费日 · 挑战卡图标（金环）：转自 resource/challenge/icon-challenge-nospend.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#F8B62D" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#FDF3DC" />
+    <!-- 小猪双耳 -->
+    <path
+        android:pathData="M451,262 A15,15 0 0 1 466,277 V347 A15,15 0 0 1 451,362 A15,15 0 0 1 436,347 V277 A15,15 0 0 1 451,262 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M573,262 A15,15 0 0 1 588,277 V347 A15,15 0 0 1 573,362 A15,15 0 0 1 558,347 V277 A15,15 0 0 1 573,262 Z"
+        android:fillColor="#555555" />
+    <!-- 脸部主体 -->
+    <path
+        android:pathData="M408,300 H616 A36,36 0 0 1 652,336 V624 A36,36 0 0 1 616,660 H408 A36,36 0 0 1 372,624 V336 A36,36 0 0 1 408,300 Z"
+        android:fillColor="#555555" />
+    <!-- 脸部面板 -->
+    <path
+        android:pathData="M416,396 H608 A20,20 0 0 1 628,416 V616 A20,20 0 0 1 608,636 H416 A20,20 0 0 1 396,616 V416 A20,20 0 0 1 416,396 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 禁零花圆环 -->
+    <path
+        android:pathData="M440,516 A72,72 0 1 1 584,516 A72,72 0 1 1 440,516 Z"
+        android:fillColor="#F8B62D" />
+    <path
+        android:pathData="M466,516 A46,46 0 1 1 558,516 A46,46 0 1 1 466,516 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 斜杠（rotate(-45) → group 旋转，围绕 512,516） -->
+    <group
+        android:rotation="-45"
+        android:pivotX="512"
+        android:pivotY="516">
+        <path
+            android:pathData="M454,502 H570 A14,14 0 0 1 584,516 A14,14 0 0 1 570,530 H454 A14,14 0 0 1 440,516 A14,14 0 0 1 454,502 Z"
+            android:fillColor="#F8B62D" />
+    </group>
+</vector>

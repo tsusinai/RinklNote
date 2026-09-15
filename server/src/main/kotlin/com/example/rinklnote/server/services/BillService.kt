@@ -28,7 +28,12 @@ data class BillDTO(
     val updatedAt: Long? = null,
     val deleted: Boolean = false,
     // 同日内显式排序名次（App 端拖动重排）；null = 未排序。
-    val sortOrder: Long? = null
+    val sortOrder: Long? = null,
+    // 经纬度（度）：仅用户主动打点的账单才有值；null 时 JSON 省略该字段
+    // （旧客户端不认识/新客户端按默认 null 解析，双向兼容），与 amount 的 @EncodeDefault(ALWAYS)
+    // 惯例不同——那是「旧端必读」的兼容字段，本字段是「新端增量」字段。
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Serializable
@@ -175,7 +180,9 @@ class BillService {
         accountId: Long,
         remark: String?,
         date: Long?,
-        sortOrder: Long? = null
+        sortOrder: Long? = null,
+        latitude: Double? = null,
+        longitude: Double? = null
     ): BillDTO {
         require(amountMinor > 0) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
@@ -207,6 +214,8 @@ class BillService {
                 it[BillsTable.createdAt] = now
                 it[BillsTable.updatedAt] = now
                 it[BillsTable.sortOrder] = sortOrder
+                it[BillsTable.latitude] = latitude
+                it[BillsTable.longitude] = longitude
             } get BillsTable.id
         }
 
@@ -215,7 +224,8 @@ class BillService {
             categoryId = categoryId, categoryName = categoryName,
             subCategoryName = subCategoryName, accountId = accountId,
             remark = remark, date = billDate, source = "WEB",
-            createdAt = now, updatedAt = now, sortOrder = sortOrder
+            createdAt = now, updatedAt = now, sortOrder = sortOrder,
+            latitude = latitude, longitude = longitude
         )
     }
 
@@ -268,7 +278,9 @@ class BillService {
                     createdAt = it[BillsTable.createdAt],
                     updatedAt = it[BillsTable.updatedAt],
                     deleted = it[BillsTable.deleted],
-                    sortOrder = it[BillsTable.sortOrder]
+                    sortOrder = it[BillsTable.sortOrder],
+                    latitude = it[BillsTable.latitude],
+                    longitude = it[BillsTable.longitude]
                 )
             }
         }
@@ -314,7 +326,9 @@ class BillService {
         deleted = this[AccountsTable.deleted]
     )
 
-    /** 按 (user_id,name) 幂等补默认 3 账户：缺哪个名补哪个，自定义账户共存。 */
+    /** 按 (user_id,name) 幂等补默认兜底账户：只补「无账户」（快速记账需要默认账户落点），
+     *  微信/支付宝等真实钱包改由用户自建。缺哪个名补哪个，自定义账户共存；
+     *  老用户已有的微信/支付宝不受影响（本函数只补缺，从不删改）。 */
     fun ensureDefaultAccounts(userId: Long) {
         val now = System.currentTimeMillis()
         transaction {
@@ -323,8 +337,6 @@ class BillService {
                 .map { it[AccountsTable.name] }
                 .toSet()
             listOf(
-                Triple("微信", "#28C145", "WECHAT"),
-                Triple("支付宝", "#06B4FD", "ALIPAY"),
                 Triple("无账户", "#F97D1D", "OTHER")
             ).forEach { (name, color, iconKey) ->
                 if (name in existing) return@forEach
@@ -585,10 +597,10 @@ class BillService {
         }
     }
 
+    /** 全局种子（user_id 为空的遗留兜底行）：与 ensureDefaultAccounts 同口径，只建「无账户」，
+     *  微信/支付宝等真实钱包一律由用户自建。 */
     private fun seedAccounts() {
         val accounts = listOf(
-            Triple("微信", "#28C145", "WECHAT"),
-            Triple("支付宝", "#06B4FD", "ALIPAY"),
             Triple("无账户", "#F97D1D", "OTHER")
         )
         accounts.forEach { (name, color, iconKey) ->
@@ -743,6 +755,8 @@ class BillService {
         createdAt = this[BillsTable.createdAt],
         updatedAt = this[BillsTable.updatedAt],
         deleted = this[BillsTable.deleted],
-        sortOrder = this[BillsTable.sortOrder]
+        sortOrder = this[BillsTable.sortOrder],
+        latitude = this[BillsTable.latitude],
+        longitude = this[BillsTable.longitude]
     )
 }

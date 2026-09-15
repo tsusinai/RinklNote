@@ -31,7 +31,7 @@ fun Application.configureDatabase() {
 
     transaction {
         ensureAccountIconKeyColumn()
-        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, WebhookEventTable, PushLogTable, AiApiTokensTable)
+        SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, ChallengesTable, WebhookEventTable, PushLogTable, AiApiTokensTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
         runMigrations()

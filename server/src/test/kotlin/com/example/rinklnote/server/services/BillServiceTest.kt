@@ -170,7 +170,7 @@ class BillServiceTest {
 
     @Test
     fun `updateAccountBalance updates and returns the account`() {
-        val before = service.accountsFor(1L).firstOrNull { it.name == "微信" } ?: error("微信 missing")
+        val before = service.accountsFor(1L).firstOrNull { it.name == "无账户" } ?: error("无账户 missing")
         val updated = service.updateAccountBalance(before.id, 50000L, 1L)
         assertNotNull(updated)
         assertEquals(before.id, updated!!.id)
@@ -195,8 +195,33 @@ class BillServiceTest {
     }
 
     @Test
+    fun `createWebBill stores location and sync echoes it, untagged bills stay null`() {
+        val accountId = service.accountsFor(1L).first().id
+        val tagged = service.createWebBill(
+            userId = 1L, amountMinor = 2500L, billType = "EXPENSE",
+            categoryId = 1, categoryName = "三餐", subCategoryName = null,
+            accountId = accountId, remark = null, date = null,
+            latitude = 39.9042, longitude = 116.4074
+        )
+        val untagged = service.createWebBill(
+            userId = 1L, amountMinor = 1000L, billType = "EXPENSE",
+            categoryId = 1, categoryName = "三餐", subCategoryName = null,
+            accountId = accountId, remark = null, date = null
+        )
+        // 打点账单：读取端（sync/getBill）原样带回经纬度
+        val page = service.syncBills(1L)
+        val taggedDto = page.bills.first { it.id == tagged.id }
+        assertEquals(39.9042, taggedDto.latitude!!, 1e-9)
+        assertEquals(116.4074, taggedDto.longitude!!, 1e-9)
+        // 未打点账单（含 QQ/AI/老数据来源）经纬度保持 null，JSON 序列化时省略（encodeDefaults=false）
+        val untaggedDto = service.getBill(untagged.id, 1L)!!
+        assertNull(untaggedDto.latitude)
+        assertNull(untaggedDto.longitude)
+    }
+
+    @Test
     fun `updateAccountBalance is scoped to the account owner`() {
-        val w = service.accountsFor(1L).first { it.name == "微信" }
+        val w = service.accountsFor(1L).first { it.name == "无账户" }
         // 用户 2 无法改动用户 1 的账户余额
         assertNull(service.updateAccountBalance(w.id, 99900L, 2L))
     }

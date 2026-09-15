@@ -2,8 +2,11 @@ package com.example.rinklnote.ui.screen.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,7 +69,8 @@ import java.time.LocalDate
 fun AiScreen(
     viewModel: AiViewModel,
     isLoggedIn: Boolean,
-    onVoiceInput: () -> Unit
+    onVoiceInput: () -> Unit,
+    onBack: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -78,14 +83,27 @@ fun AiScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        // 标题栏
+        // 标题栏：左侧返回键 + 居中标题（与搜索账单/自定义主题等二级页一致）
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("AI 助手", fontSize = 20.sp, fontWeight = FontWeight.Medium)
+            IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = LocalRinklColors.current.topBarTitleColor,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Text(
+                "AI 助手",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = LocalRinklColors.current.topBarTitleColor
+            )
         }
         if (!isLoggedIn) {
             Box(
@@ -131,6 +149,20 @@ fun AiScreen(
                 item(key = "typing") {
                     TypingBubble()
                 }
+            }
+        }
+
+        // 快捷询问 chips：点击以预设文案直接走现有发送链路（AiViewModel.send），
+        // 文案措辞对齐服务端意图关键词（总结 / 异常 / 分析），横排三个，小屏可横向滚动。
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            quickAsks.forEach { (label, query) ->
+                QuickAskChip(text = label) { viewModel.send(query) }
             }
         }
 
@@ -215,6 +247,33 @@ fun AiScreen(
                 }
             }
         }
+    }
+}
+
+/** 快捷询问 chip：文案措辞已按服务端意图正则（总结/异常/分析）挑选，点击即整句发送。 */
+private val quickAsks = listOf(
+    "支出总结" to "帮我总结本月支出",
+    "支出异常" to "本月有支出异常吗",
+    "支出分析" to "分析一下我的支出"
+)
+
+/** 胶囊询问 chip：边框走边框令牌（未自定义时回落内置描边灰，与输入框同款处理），文字走字体令牌。 */
+@Composable
+private fun QuickAskChip(text: String, onClick: () -> Unit) {
+    val rinkl = LocalRinklColors.current
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(
+                width = 1.dp,
+                color = rinkl.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder,
+                shape = RoundedCornerShape(24.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+    ) {
+        Text(text = text, fontSize = 13.sp, color = rinkl.fontColor)
     }
 }
 

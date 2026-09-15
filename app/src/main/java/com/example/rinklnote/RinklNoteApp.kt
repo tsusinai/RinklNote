@@ -14,6 +14,8 @@ import com.example.rinklnote.data.repository.BudgetRepository
 import com.example.rinklnote.data.repository.BudgetRepositoryImpl
 import com.example.rinklnote.data.repository.ChatRepository
 import com.example.rinklnote.data.repository.ChatRepositoryImpl
+import com.example.rinklnote.data.repository.ChallengeRepository
+import com.example.rinklnote.data.repository.ChallengeRepositoryImpl
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.notification.DailyReportReceiver
@@ -57,9 +59,10 @@ class RinklNoteApp : Application() {
     val tokenManager: TokenManager by lazy { TokenManager(this) }
     val settingsManager: SettingsManager by lazy { SettingsManager(this) }
     val apiService: ApiService by lazy { RetrofitClient.create(tokenManager) }
-    val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao(), database.budgetDao(), database.accountDao()) }
+    val syncManager: SyncManager by lazy { SyncManager(apiService, tokenManager, database.billDao(), database.billTemplateDao(), database.budgetDao(), database.accountDao(), database.challengeDao()) }
     val accountRepository: AccountRepository by lazy { AccountRepositoryImpl(database) }
     val budgetRepository: BudgetRepository by lazy { BudgetRepositoryImpl(database) }
+    val challengeRepository: ChallengeRepository by lazy { ChallengeRepositoryImpl(database) }
     val chatRepository: ChatRepository by lazy { ChatRepositoryImpl(database) }
 
     // 主屏小组件点分类 / 深链 rinklnote://add → 欲预填快速记账抽屉的参数；

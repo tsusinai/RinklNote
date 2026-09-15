@@ -58,7 +58,11 @@ data class BillDTO(
     val updatedAt: Long? = null,
     val deleted: Boolean = false,
     // 同日内显式排序名次（拖动重排）；null = 未排序（查询端 COALESCE(created_at) 兜底）。
-    val sortOrder: Long? = null
+    val sortOrder: Long? = null,
+    // 经纬度（度）：仅用户主动打点的账单才有值；null 序列化时省略，
+    // 旧服务端（无该字段）/旧客户端（ignoreUnknownKeys）互不影响。
+    val latitude: Double? = null,
+    val longitude: Double? = null
 ) {
     /** 解析金额：优先取分；旧服务端只回 amount（元）时回退换算。 */
     val resolvedAmountMinor: Long
@@ -86,7 +90,10 @@ data class CreateBillRequest(
     val remark: String? = null,
     val date: Long? = null,
     val baseUpdatedAt: Long? = null, // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
-    val sortOrder: Long? = null // 同日内显式排序名次（拖动重排）
+    val sortOrder: Long? = null, // 同日内显式排序名次（拖动重排）
+    // 经纬度（度）：用户主动打点才有值；null 时服务端存 NULL（清除打点同样靠传 null 生效）。
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Serializable

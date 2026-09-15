@@ -175,6 +175,60 @@ class SyncManagerTest {
     }
 
     @Test
+    fun `pull merge carries bill latitude and longitude into the local row`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        val tagged = billDTO(3, 300).copy(latitude = 39.9042, longitude = 116.4074)
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(listOf(tagged), serverTime = 1000))
+
+        manager.sync()
+
+        verify(billDao).upsertAll(argThat<List<Bill>> { bills ->
+            bills.size == 1 && bills[0].latitude == 39.9042 && bills[0].longitude == 116.4074
+        })
+    }
+
+    @Test
+    fun `pull merge keeps untagged bill location null (old rows unaffected)`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(listOf(billDTO(4, 400)), serverTime = 1000))
+
+        manager.sync()
+
+        verify(billDao).upsertAll(argThat<List<Bill>> { bills ->
+            bills.size == 1 && bills[0].latitude == null && bills[0].longitude == null
+        })
+    }
+
+    @Test
+    fun `bill push carries local latitude and longitude in the wire payload`() = runTest {
+        val b = bill(id = 7, deleted = false, serverId = null).copy(latitude = 31.2304, longitude = 121.4737)
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 99)
+        )
+        whenever(api.uploadBill(any())).thenReturn(
+            BillDTO(id = 500, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
+                categoryName = "三餐", accountId = 1, date = 100, source = "APP",
+                createdAt = 100, updatedAt = 1000)
+        )
+
+        manager.pushBill(b)
+
+        verify(api).uploadBill(argThat<CreateBillRequest> { req ->
+            req.latitude == 31.2304 && req.longitude == 121.4737
+        })
+    }
+
+    @Test
     fun `budget merge overwrites local when the server copy is newer`() = runTest {
         stubLoggedIn(true)
         stubAccountSyncDefaults()

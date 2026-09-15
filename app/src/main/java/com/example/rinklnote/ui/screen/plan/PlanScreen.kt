@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
+import com.example.rinklnote.ui.screen.challenge.ChallengeSummaryCard
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -78,6 +79,7 @@ import kotlin.math.abs
  * @param hazeState nav 层透传的毛玻璃状态
  * @param onEditBudget 跳转预算编辑页（导航层注入）
  * @param onOpenCategoryBudgets 进入「分类预算设置」页（导航层注入，路由 `budget-categories`）
+ * @param onOpenChallenges 进入「省钱挑战」页（导航层注入，路由 `challenges`）
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -86,7 +88,8 @@ fun PlanScreen(
     backgroundUri: String?,
     hazeState: HazeState,
     onEditBudget: () -> Unit,
-    onOpenCategoryBudgets: () -> Unit
+    onOpenCategoryBudgets: () -> Unit,
+    onOpenChallenges: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -144,6 +147,11 @@ fun PlanScreen(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // 首位：省钱挑战摘要卡（三行迷你进度 + 结余预测一句，整卡可点进挑战页；
+                // 卡内自取数现算，口径与挑战页一致）。
+                item(key = "entry-challenges") {
+                    ChallengeSummaryCard(onOpenChallenges = onOpenChallenges)
+                }
                 // 列表区头部：进入「分类预算设置」独立页的入口行（路由 budget-categories 由主会话接线）。
                 item(key = "entry-category-budgets") {
                     CategoryBudgetEntryRow(onClick = onOpenCategoryBudgets)

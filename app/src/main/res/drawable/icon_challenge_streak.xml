@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 连续记账 · 挑战卡图标（蓝环水滴）：转自 resource/challenge/icon-challenge-streak.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#EAF5FE" />
+    <!-- 外层水滴 -->
+    <path
+        android:pathData="M512,200 C604,322 684,404 684,516 A172,172 0 1 1 340,516 C340,404 420,322 512,200 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 中层水滴 -->
+    <path
+        android:pathData="M512,320 C576,404 630,462 630,540 A118,118 0 1 1 394,540 C394,462 448,404 512,320 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 内芯火焰 -->
+    <path
+        android:pathData="M512,440 C544,480 560,502 560,532 A48,48 0 1 1 464,532 C464,502 480,480 512,440 Z"
+        android:fillColor="#F8B62D" />
+</vector>

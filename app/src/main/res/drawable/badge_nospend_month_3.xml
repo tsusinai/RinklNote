@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单月无消费 3 天徽章（金，单星）：转自 resource/challenge/badge-nospend-month-3.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#F8B62D" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#FDF3DC" />
+    <!-- 小猪双耳 -->
+    <path
+        android:pathData="M451,222 A15,15 0 0 1 466,237 V307 A15,15 0 0 1 451,322 A15,15 0 0 1 436,307 V237 A15,15 0 0 1 451,222 Z"
+        android:fillColor="#555555" />
+    <path
+        android:pathData="M573,222 A15,15 0 0 1 588,237 V307 A15,15 0 0 1 573,322 A15,15 0 0 1 558,307 V237 A15,15 0 0 1 573,222 Z"
+        android:fillColor="#555555" />
+    <!-- 脸部主体 -->
+    <path
+        android:pathData="M408,260 H616 A36,36 0 0 1 652,296 V604 A36,36 0 0 1 616,640 H408 A36,36 0 0 1 372,604 V296 A36,36 0 0 1 408,260 Z"
+        android:fillColor="#555555" />
+    <!-- 脸部面板 -->
+    <path
+        android:pathData="M416,356 H608 A20,20 0 0 1 628,376 V596 A20,20 0 0 1 608,616 H416 A20,20 0 0 1 396,596 V376 A20,20 0 0 1 416,356 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 禁零花圆环 -->
+    <path
+        android:pathData="M436,500 A76,76 0 1 1 588,500 A76,76 0 1 1 436,500 Z"
+        android:fillColor="#F8B62D" />
+    <path
+        android:pathData="M464,500 A48,48 0 1 1 560,500 A48,48 0 1 1 464,500 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 斜杠（rotate(-45) → group 旋转，围绕 512,500） -->
+    <group
+        android:rotation="-45"
+        android:pivotX="512"
+        android:pivotY="500">
+        <path
+            android:pathData="M450,486 H576 A14,14 0 0 1 588,500 A14,14 0 0 1 576,514 H450 A14,14 0 0 1 436,500 A14,14 0 0 1 450,486 Z"
+            android:fillColor="#F8B62D" />
+    </group>
+    <!-- 底部单星（translate+scale → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="724"
+        android:scaleX="1.5"
+        android:scaleY="1.5">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+</vector>

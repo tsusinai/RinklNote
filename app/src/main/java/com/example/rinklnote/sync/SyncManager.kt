@@ -4,10 +4,12 @@ import com.example.rinklnote.data.db.dao.AccountDao
 import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BillTemplateDao
 import com.example.rinklnote.data.db.dao.BudgetDao
+import com.example.rinklnote.data.db.dao.ChallengeDao
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
+import com.example.rinklnote.data.db.entity.Challenge
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.domain.Source
 import com.example.rinklnote.data.local.TokenManager
@@ -18,6 +20,7 @@ import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
+import com.example.rinklnote.data.network.dto.UpsertChallengeRequest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,7 +38,8 @@ class SyncManager(
     private val billDao: BillDao,
     private val templateDao: BillTemplateDao? = null,
     private val budgetDao: BudgetDao? = null,
-    private val accountDao: AccountDao? = null
+    private val accountDao: AccountDao? = null,
+    private val challengeDao: ChallengeDao? = null
 ) {
     // Serialize push/sync so a QuickAdd push and an automatic sync can never run
     // concurrently and double-submit the same bill.
@@ -111,6 +115,9 @@ class SyncManager(
                         updatedAt = dto.updatedAt,
                         baseUpdatedAt = dto.updatedAt,
                         sortOrder = dto.sortOrder,
+                        // 经纬度：服务端有值才带（老账单/旧服务端为 null，本地保持未打点）。
+                        latitude = dto.latitude,
+                        longitude = dto.longitude,
                         deleted = false
                     )
                 }
@@ -136,6 +143,9 @@ class SyncManager(
 
             // 4. Sync budgets (push unsynced, then pull all + LWW merge)
             syncBudgets()
+
+            // 5. Sync challenges (push unsynced, then pull all + LWW merge)
+            syncChallenges()
 
             SyncResult.Success(pushed, pulled)
         } catch (e: Exception) {
@@ -323,6 +333,93 @@ class SyncManager(
         } catch (_: Exception) {}
     }
 
+    /** Upload a single local challenge (non-blocking, called after create/adjust). */
+    suspend fun pushChallenge(challenge: Challenge) = syncMutex.withLock {
+        try {
+            pushOneChallenge(challenge)
+        } catch (_: Exception) {
+            // Will be pushed on next full sync
+        }
+    }
+
+    /**
+     * Push one challenge（须持有 [syncMutex] 调用）。v1 无删除端点：
+     * 本地软删墓碑不推送（无删除 UI，正常不会产生），留待 pull 对账；
+     * 其余一律 PUT upsert —— 服务端 LWW 旧写被拒时仍返回现行行（200），
+     * 拿返回 DTO 回写 server_id 即可，无需重放。
+     */
+    private suspend fun pushOneChallenge(challenge: Challenge) {
+        val dao = challengeDao ?: return
+        if (challenge.deleted) return
+        val dto = api.upsertChallenge(
+            UpsertChallengeRequest(
+                type = challenge.type,
+                periodStart = challenge.periodStart,
+                goal = challenge.goal,
+                status = challenge.status,
+                // 客户端行时间戳参与服务端 LWW 比较。
+                updatedAt = challenge.updatedAt
+            )
+        )
+        dao.updateServerId(challenge.id, dto.id, dto.updatedAt ?: dto.createdAt)
+    }
+
+    /** 挑战数量少 → 推送全部未同步行，再全量拉取按 LWW 合并。 */
+    private suspend fun syncChallenges() {
+        val dao = challengeDao ?: return
+
+        // Push unsynced (server_id IS NULL OR dirty = 1)
+        dao.getUnsynced().forEach { challenge ->
+            try {
+                pushOneChallenge(challenge)
+            } catch (_: Exception) {}
+        }
+
+        // Pull all + last-write-wins merge
+        try {
+            api.getChallenges().forEach { dto ->
+                if (dto.deleted) {
+                    // 服务端已删除：本地直接清掉对应行（与预算行为一致，不留陈旧墓碑）。
+                    dao.deleteByServerId(dto.id)
+                    return@forEach
+                }
+                val serverTime = dto.updatedAt ?: dto.createdAt
+                val local = dao.getByServerId(dto.id)
+                if (local == null) {
+                    dao.upsert(
+                        Challenge(
+                            serverId = dto.id,
+                            type = dto.type,
+                            periodStart = dto.periodStart,
+                            goal = dto.goal,
+                            status = dto.status,
+                            updatedAt = serverTime,
+                            deleted = false,
+                            dirty = false
+                        )
+                    )
+                } else {
+                    // 本地 dirty 行尚未推送，绝不被服务端数据覆盖（与账户合并同规则）。
+                    if (local.dirty) return@forEach
+                    val localTime = local.updatedAt ?: 0L
+                    if (serverTime > localTime) {
+                        dao.upsert(
+                            local.copy(
+                                type = dto.type,
+                                periodStart = dto.periodStart,
+                                goal = dto.goal,
+                                status = dto.status,
+                                updatedAt = serverTime,
+                                deleted = false,
+                                dirty = false
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     /** Upload a single local account (non-blocking, called after create/edit/delete). */
     suspend fun pushAccount(account: Account) = syncMutex.withLock {
         val dao = accountDao ?: return@withLock
@@ -446,7 +543,10 @@ private fun Bill.toRequest() = CreateBillRequest(
     accountId = accountId,
     remark = remark,
     date = date,
-    sortOrder = sortOrder
+    sortOrder = sortOrder,
+    // 经纬度：仅打点账单有值；null 上传即服务端存 NULL（PUT 全量替换语义）。
+    latitude = latitude,
+    longitude = longitude
 )
 
 private fun TemplateDTO.toEntity() = BillTemplate(

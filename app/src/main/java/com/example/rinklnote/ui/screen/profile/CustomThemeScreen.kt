@@ -1,11 +1,13 @@
 package com.example.rinklnote.ui.screen.profile
 
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -57,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -65,7 +69,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
+import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.local.SettingsManager
+import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
@@ -77,7 +83,17 @@ import com.example.rinklnote.ui.theme.PresetThemes
 import com.example.rinklnote.ui.theme.RinklThemeSlot
 import com.example.rinklnote.ui.theme.colorToHex
 import com.example.rinklnote.ui.theme.hexToColor
+import com.example.rinklnote.domain.AchievementInput
+import com.example.rinklnote.domain.DayKind
+import com.example.rinklnote.domain.currentBookkeepingStreak
+import com.example.rinklnote.domain.dayKind
+import com.example.rinklnote.domain.evaluateAchievements
+import com.example.rinklnote.domain.monthlyBudgetOutcomes
+import com.example.rinklnote.domain.toDayStartEpoch
+import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
+import java.time.LocalDate
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -92,8 +108,9 @@ import kotlinx.coroutines.launch
  * 9. 支出颜色（支出金额与标记） 10. 收入颜色（收入金额与标记）
  *
  * 点任一行 → 底部色盘面板（预设色板 + HSV 自选色盘 + 十六进制输入 + 恢复默认）；
- * 「推荐配色」可一键写满 5 个槽位。所有改动即时写入 DataStore，
- * `MainActivity` 收集后重建 `RinklColors`，全局立刻生效。
+ * 「推荐配色」可一键写满 5 个槽位；追加三套**成就解锁预设**（晨曦/薄荷/琥珀，2026-09-15）——
+ * 未解锁显示锁与条件文案（点击 Toast 提示），解锁后同样一键整套应用。
+ * 所有改动即时写入 DataStore，`MainActivity` 收集后重建 `RinklColors`，全局立刻生效。
  */
 @Composable
 fun CustomThemeScreen(
@@ -106,6 +123,43 @@ fun CustomThemeScreen(
     val colors = LocalRinklColors.current
     val scope = rememberCoroutineScope()
     var pickerSlot by remember { mutableStateOf<RinklThemeSlot?>(null) }
+
+    // —— 成就解锁主题（晨曦/薄荷/琥珀）——
+    val app = LocalContext.current.applicationContext as RinklNoteApp
+    // 当前明暗态：镜像 MainActivity 的解析（SYSTEM 跟随系统 / LIGHT / DARK），解锁预设按此取明暗两套色值。
+    val themeMode by settingsManager.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+    val isDark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    // 解锁谓词的引擎值在组合作用域现算：produceState 订阅「日统计 + 预算」两流（窗口与挑战页一致
+    // = 今天 −400 天 ~ 明天），账单/预算变动后实时回落；琥珀复用挑战页同一条 budget-3months 口径。
+    val unlockSignals by produceState(ThemeUnlockSignals()) {
+        val zone = bookkeepingZone()
+        val now = LocalDate.now(zone)
+        combine(
+            app.database.billDao().observeDailySpendStats(
+                now.minusDays(400).toDayStartEpoch(zone),
+                now.plusDays(1).toDayStartEpoch(zone),
+            ),
+            app.budgetRepository.observeBudgets(),
+        ) { stats, budgets ->
+            ThemeUnlockSignals(
+                streakDays = currentBookkeepingStreak(stats, LocalDate.now(bookkeepingZone())),
+                totalNoSpendDays = stats.count { dayKind(it) == DayKind.NO_SPEND },
+                threeMonthNoOverrun = evaluateAchievements(
+                    AchievementInput(
+                        recordedDays = 0,
+                        firstBillDate = null,
+                        dailyStats = stats,
+                        budgetOutcomes = monthlyBudgetOutcomes(stats, budgets),
+                        achievedChallengeCount = 0,
+                    )
+                ).firstOrNull { it.id == "budget-3months" }?.unlocked ?: false,
+            )
+        }.collect { value = it }
+    }
 
     val listState = rememberLazyListState()
     val density = LocalDensity.current
@@ -167,6 +221,22 @@ fun CustomThemeScreen(
                         onApply = { preset ->
                             scope.launch {
                                 // 整套写入：预设里为 null 的槽位显式清掉，回到该槽默认。
+                                settingsManager.setCustomThemeColor(RinklThemeSlot.PRIMARY, preset.themeColor)
+                                settingsManager.setCustomThemeColor(RinklThemeSlot.BORDER, preset.borderColor)
+                                settingsManager.setCustomThemeColor(RinklThemeSlot.ICON, preset.iconColor)
+                                settingsManager.setCustomThemeColor(RinklThemeSlot.FONT, preset.fontColor)
+                                settingsManager.setCustomThemeColor(RinklThemeSlot.TOP_BAR, preset.topBarColor)
+                            }
+                        }
+                    )
+                    RinklDivider()
+                    // 成就解锁预设（晨曦/薄荷/琥珀）：未解锁=锁图标 + 条件文案（点击 Toast 提示）；
+                    // 解锁后与常规预设一致，一键整套应用（走 setCustomThemeColor 全槽写入）。
+                    UnlockablePresetRows(
+                        signals = unlockSignals,
+                        isDark = isDark,
+                        onApply = { preset ->
+                            scope.launch {
                                 settingsManager.setCustomThemeColor(RinklThemeSlot.PRIMARY, preset.themeColor)
                                 settingsManager.setCustomThemeColor(RinklThemeSlot.BORDER, preset.borderColor)
                                 settingsManager.setCustomThemeColor(RinklThemeSlot.ICON, preset.iconColor)
@@ -746,5 +816,135 @@ private fun HueSlider(hue: Float, onChange: (Float) -> Unit) {
             center = Offset(x, size.height / 2f),
             style = Stroke(width = 2f)
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 成就解锁预设（晨曦 / 薄荷 / 琥珀）
+// ---------------------------------------------------------------------------
+
+/** 主题解锁谓词的实时引擎值快照（由 ChallengeEngine 从日统计/预算现算，见 produceState）。 */
+private data class ThemeUnlockSignals(
+    /** 当前连续记账天数（晨曦：≥ 30 解锁）。 */
+    val streakDays: Int = 0,
+    /** 累计无消费天数（薄荷：≥ 100 解锁）。 */
+    val totalNoSpendDays: Int = 0,
+    /** 连续 3 个月预算不超支（琥珀；复用挑战页 budget-3months 成就口径）。 */
+    val threeMonthNoOverrun: Boolean = false,
+)
+
+/**
+ * 一套成就解锁预设：id 与挑战页「主题解锁」行的 ThemeUnlockState 对齐（dawn/mint/amber），
+ * 明暗各一套 [PresetTheme]（font/topBar 为 null = 跟随系统明暗的默认字体色），
+ * 应用时按当前明暗态取对应套写入。
+ */
+private data class UnlockableThemePreset(
+    val id: String,
+    val name: String,
+    /** 解锁条件文案（不含「解锁」二字，行内文案与 Toast 拼接用）。 */
+    val requirement: String,
+    val light: PresetTheme,
+    val dark: PresetTheme,
+)
+
+/** 三套成就解锁预设：晨曦=暖橙粉调、薄荷=青绿调、琥珀=金棕调；明暗两套、格式与常规预设一致。 */
+private val UnlockableThemePresets = listOf(
+    UnlockableThemePreset(
+        id = "dawn",
+        name = "晨曦",
+        requirement = "连续记账 30 天",
+        light = PresetTheme("晨曦", themeColor = Color(0xFFEF7D68), borderColor = Color(0xFFF8E3DC), iconColor = Color(0xFFD9644F)),
+        dark = PresetTheme("晨曦", themeColor = Color(0xFFF5A08C), borderColor = Color(0xFF513B34), iconColor = Color(0xFFF7AC9A)),
+    ),
+    UnlockableThemePreset(
+        id = "mint",
+        name = "薄荷",
+        requirement = "累计无消费 100 天",
+        light = PresetTheme("薄荷", themeColor = Color(0xFF2FA98C), borderColor = Color(0xFFDCEFE8), iconColor = Color(0xFF238A72)),
+        dark = PresetTheme("薄荷", themeColor = Color(0xFF5BC4AB), borderColor = Color(0xFF32473F), iconColor = Color(0xFF7BD4BE)),
+    ),
+    UnlockableThemePreset(
+        id = "amber",
+        name = "琥珀",
+        requirement = "连续 3 个月预算不超支",
+        light = PresetTheme("琥珀", themeColor = Color(0xFFC08A3F), borderColor = Color(0xFFF1E5D0), iconColor = Color(0xFFA2732E)),
+        dark = PresetTheme("琥珀", themeColor = Color(0xFFD9AC66), borderColor = Color(0xFF4A3E2C), iconColor = Color(0xFFE5BE83)),
+    ),
+)
+
+/** 解锁阈值（与挑战页 ThemeUnlockState 的口径逐字一致）。 */
+private const val DAWN_STREAK_REQUIREMENT = 30
+private const val MINT_NO_SPEND_REQUIREMENT = 100
+
+/**
+ * 成就解锁预设行（接在常规预设之后）：未解锁=名称灰显 + 条件文案 + 锁图标，点击 Toast「完成 XX 后解锁」；
+ * 解锁后与常规预设行同构（色点 + 「应用」），点击按当前明暗态整套应用。
+ */
+@Composable
+private fun UnlockablePresetRows(
+    signals: ThemeUnlockSignals,
+    isDark: Boolean,
+    onApply: (PresetTheme) -> Unit
+) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        UnlockableThemePresets.forEachIndexed { index, preset ->
+            if (index > 0) RinklDivider()
+            val unlocked = when (preset.id) {
+                "dawn" -> signals.streakDays >= DAWN_STREAK_REQUIREMENT
+                "mint" -> signals.totalNoSpendDays >= MINT_NO_SPEND_REQUIREMENT
+                else -> signals.threeMonthNoOverrun
+            }
+            val colors = if (isDark) preset.dark else preset.light
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (unlocked) {
+                            onApply(colors)
+                        } else {
+                            Toast.makeText(context, "完成「${preset.requirement}」后解锁", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .defaultMinSize(minHeight = 56.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = preset.name,
+                        fontSize = 16.sp,
+                        color = if (unlocked) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    Text(
+                        text = if (unlocked) "已达成「${preset.requirement}」" else "${preset.requirement}解锁",
+                        fontSize = 12.sp,
+                        color = if (unlocked) {
+                            LocalRinklColors.current.themeColor
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+                if (unlocked) {
+                    listOfNotNull(colors.themeColor, colors.iconColor, colors.borderColor).forEach { c ->
+                        ColorDot(color = c, size = 22.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+                    Text("应用", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_lock),
+                        contentDescription = "未解锁",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
     }
 }

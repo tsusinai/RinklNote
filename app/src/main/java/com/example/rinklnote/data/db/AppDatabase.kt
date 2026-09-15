@@ -12,18 +12,20 @@ import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.dao.BillTemplateDao
 import com.example.rinklnote.data.db.dao.BudgetDao
 import com.example.rinklnote.data.db.dao.CategoryDao
+import com.example.rinklnote.data.db.dao.ChallengeDao
 import com.example.rinklnote.data.db.dao.ChatMessageDao
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
+import com.example.rinklnote.data.db.entity.Challenge
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
-    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class],
-    version = 14,
+    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class, Challenge::class],
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -33,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun billTemplateDao(): BillTemplateDao
     abstract fun budgetDao(): BudgetDao
+    abstract fun challengeDao(): ChallengeDao
     abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
@@ -280,13 +283,41 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v15：新增省钱挑战表 challenges（goal 单位由 type 决定：天数或整数分，见实体注释）。 */
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS challenges (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        server_id INTEGER,
+                        type TEXT NOT NULL,
+                        period_start INTEGER NOT NULL,
+                        goal INTEGER NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'ACTIVE',
+                        updated_at INTEGER,
+                        deleted INTEGER NOT NULL,
+                        dirty INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_challenges_server_id ON challenges(server_id)")
+            }
+        }
+
+        /** v16：bills 增加账单打点经纬度（可空 REAL；NULL = 未打点，老账单不受影响）。 */
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE bills ADD COLUMN latitude REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE bills ADD COLUMN longitude REAL DEFAULT NULL")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                 .fallbackToDestructiveMigration()
                 .build()
         }

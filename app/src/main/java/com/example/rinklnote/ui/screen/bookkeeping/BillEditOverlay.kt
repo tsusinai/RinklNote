@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -23,12 +24,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -43,12 +47,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -64,11 +70,14 @@ import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -98,6 +107,8 @@ fun BillEditOverlay(
 ) {
     val hasCustomBackground = backgroundUri != null
     val initialCategories = if (bill.billType == BillType.EXPENSE) expenseCategories else incomeCategories
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var amount by remember(bill.id) { mutableStateOf(Money.toYuanInputString(bill.amountMinor)) }
     var billType by remember(bill.id) { mutableStateOf(bill.billType.value) }
@@ -115,6 +126,9 @@ fun BillEditOverlay(
     var showDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    // 位置打点：编辑既有账单可补打/清除；初值来自账单本身（保存时按当前值全量覆盖）
+    var location by remember(bill.id) { mutableStateOf(bill.toLocationTag()) }
+    var locating by remember { mutableStateOf(false) }
 
     val visibleCategories = if (billType == BillType.EXPENSE.value) expenseCategories else incomeCategories
 
@@ -161,6 +175,28 @@ fun BillEditOverlay(
         pendingSubName = null
     }
 
+    /**
+     * 位置 chip 点击：已定位 → 清除（可再点补回）；未定位 → 采集一次当前位置。
+     * 采集在 UI 层做（本页为无 VM 的状态组件），失败 Toast 提示检查权限。
+     */
+    fun toggleLocation() {
+        if (location != null) {
+            location = null
+            return
+        }
+        if (locating) return
+        locating = true
+        scope.launch {
+            val got = LocationGrabber.grab(context)
+            locating = false
+            if (got != null) {
+                location = got
+            } else {
+                Toast.makeText(context, "定位失败，请检查定位权限", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun buildEditedBill(): Bill = bill.copy(
         amountMinor = Money.parseMinor(amount) ?: bill.amountMinor,
         billType = BillType.fromValue(billType),
@@ -169,7 +205,10 @@ fun BillEditOverlay(
         subCategoryName = selectedSubCategory?.name,
         accountId = selectedAccount?.id ?: bill.accountId,
         remark = remark.trim().ifBlank { null },
-        date = selectedDate.toBillTimestamp()
+        date = selectedDate.toBillTimestamp(),
+        // 位置：chip 当前值（补打/清除都会体现为变更并置脏同步）
+        latitude = location?.first,
+        longitude = location?.second
     )
 
     val amountMinor = Money.parseMinor(amount)
@@ -217,6 +256,13 @@ fun BillEditOverlay(
                     hasCustomBackground = hasCustomBackground,
                     onDateClick = { showDatePicker = true },
                     onQuickDateClick = { selectedDate = it }
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                LocationEditor(
+                    location = location,
+                    locating = locating,
+                    hasCustomBackground = hasCustomBackground,
+                    onToggle = ::toggleLocation
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 AccountEditor(
@@ -543,6 +589,70 @@ private fun DateEditor(
     }
 }
 
+@Composable
+private fun LocationEditor(
+    location: Pair<Double, Double>?,
+    locating: Boolean,
+    hasCustomBackground: Boolean,
+    onToggle: () -> Unit
+) {
+    val rinkl = LocalRinklColors.current
+    val located = location != null
+    SectionCard(hasCustomBackground = hasCustomBackground) {
+        SectionHeader(title = "位置", hint = "仅主动打点的账单会上账单地图")
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    if (located) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+                    }
+                )
+                .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(10.dp)))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.LocationOn,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                // 已定位 → 主题色令牌（PRIMARY 槽）；未定位 → 图标令牌（ICON 槽，未自定义回落灰）
+                tint = if (located) rinkl.themeColor else rinkl.iconButtonColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(7.dp))
+            Column {
+                Text(
+                    text = when {
+                        locating -> "定位中…"
+                        located -> "已定位 · 可再点取消"
+                        else -> "位置"
+                    },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (located) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+                Text(
+                    text = if (located) {
+                        String.format(Locale.CHINESE, "%.5f, %.5f", location!!.first, location.second)
+                    } else {
+                        "点一下记录当前位置，可再次点击清除"
+                    },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AccountEditor(
@@ -743,6 +853,10 @@ private fun DiscardChangesDialog(
 
 private fun Long.toBillLocalDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(bookkeepingZone()).toLocalDate()
+
+/** 账单自带的经纬度 → chip 状态（任一为 null 视为未打点）。 */
+private fun Bill.toLocationTag(): Pair<Double, Double>? =
+    latitude?.let { lat -> longitude?.let { lng -> lat to lng } }
 
 private fun LocalDate.toBillTimestamp(): Long =
     atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()

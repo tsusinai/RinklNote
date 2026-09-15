@@ -50,9 +50,14 @@ data class QuickAddState(
     val nlpInput: String = "",
     val isParsing: Boolean = false,
     val suggestion: SuggestionData? = null,
-    val suggestionDismissed: Boolean = false
+    val suggestionDismissed: Boolean = false,
+    /** 已打点的位置：仅用户主动点「位置」chip 采集一次才有值；null = 不带位置。 */
+    val location: LocationTag? = null
 ) {
     data class SuggestionData(val label: String, val categoryName: String, val amount: Long)
+
+    /** 打点到账单上的经纬度（度）。 */
+    data class LocationTag(val latitude: Double, val longitude: Double)
 
     val categories: List<Category>
         get() = if (billType == BillType.EXPENSE) expenseCategories else incomeCategories
@@ -75,6 +80,12 @@ sealed interface QuickAddEvent {
     data object SuggestionClick : QuickAddEvent
     data object DismissSuggestion : QuickAddEvent
     data object Confirm : QuickAddEvent
+
+    /** 位置 chip：抽屉侧采集成功后回填经纬度（采集动作在 UI 层，VM 不持有 Context）。 */
+    data class LocationResolved(val latitude: Double, val longitude: Double) : QuickAddEvent
+
+    /** 位置 chip：再点一次取消已打点的位置。 */
+    data object ClearLocation : QuickAddEvent
 
     /** 语音连续多笔：一整句口语转写（可能含多笔金额），逐笔入库但不动抽屉。 */
     data class VoiceUtterance(val text: String) : QuickAddEvent
@@ -173,6 +184,10 @@ class QuickAddViewModel(
                 it.copy(suggestion = null, suggestionDismissed = true)
             }
             is QuickAddEvent.Confirm -> confirm()
+            is QuickAddEvent.LocationResolved -> _state.update {
+                it.copy(location = QuickAddState.LocationTag(event.latitude, event.longitude))
+            }
+            is QuickAddEvent.ClearLocation -> _state.update { it.copy(location = null) }
         }
     }
 
@@ -562,7 +577,10 @@ class QuickAddViewModel(
                     subCategoryName = s.selectedSubCategory?.name,
                     accountId = account.id,
                     remark = s.remark.ifBlank { null },
-                    date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+                    date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli(),
+                    // 位置：仅用户点过「位置」chip 的账单带经纬度
+                    latitude = s.location?.latitude,
+                    longitude = s.location?.longitude
                 )
                 val savedId = repository.addBill(bill)
                 _effects.send(QuickAddEffect.FinalConfirmCompleted)
@@ -605,7 +623,9 @@ class QuickAddViewModel(
                 nlpInput = "",
                 isParsing = false,
                 suggestion = null,
-                suggestionDismissed = false
+                suggestionDismissed = false,
+                // 位置不跨笔继承：本笔记完，下一笔默认重新开始（要不要打点由用户再决定）
+                location = null
             )
         }
     }

@@ -6,6 +6,7 @@ import androidx.room.Query
 import androidx.room.Update
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.DailyCategoryAmount
+import com.example.rinklnote.data.db.entity.DailySpendStat
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -91,4 +92,28 @@ interface BillDao {
     @Query("UPDATE bills SET server_id = :serverId, updated_at = :updatedAt, base_updated_at = :updatedAt, dirty = 0 WHERE id = :localId")
 
     suspend fun updateServerId(localId: Long, serverId: Long, updatedAt: Long)
+
+    // ===== 省钱挑战 / 成就：日粒度统计 =====
+
+    // 一天一行（GROUP BY date），驱动挑战进度与打卡墙的全部派生口径。
+    // 400 天观察窗口局限：挑战页传「今天 - 400 天 ~ 明天」，窗口外的历史天数不参与统计——
+    // 这是有意取舍：限定窗口可让 GROUP BY 走 bills(date) 索引做轻量响应式聚合；
+    // 全时累计口径（累计记账天数、首笔账）另由下面的 countRecordedDays / getFirstBillDate 补齐。
+    // 支出 = SUM(CASE WHEN 支出类型 THEN amount_minor ELSE 0 END)，整数分累加无浮点误差；
+    // 只记收入的日子 billCount > 0 且 expenseMinor = 0，即「无消费日」。
+    @Query(
+        "SELECT date AS dayStart, COUNT(*) AS billCount, " +
+            "SUM(CASE WHEN bill_type = 'EXPENSE' THEN amount_minor ELSE 0 END) AS expenseMinor " +
+            "FROM bills WHERE deleted = 0 AND date >= :start AND date < :end " +
+            "GROUP BY date ORDER BY date ASC"
+    )
+    fun observeDailySpendStats(start: Long, end: Long): Flow<List<DailySpendStat>>
+
+    // 全时累计记账天数（COUNT DISTINCT date），不受观察窗口限制。
+    @Query("SELECT COUNT(DISTINCT date) FROM bills WHERE deleted = 0")
+    suspend fun countRecordedDays(): Int
+
+    // 首笔账单日期（MIN(date)），还没有任何账单时为 NULL。
+    @Query("SELECT MIN(date) FROM bills WHERE deleted = 0")
+    suspend fun getFirstBillDate(): Long?
 }

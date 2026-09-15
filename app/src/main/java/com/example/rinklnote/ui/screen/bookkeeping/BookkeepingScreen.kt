@@ -103,7 +103,10 @@ fun BookkeepingScreen(
     onOpenBillMap: () -> Unit = {},
     onOpenImport: () -> Unit = {},
     onOpenMultiCurrency: () -> Unit = {},
-    onOpenSearch: () -> Unit = {}
+    onOpenSearch: () -> Unit = {},
+    // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
+    // 默认空实现防接线前编译断。dayStart = 当日 0 点 epoch millis，业务时区）
+    onOpenDay: (Long) -> Unit = {}
 ) {
     val horizonalPadding = 10.dp
 
@@ -245,7 +248,8 @@ fun BookkeepingScreen(
                             viewModel.onEvent(BookkeepingEvent.EditBill(bill))
                             onEditBill(bill)
                         },
-                        onDragFinished = onDragFinished
+                        onDragFinished = onDragFinished,
+                        onOpenDay = onOpenDay
                     )
                     Spacer(modifier = Modifier.height(horizonalPadding))
                 }

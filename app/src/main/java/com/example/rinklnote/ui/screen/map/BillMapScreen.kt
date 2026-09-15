@@ -11,8 +11,10 @@ import android.graphics.drawable.BitmapDrawable
 import android.text.TextPaint
 import android.text.TextUtils
 import android.util.TypedValue
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas as IconCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,14 +40,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -53,15 +61,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
+import com.example.rinklnote.RinklNoteApp
+import com.example.rinklnote.data.db.entity.Bill
+import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 import java.io.File
 import kotlin.math.ceil
+import kotlin.math.roundToLong
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
@@ -70,24 +85,39 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 
+/** 「回到我的位置」标记在 overlays 里的专用 id：重建账单标记时按此豁免，避免定位圆点被误清。 */
+private const val MY_LOCATION_MARKER_ID = "my_location"
+
+/** 定位采集超时（毫秒）：首次自动定位与手动按钮共用。 */
+private const val LOCATE_TIMEOUT_MS = 5000L
+
+/** 同位置聚合网格：0.0001 度 ≈ 11 米（见 [buildBillMarkers] 注释）。 */
+private const val BILL_GRID_DEG = 10_000.0
+
 /**
- * 「账单地图」预实现（路由 `bill-map` 由主会话接线，对应目标 9）。
+ * 「账单地图」（路由 `bill-map`）——真实数据版。
  *
- * 现实约束：bills 表**尚无位置字段（lat/lng）**，无真实账单地点数据——本页按三态流程预实现：
+ * 取数：[RinklNoteApp] 服务定位器自取全量账单 Flow（`BillDao.observeAll` 已过滤 deleted=0），
+ * 内存过滤 latitude/longitude 双非空（只有记账/编辑时点过「位置」的账单才上地图），
+ * 再按 ≈11 米网格聚合成标记（见 [buildBillMarkers]）。
+ *
+ * 流程仍为三态：
  * ① 确认卡：说明「账单地图按消费地点展示账单，需开启定位权限」，「开启」同时请求
  *    ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION（[RequestMultiplePermissions]）→
  * ② 地图态：osmdroid [MapView] + 高德瓦片源（[AmapTileSource]，**无需 API key**、国内可直连；
- *    OSM MAPNIK 会封锁 osmdroid 类默认 UA 导致 AccessBlocked，故弃用），演示标记为
- *    Canvas 合成位图：常驻「分类名 ¥金额」椭圆白雾气泡 + 经典水滴大头针（支出 tertiary 红 /
- *    收入 IncomeGreen），标签直接烧进标记图标，无需点击即始终显示（见 [buildMarkerDrawable]）；
+ *    OSM MAPNIK 会封锁 osmdroid 类默认 UA 导致 AccessBlocked，故弃用）。
+ *    标记为 Canvas 合成位图：常驻「分类名 ¥金额」椭圆白雾气泡 + 经典水滴大头针
+ *    （支出/收入色随收支令牌 expenseColor / incomeColor，标签烧进图标常驻显示，
+ *    见 [buildMarkerDrawable]）。点击标记 = 该点平移居中 + [onOpenBill] 打开代表账单
+ *    （同位置多笔时为最近一笔，气泡附 ×N）。右下角「回到我的位置」悬浮钮：
+ *    [LocationGrabber] 采集一次 → animateTo 并画定位圆点，失败 Toast；
+ *    首次进入地图也会自动尝试一次定位（失败保持默认中心，静默降级）。
+ *    无带位置账单时地图中央显示半透明空态提示卡。
  * ③ 拒绝态：引导卡（说明 + 「去开启」重试 + 返回）。
  *
- * **坐标系说明**：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在数百米级偏移；
- * 演示标记阶段可接受，**接入真实账单位置时需 WGS-84→GCJ-02 纠偏**后再打点。
- *
- * **后续接入点**：bills 表加位置字段后，①删掉 [DemoBillPlaces] 演示标记，改为按账单
- * 聚合真实标记（含 WGS-84→GCJ-02 纠偏）；②初始视野改为按聚合点的包围盒定位
- * （或用户最近一次消费地点）。
+ * **坐标系说明**：账单位置三端统一存 WGS-84 原始度值（[LocationGrabber] 直出，无需换算）；
+ * 高德底图为 GCJ-02（火星坐标），国内打点会有数百米级视觉偏移——本页直接按原始值打点
+ * 不做纠偏（纠偏算法非官方、三端各自实现反而引入不一致），「看消费地点分布」的用途下可接受。
  *
  * 材质沿用 App 既有规范：确认/引导卡 15dp 圆角 + rinkShadow + applyCardGlass，
  * 字阶 18/14/16，页面水平 14dp；有自选背景时卡片透出照片（hazeState 非空即挂毛玻璃能力）。
@@ -96,13 +126,19 @@ import org.osmdroid.views.overlay.Marker
  * @param hazeState nav 层毛玻璃状态；null = 纯色背景兜底
  * @param onBack 返回（顶栏返回键与「返回」按钮共用）
  * @param onRequestEnable 用户在确认卡点「开启」后的后续动作回调（当前可空实现，由调用方注入）
+ * @param onOpenBill 点击账单标记后的打开回调（参数 = 代表账单 id，同位置多笔时为最近一笔）；
+ *                    带默认值空实现——导航层未接线前本页可独立编译运行
+ * @param focusBillId 定向聚焦：非空时进入地图后首次定位到该账单标记并居中放大
+ *                    （供「从账单看位置」类入口传入）；该账单未上地图/无位置时保持默认视野
  */
 @Composable
 fun BillMapScreen(
     backgroundUri: String?,
     hazeState: HazeState?,
     onBack: () -> Unit,
-    onRequestEnable: () -> Unit
+    onRequestEnable: () -> Unit,
+    onOpenBill: (Long) -> Unit = {},
+    focusBillId: Long? = null
 ) {
     val context = LocalContext.current
 
@@ -167,7 +203,11 @@ fun BillMapScreen(
                 onBack = onBack
             )
 
-            MapStep.Map -> MapContent(onBack = onBack)
+            MapStep.Map -> MapContent(
+                onBack = onBack,
+                onOpenBill = onOpenBill,
+                focusBillId = focusBillId
+            )
         }
     }
 }
@@ -309,36 +349,70 @@ private val AmapTileSource: XYTileSource = object : XYTileSource(
 }
 
 /**
- * 演示标记数据：**bills 表位置字段（lat/lng）接入前的占位**。
- * 接入后删除本列表，替换为真实账单按地点聚合的标记（见文件头注释「后续接入点」）。
+ * 聚合后的地图标记模型（真实账单驱动，替代旧演示点）。
  *
- * 坐标系说明：高德底图为 GCJ-02（火星坐标），与 WGS-84 存在偏移——演示标记阶段可接受，
- * **接入真实账单位置时需 WGS-84→GCJ-02 纠偏**后再打点。
- *
- * @param isExpense true = 支出（大头针/标签字色走 tertiary 红），false = 收入（IncomeGreen）
+ * @param representativeBillId 代表账单 id：同位置多笔时取**最近一笔**（bills 按日期倒序，
+ *                              分组首笔即代表），点击标记即打开它
+ * @param position 标记坐标（组内代表账单的经纬度，WGS-84 原始度值）
+ * @param label 气泡文案：「分类名 ¥金额（×N）」，金额走 [Money.formatPlain]
+ * @param isExpense 支出/收入（随代表账单），决定大头针与文字配色
+ * @param count 该位置聚合的账单笔数（>1 时气泡金额后附 ×N）
  */
-private data class DemoBillPlace(
-    val lat: Double,
-    val lng: Double,
-    val category: String,
-    val amountMinor: Long,
-    val isExpense: Boolean
+private data class BillMarkerItem(
+    val representativeBillId: Long,
+    val position: GeoPoint,
+    val label: String,
+    val isExpense: Boolean,
+    val count: Int
 )
 
-private val DemoBillPlaces = listOf(
-    DemoBillPlace(31.2304, 121.4737, "午餐", 2800L, isExpense = true),
-    DemoBillPlace(31.2230, 121.4400, "地铁", 400L, isExpense = true),
-    DemoBillPlace(31.2245, 121.4890, "超市", 9600L, isExpense = true),
-    DemoBillPlace(31.2600, 121.4300, "兼职", 15000L, isExpense = false),
-    DemoBillPlace(31.2380, 121.4560, "红包", 888L, isExpense = false)
-)
+/**
+ * 带位置账单 → 标记聚合。
+ *
+ * **同位置多笔的策略（聚合计数）**：分组键 = 经纬度各自四舍五入到 0.0001 度（≈11 米网格）。
+ * 不按精确 double 匹配的原因：[LocationGrabber] 每次采集天然带米级抖动，同一店铺连续记账
+ * 的两笔几乎不可能得到逐位相同的坐标；11 米内的几笔视为「同一位置」聚成一枚标记，
+ * 气泡显示最近一笔的「分类名 ¥金额」并附 ×N，点击打开最近一笔（[BillMarkerItem.representativeBillId]）。
+ * 入参 bills 来自 `BillDao.observeAll`（date 倒序），因此遍历首笔即组内最近一笔。
+ */
+private fun buildBillMarkers(bills: List<Bill>): List<BillMarkerItem> {
+    if (bills.isEmpty()) return emptyList()
+    val representativeByKey = LinkedHashMap<Pair<Long, Long>, Bill>()
+    val countByKey = HashMap<Pair<Long, Long>, Int>()
+    bills.forEach { bill ->
+        val lat = bill.latitude ?: return@forEach
+        val lng = bill.longitude ?: return@forEach
+        val key = (lat * BILL_GRID_DEG).roundToLong() to (lng * BILL_GRID_DEG).roundToLong()
+        if (!representativeByKey.containsKey(key)) representativeByKey[key] = bill
+        countByKey[key] = (countByKey[key] ?: 0) + 1
+    }
+    return representativeByKey.map { (key, bill) ->
+        val count = countByKey.getValue(key)
+        BillMarkerItem(
+            representativeBillId = bill.id,
+            position = GeoPoint(bill.latitude!!, bill.longitude!!),
+            label = buildString {
+                append(bill.categoryName)
+                append(" ¥")
+                append(Money.formatPlain(bill.amountMinor))
+                if (count > 1) {
+                    append(" ×")
+                    append(count)
+                }
+            },
+            isExpense = bill.billType == BillType.EXPENSE,
+            count = count
+        )
+    }
+}
 
-/** 默认演示城市：上海人民广场一带（无定位数据时的固定初始视野）。 */
+/** 默认初始视野：上海人民广场一带（无 focusBillId 且自动定位失败时的固定兜底中心）。 */
 private val DefaultCenter = GeoPoint(31.2304, 121.4737)
 
 /**
  * 合成标记图标产物：位图 + 针尖纵向锚点（v）——后者交给 [Marker.setAnchor]，
  * 使针尖精确压在坐标点上（气泡再高也不影响定位）。
+ * 「我的位置」圆点标记复用本类，此时 tipAnchorV = 0.5（位图正中）。
  */
 private class MarkerIcon(val drawable: BitmapDrawable, val tipAnchorV: Float)
 
@@ -347,8 +421,8 @@ private class MarkerIcon(val drawable: BitmapDrawable, val tipAnchorV: Float)
  * 画进同一张位图，标签常驻显示、随缩放平移跟手，且无需任何 InfoWindow 状态管理。
  *
  * 自上而下绘制：① 椭圆白雾气泡底图（复用 [R.drawable.map_bubble_bg]，白雾底 + 1dp
- * DefaultCardBorder 描边，观感与原 InfoWindow 气泡一致）；② 12sp 标签文字（支出 tertiary 红 /
- * 收入 IncomeGreen），宽度按 measureText 自适应、超长省略号截断；③ 经典水滴大头针
+ * DefaultCardBorder 描边，观感与原 InfoWindow 气泡一致）；② 12sp 标签文字（支出/收入
+ * 各走收支令牌色），宽度按 measureText 自适应、超长省略号截断；③ 经典水滴大头针
  * （大头圆弧 + 两条切线收拢到针尖 + 中心白点），颜色随收支类型。
  *
  * 尺寸按当前屏幕密度绘制（12sp 字号随系统字体缩放换算 px），保证各分辨率下观感一致；
@@ -367,7 +441,7 @@ private fun buildMarkerDrawable(context: Context, colorArgb: Int, label: String)
         textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, metrics)
         color = colorArgb
     }
-    // 防御性截断：文字最宽约 140dp，超出省略号（演示标签很短，防真实接入后的备注级长文本）
+    // 防御性截断：文字最宽约 140dp，超出省略号（真实分类名/金额文案较长时也安全）
     val text = TextUtils.ellipsize(
         label, textPaint, 140f * density, TextUtils.TruncateAt.END
     ).toString()
@@ -436,14 +510,94 @@ private fun buildMarkerDrawable(context: Context, colorArgb: Int, label: String)
     return MarkerIcon(BitmapDrawable(context.resources, bitmap), tipY / bitmap.height)
 }
 
-@Composable
-private fun MapContent(onBack: () -> Unit) {
-    val context = LocalContext.current
+/**
+ * Canvas 合成「我的位置」标记图标：经典三层同心圆——外圈淡色光晕（主题令牌色 20% 透明）、
+ * 白色描边环、主题色实心圆点；锚点取位图正中（0.5, 0.5，与账单水滴针的针尖锚点不同）。
+ */
+private fun buildMyLocationIcon(context: Context, themeColorArgb: Int): MarkerIcon {
+    val density = context.resources.displayMetrics.density
+    val haloR = 21f * density
+    val ringR = 12f * density
+    val dotR = 6.5f * density
+    val side = ceil(haloR * 2f).toInt().coerceAtLeast(1)
+    val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val c = side / 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // 光晕：仅替换 alpha 字节为 0x33（20%），保留主题色 RGB
+    paint.color = (themeColorArgb and 0x00FFFFFF) or 0x33000000
+    canvas.drawCircle(c, c, haloR, paint)
+    paint.color = 0xFFFFFFFF.toInt()
+    canvas.drawCircle(c, c, ringR, paint)
+    paint.color = themeColorArgb
+    canvas.drawCircle(c, c, dotR, paint)
+    return MarkerIcon(BitmapDrawable(context.resources, bitmap), 0.5f)
+}
 
-    // 收支配色一次性转为 android 层 ARGB int（大头针与常驻标签文字共用）：
-    // 支出 = tertiary（亮色主题即 ExpenseRed #CA3032），收入 = IncomeGreen #04A433
-    val expenseColor = MaterialTheme.colorScheme.tertiary.toArgb()
-    val incomeColor = LocalRinklColors.current.incomeColor.toArgb()
+/**
+ * 在地图上放置/更新「我的位置」圆点标记：先移除旧圆点（按 id 识别），再画新的并刷新。
+ * 返回新标记实例，供调用方持有以便下一次更新。
+ */
+private fun placeMyLocationMarker(
+    mapView: MapView,
+    context: Context,
+    previous: Marker?,
+    themeColorArgb: Int,
+    lat: Double,
+    lng: Double
+): Marker {
+    previous?.let { mapView.overlays.remove(it) }
+    val icon = buildMyLocationIcon(context, themeColorArgb)
+    val marker = Marker(mapView).apply {
+        id = MY_LOCATION_MARKER_ID
+        position = GeoPoint(lat, lng)
+        setIcon(icon.drawable)
+        // 圆点标记以位图正中对准坐标（账单针是针尖锚点，二者不同）
+        setAnchor(Marker.ANCHOR_CENTER, icon.tipAnchorV)
+    }
+    mapView.overlays.add(marker)
+    mapView.invalidate()
+    return marker
+}
+
+/**
+ * 地图态：真实带位置账单标记 + 定位聚焦 + 点击开账单。
+ *
+ * 取数：[RinklNoteApp] 服务定位器自取 `BillRepository.observeAllBills()`（Room 响应式，
+ * 记账/删除后地图实时增减标记），内存过滤「经纬度双非空」（DAO 已滤 deleted=0）。
+ */
+@Composable
+private fun MapContent(
+    onBack: () -> Unit,
+    onOpenBill: (Long) -> Unit,
+    focusBillId: Long?
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    // 主题令牌：支出/收入配色与「我的位置」圆点、悬浮钮都走令牌（自定义主题一键换色生效）
+    val rinklColors = LocalRinklColors.current
+    val themeColor = rinklColors.themeColor
+    val expenseColorArgb = rinklColors.expenseColor.toArgb()
+    val incomeColorArgb = rinklColors.incomeColor.toArgb()
+    val themeColorArgb = themeColor.toArgb()
+
+    // 取数：全量账单 Flow → 内存过滤带位置账单（observeAll 已按日期倒序、已滤 deleted=0）
+    val app = context.applicationContext as RinklNoteApp
+    val allBills by remember(app.repository) { app.repository.observeAllBills() }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val locatedBills = remember(allBills) {
+        allBills.filter { it.latitude != null && it.longitude != null }
+    }
+
+    // 聚合成标记（账单增删改 → locatedBills 变化 → 重算，地图实时刷新）
+    val markerItems = remember(locatedBills) { buildBillMarkers(locatedBills) }
+
+    // 点击回调经 rememberUpdatedState 固定取最新值，避免把 lambda 放进重组 keyed 效应里
+    val currentOnOpenBill by rememberUpdatedState(onOpenBill)
+
+    // 「我的位置」圆点标记实例（自动定位与手动按钮共用，更新时先移除旧实例）
+    var myLocationMarker by remember { mutableStateOf<Marker?>(null) }
 
     // osmdroid 初始化只做一次：UA 必须在首个 MapView 创建前设置——OSM 官方源封锁
     // osmdroid 类默认 UA（AccessBlocked 的根源），改走高德瓦片后沿用应用包名 UA 即可；
@@ -462,28 +616,60 @@ private fun MapContent(onBack: () -> Unit) {
             map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             map.controller.setZoom(11.0)
             map.controller.setCenter(DefaultCenter)
-
-            // 演示标记（占位）：账单位置字段接入后替换为真实聚合数据（需 WGS-84→GCJ-02 纠偏）。
-            // 「分类名 ¥金额」标签常驻合成进标记位图，无需点击展开、无 InfoWindow 状态管理；
-            // 针尖对准坐标点：v 锚点取针尖在合成位图中的纵向比例、u 恒为水平居中
-            // （计算方式见 buildMarkerDrawable 注释）。点击标记把该点平移居中（返回 true 消费触摸）
-            DemoBillPlaces.forEach { place ->
-                val colorArgb = if (place.isExpense) expenseColor else incomeColor
-                val label = "${place.category} ${Money.format(place.amountMinor)}"
-                val markerIcon = buildMarkerDrawable(context, colorArgb, label)
-                map.overlays.add(
-                    Marker(map).apply {
-                        position = GeoPoint(place.lat, place.lng)
-                        icon = markerIcon.drawable
-                        setAnchor(Marker.ANCHOR_CENTER, markerIcon.tipAnchorV)
-                        setOnMarkerClickListener { marker, targetMap ->
-                            targetMap.controller.animateTo(marker.position)
-                            true
-                        }
-                    }
-                )
-            }
         }
+    }
+
+    // 标记随账单数据重建：清掉旧账单标记（「我的位置」圆点按 id 豁免）后整批重画。
+    // 个人账单量级小，整批重建开销可忽略；LaunchedEffect 默认跑在主线程，
+    // 满足 osmdroid「overlay 只能在主线程操作」的要求。
+    LaunchedEffect(mapView, markerItems, expenseColorArgb, incomeColorArgb) {
+        mapView.overlays.removeAll { it is Marker && it.id != MY_LOCATION_MARKER_ID }
+        markerItems.forEach { item ->
+            val colorArgb = if (item.isExpense) expenseColorArgb else incomeColorArgb
+            val markerIcon = buildMarkerDrawable(context, colorArgb, item.label)
+            mapView.overlays.add(
+                Marker(mapView).apply {
+                    // 标记 ↔ 账单关联：id 存代表账单 id，点击时解析回传
+                    id = item.representativeBillId.toString()
+                    position = item.position
+                    setIcon(markerIcon.drawable)
+                    setAnchor(Marker.ANCHOR_CENTER, markerIcon.tipAnchorV)
+                    setOnMarkerClickListener { marker, targetMap ->
+                        // 先把该点平移居中，再回调打开账单（同位置多笔 = 打开最近一笔）
+                        targetMap.controller.animateTo(marker.position)
+                        marker.id.toLongOrNull()?.let(currentOnOpenBill)
+                        true
+                    }
+                }
+            )
+        }
+        mapView.invalidate()
+    }
+
+    // 定向聚焦（focusBillId 优先于自动定位，两个视野不打架）：定位到指定账单标记并居中放大。
+    // 等 locatedBills 首次到齐后再尝试一次；目标账单无位置/已删除时保持默认视野（不重试）。
+    var focusDone by remember { mutableStateOf(false) }
+    LaunchedEffect(mapView, locatedBills) {
+        if (focusBillId == null || focusDone || locatedBills.isEmpty()) return@LaunchedEffect
+        focusDone = true
+        val target = locatedBills.firstOrNull { it.id == focusBillId }
+        if (target != null) {
+            mapView.controller.setZoom(17.0)
+            mapView.controller.animateTo(GeoPoint(target.latitude!!, target.longitude!!))
+        }
+    }
+
+    // 首次进入地图自动尝试一次定位（focusBillId 已指定时跳过）：成功 → 画「我的位置」圆点
+    // 并 animateTo；失败（无权限/无 provider/超时）→ 保持默认中心（上海人民广场一带）
+    // 静默降级，不弹 Toast 打扰首次浏览。
+    LaunchedEffect(mapView) {
+        if (focusBillId != null) return@LaunchedEffect
+        val grabbed = LocationGrabber.grab(context, LOCATE_TIMEOUT_MS) ?: return@LaunchedEffect
+        val (lat, lng) = grabbed
+        myLocationMarker = placeMyLocationMarker(
+            mapView, context, myLocationMarker, themeColorArgb, lat, lng
+        )
+        mapView.controller.animateTo(GeoPoint(lat, lng))
     }
 
     // 生命周期对齐：进出页面启停瓦片下载调度，卸载时解绑（预实现阶段不做 SqlTileWriter 深清理）
@@ -535,6 +721,88 @@ private fun MapContent(onBack: () -> Unit) {
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             )
+        }
+
+        // 空态：还没有任何带位置账单时，地图中央半透明提示卡（文案中文、≥12sp、令牌配色）
+        if (markerItems.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 40.dp)
+                        .rinkShadow(RoundedCornerShape(15.dp))
+                        .clip(RoundedCornerShape(15.dp))
+                        // surface 半透明垫底保证瓦片深浅下都可读，再叠 applyCardGlass 雾面
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.66f))
+                        .then(applyCardGlass(RoundedCornerShape(15.dp)))
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Text(
+                        text = "还没有带位置的账单",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = rinklColors.fontColor
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "记账时点「位置」即可上地图",
+                        fontSize = 12.sp,
+                        color = rinklColors.fontColor.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
+
+        // 右下角「回到我的位置」悬浮钮：点击采集一次定位 → 成功 animateTo 并画定位圆点；
+        // 失败 Toast 提示。MyLocation 图标在 material-icons-extended（项目未引入该依赖，
+        // 本文件也不新增依赖），故用 Canvas 手绘同款「准星」造型：外环 + 中心实心点 + 四向刻度，
+        // 颜色走主题令牌 themeColor（IconCanvas 别名是为了避开 android.graphics.Canvas 重名）。
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 14.dp, bottom = 24.dp)
+                .rinkShadow(CircleShape)
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface)
+                .then(applyCardGlass(CircleShape))
+                .clickable {
+                    scope.launch {
+                        val grabbed = LocationGrabber.grab(context, LOCATE_TIMEOUT_MS)
+                        if (grabbed != null) {
+                            val (lat, lng) = grabbed
+                            myLocationMarker = placeMyLocationMarker(
+                                mapView, context, myLocationMarker, themeColorArgb, lat, lng
+                            )
+                            mapView.controller.animateTo(GeoPoint(lat, lng))
+                        } else {
+                            Toast.makeText(
+                                context, "定位失败，请检查定位权限", Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            IconCanvas(modifier = Modifier.size(22.dp)) {
+                val stroke = size.minDimension / 13f
+                val ringRadius = size.minDimension / 2f * 0.56f
+                val tickInner = ringRadius + stroke * 0.7f
+                val tickOuter = ringRadius + stroke * 1.7f
+                drawCircle(color = themeColor, radius = ringRadius, style = Stroke(width = stroke))
+                drawCircle(color = themeColor, radius = stroke * 1.15f)
+                listOf(
+                    Offset(1f, 0f), Offset(-1f, 0f), Offset(0f, 1f), Offset(0f, -1f)
+                ).forEach { dir ->
+                    drawLine(
+                        color = themeColor,
+                        start = center + dir * tickInner,
+                        end = center + dir * tickOuter,
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
         }
     }
 }

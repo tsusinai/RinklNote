@@ -363,9 +363,9 @@ internal class BillRepositoryImpl(
     }
 
     private suspend fun seedAccounts() {
+        // 新账号只预置「无账户」兜底桶（快速记账需要默认账户落点）；
+        // 微信/支付宝等真实钱包由用户在资产页自建。老用户已有数据不受影响（本函数只在账户数为 0 时执行）。
         val accounts = listOf(
-            Account(name = "微信", iconColor = "#28C145", iconKey = "WECHAT"),
-            Account(name = "支付宝", iconColor = "#06B4FD", iconKey = "ALIPAY"),
             Account(name = ACCOUNT_BUCKET_NAME, iconColor = "#F97D1D", iconKey = "OTHER"),
         )
         for (a in accounts) {

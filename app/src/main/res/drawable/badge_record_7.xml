@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 累计记账 7 天徽章（蓝，单星）：转自 resource/challenge/badge-record-7.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#EAF5FE" />
+    <!-- 账本封皮 -->
+    <path
+        android:pathData="M408,280 H616 A36,36 0 0 1 652,316 V604 A36,36 0 0 1 616,640 H408 A36,36 0 0 1 372,604 V316 A36,36 0 0 1 408,280 Z"
+        android:fillColor="#555555" />
+    <!-- 左侧书脊色条 -->
+    <path
+        android:pathData="M432,280 H452 V640 H432 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 账本内页 -->
+    <path
+        android:pathData="M468,304 H608 A20,20 0 0 1 628,324 V596 A20,20 0 0 1 608,616 H468 A20,20 0 0 1 448,596 V324 A20,20 0 0 1 468,304 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 记账横线三根 -->
+    <path
+        android:pathData="M497,372 H595 A9,9 0 0 1 604,381 A9,9 0 0 1 595,390 H497 A9,9 0 0 1 488,381 A9,9 0 0 1 497,372 Z"
+        android:fillColor="#7EC1FC" />
+    <path
+        android:pathData="M497,452 H595 A9,9 0 0 1 604,461 A9,9 0 0 1 595,470 H497 A9,9 0 0 1 488,461 A9,9 0 0 1 497,452 Z"
+        android:fillColor="#7EC1FC" />
+    <path
+        android:pathData="M497,532 H555 A9,9 0 0 1 564,541 A9,9 0 0 1 555,550 H497 A9,9 0 0 1 488,541 A9,9 0 0 1 497,532 Z"
+        android:fillColor="#7EC1FC" />
+    <!-- 底部金星（translate(512,724) scale(1.5) → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="724"
+        android:scaleX="1.5"
+        android:scaleY="1.5">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+</vector>

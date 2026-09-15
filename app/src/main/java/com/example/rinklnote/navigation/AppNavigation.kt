@@ -88,6 +88,7 @@ import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
+import com.example.rinklnote.ui.screen.challenge.ChallengeScreen
 import com.example.rinklnote.ui.screen.currency.MultiCurrencyScreen
 import com.example.rinklnote.ui.screen.importbills.BillImportViewModel
 import com.example.rinklnote.ui.screen.importbills.ImportBillsScreen
@@ -98,6 +99,7 @@ import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.search.BillSearchViewModel
 import com.example.rinklnote.ui.screen.search.SearchBillsScreen
+import com.example.rinklnote.ui.screen.day.DayBillsScreen
 import com.example.rinklnote.ui.screen.web.WebScreen
 import com.example.rinklnote.ui.screen.profile.BindQQPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
@@ -489,8 +491,13 @@ fun AppNavigation(app: RinklNoteApp) {
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         onEditBudget = { navController.navigate("budget-edit") },
-                        onOpenCategoryBudgets = { navController.navigate("budget-categories") }
+                        onOpenCategoryBudgets = { navController.navigate("budget-categories") },
+                        onOpenChallenges = { navController.navigate("challenges") }
                     )
+                }
+                // 省钱挑战：计划 tab 下属的二级页（非 tab 路由 → 底栏自动隐藏，默认缩放淡入转场）。
+                composable("challenges") {
+                    ChallengeScreen(onBack = { navController.popBackStack() })
                 }
                 composable("budget-categories") {
                     // 分类预算设置独立页：从计划页入口进入，点分类跳预算编辑（共享 VM 编辑态）。
@@ -522,13 +529,32 @@ fun AppNavigation(app: RinklNoteApp) {
                         hazeState = hazeState
                     )
                 }
-                composable("bill-map") {
-                    // 账单地图预实现：开启确认与定位权限在页面内完成。
+                composable(
+                    route = "bill-map",
+                    arguments = listOf(
+                        navArgument("focusBillId") {
+                            type = NavType.LongType
+                            defaultValue = -1L
+                        }
+                    )
+                ) { entry ->
+                    // 账单地图：展示真实带位置账单，支持定位聚焦；点击标记进入对应账单编辑。
+                    val mapScope = rememberCoroutineScope()
+                    val focusBillId = entry.arguments?.getLong("focusBillId")?.takeIf { it != -1L }
                     BillMapScreen(
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         onBack = { navController.popBackStack() },
-                        onRequestEnable = { /* 开启动作已由页面内确认卡承担，此处预留埋点 */ }
+                        onRequestEnable = { /* 开启动作已由页面内确认卡承担，此处预留埋点 */ },
+                        onOpenBill = { billId ->
+                            mapScope.launch {
+                                app.database.billDao().getById(billId)?.let { bill ->
+                                    bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                                    navController.navigate("bill-edit")
+                                }
+                            }
+                        },
+                        focusBillId = focusBillId
                     )
                 }
                 composable("multi-currency") {
@@ -554,6 +580,25 @@ fun AppNavigation(app: RinklNoteApp) {
                             navController.navigate("bill-edit")
                         },
                         onBack = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = "day-detail/{dayStart}",
+                    arguments = listOf(navArgument("dayStart") { type = NavType.LongType })
+                ) { entry ->
+                    // 当天账单数据页：独立路由，支持导出账单图分享；行点击跳账单编辑。
+                    val dayScope = rememberCoroutineScope()
+                    DayBillsScreen(
+                        dayStart = entry.arguments?.getLong("dayStart") ?: 0L,
+                        onBack = { navController.popBackStack() },
+                        onEditBill = { billId ->
+                            dayScope.launch {
+                                app.database.billDao().getById(billId)?.let { bill ->
+                                    bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                                    navController.navigate("bill-edit")
+                                }
+                            }
+                        }
                     )
                 }
                 composable(
@@ -634,7 +679,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenBillMap = { navController.navigate("bill-map") },
                         onOpenImport = { navController.navigate("bill-import") },
                         onOpenMultiCurrency = { navController.navigate("multi-currency") },
-                        onOpenSearch = { navController.navigate("bill-search") }
+                        onOpenSearch = { navController.navigate("bill-search") },
+                        onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") }
                     )
 
                 }
@@ -735,7 +781,8 @@ fun AppNavigation(app: RinklNoteApp) {
                     AiScreen(
                         viewModel = aiVM,
                         isLoggedIn = authState.isLoggedIn,
-                        onVoiceInput = { startVoice(VoiceTarget.AI) }
+                        onVoiceInput = { startVoice(VoiceTarget.AI) },
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 // 自定义主题：非 tab 路由 → 底栏自动隐藏、内容区占满全屏。
@@ -933,7 +980,9 @@ fun AppNavigation(app: RinklNoteApp) {
                 botBound = authState.botBound,
                 onOpenWeb = {
                     showQqBotGuide = false
-                    val guideUrl = RetrofitClient.BASE_URL + "settings"
+                    // Web 端 settings 是 /console 的子路由（真实路径 /console/settings）；
+                    // 深链到不存在的 /settings 会让 vue-router 空渲染（WebView 白屏的根因）
+                    val guideUrl = RetrofitClient.BASE_URL + "console/settings"
                     navController.navigate(
                         "web-view?url=${Uri.encode(guideUrl)}&title=${Uri.encode("QQ 机器人引导")}"
                     )

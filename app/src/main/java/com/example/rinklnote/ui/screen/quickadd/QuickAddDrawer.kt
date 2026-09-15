@@ -5,6 +5,7 @@ import java.util.Locale
 
 import android.annotation.SuppressLint
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -45,19 +46,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -85,10 +92,12 @@ import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.util.rememberPressHaptics
+import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun QuickAddDrawer(
@@ -251,7 +260,18 @@ private fun DrawerContent(
 
             AccountSection(state.accounts, state.selectedAccount, balanceHidden, viewModel)
 
-            Spacer(modifier = Modifier.height(17.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 位置打点：默认不采集，点 chip 取当前位置；再点取消（见 LocationChipRow）
+            LocationChipRow(
+                location = state.location,
+                onResolved = { lat, lng ->
+                    viewModel.onEvent(QuickAddEvent.LocationResolved(lat, lng))
+                },
+                onCleared = { viewModel.onEvent(QuickAddEvent.ClearLocation) }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Count area — single-step amount box
             CountBefore(state, onAmountTap, onToggleType)
@@ -703,6 +723,77 @@ private fun CountBefore(
             fontSize = 12.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+        )
+    }
+}
+
+/**
+ * 位置打点 chip（快捷记账）：默认「位置」不采集；点一下采集当前位置一次，
+ * 成功显示「已定位 · 可再点取消」（再点取消），失败 Toast 提示检查定位权限。
+ * 采集动作在 UI 层执行（VM 不持有 Context），经纬度经事件回填 VM 状态，
+ * 键盘「确认」落库时才带上。
+ */
+@Composable
+private fun LocationChipRow(
+    location: QuickAddState.LocationTag?,
+    onResolved: (Double, Double) -> Unit,
+    onCleared: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var locating by remember { mutableStateOf(false) }
+    val rinkl = LocalRinklColors.current
+    val located = location != null
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                if (located) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+                }
+            )
+            .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(14.dp)))
+            .clickable {
+                if (located) {
+                    onCleared()
+                } else if (!locating) {
+                    locating = true
+                    scope.launch {
+                        val got = LocationGrabber.grab(context)
+                        locating = false
+                        if (got != null) {
+                            onResolved(got.first, got.second)
+                        } else {
+                            Toast.makeText(context, "定位失败，请检查定位权限", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.LocationOn,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            // 已定位 → 主题色令牌（PRIMARY 槽）；未定位 → 图标令牌（ICON 槽，未自定义回落灰）
+            tint = if (located) rinkl.themeColor else rinkl.iconButtonColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = when {
+                locating -> "定位中…"
+                located -> "已定位 · 可再点取消"
+                else -> "位置"
+            },
+            fontSize = 12.sp,
+            color = if (located) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
     }
 }

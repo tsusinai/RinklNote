@@ -21,6 +21,10 @@ object BillsTable : Table("bills") {
     val updatedAt = long("updated_at").nullable()
     // 同日内显式排序名次（App 端拖动重排）；NULL = 未排序。
     val sortOrder = long("sort_order").nullable()
+    // 经纬度（度）：仅用户主动打点的账单才有值；NULL = 未打点（老账单/QQ/AI 来源恒为 NULL）。
+    // createMissingTablesAndColumns 会自动给既有库补可空列，无需手写 ALTER。
+    val latitude = double("latitude").nullable()
+    val longitude = double("longitude").nullable()
     val deleted = bool("deleted").default(false)
 
     override val primaryKey = PrimaryKey(id)

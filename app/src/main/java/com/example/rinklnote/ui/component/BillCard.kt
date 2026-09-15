@@ -65,6 +65,8 @@ fun BillCard(
     dragHost: BillDragHost,
     onEdit: (Bill) -> Unit,
     onDragFinished: () -> Unit,
+    // 日期头整行点击 → 打开「当天账单」页（默认空实现：未接线时点了无反应，不影响既有调用）
+    onOpenDay: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -87,7 +89,10 @@ fun BillCard(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // 日期头整行可点：进入「当天账单」页（只加在头部，不碰行内长按拖动手势）
+                .clickable { onOpenDay(date) },
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {

@@ -118,7 +118,7 @@ class AiAssistServiceTest {
     fun `balance sums all accounts`() {
         val r = service.balance(1L)
         assertEquals(0.0, r.total, 0.001)
-        assertTrue(r.accounts.isNotEmpty())   // 微信/支付宝/无账户
+        assertTrue(r.accounts.isNotEmpty())   // 无账户（新账号只预置兜底桶）
         assertTrue(r.reply.contains("余额合计"))
     }
 

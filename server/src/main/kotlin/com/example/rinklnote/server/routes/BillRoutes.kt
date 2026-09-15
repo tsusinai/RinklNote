@@ -30,7 +30,10 @@ data class CreateBillRequest(
     val remark: String? = null,
     val date: Long? = null,
     val baseUpdatedAt: Long? = null, // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
-    val sortOrder: Long? = null // 同日内显式排序名次（App 端拖动重排）
+    val sortOrder: Long? = null, // 同日内显式排序名次（App 端拖动重排）
+    // 经纬度（度）：仅用户主动打点的账单才有值；null = 未打点（老客户端不发，忽略即可）。
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 @Serializable
@@ -114,7 +117,9 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         accountId = body.accountId,
                         remark = body.remark,
                         date = body.date,
-                        sortOrder = body.sortOrder
+                        sortOrder = body.sortOrder,
+                        latitude = body.latitude,
+                        longitude = body.longitude
                     )
                     call.respond(HttpStatusCode.Created, bill)
                 } catch (e: IllegalArgumentException) {
@@ -168,6 +173,9 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         it[BillsTable.accountId] = body.accountId
                         it[BillsTable.remark] = body.remark
                         it[BillsTable.sortOrder] = body.sortOrder
+                        // PUT 是全量替换语义（与 remark 等字段一致）：传 null 即清除打点。
+                        it[BillsTable.latitude] = body.latitude
+                        it[BillsTable.longitude] = body.longitude
                         it[BillsTable.updatedAt] = now
                     }
 
@@ -177,7 +185,8 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         subCategoryName = body.subCategoryName, accountId = body.accountId,
                         remark = body.remark, date = row[BillsTable.date],
                         source = row[BillsTable.billSource], createdAt = row[BillsTable.createdAt],
-                        updatedAt = now, sortOrder = body.sortOrder
+                        updatedAt = now, sortOrder = body.sortOrder,
+                        latitude = body.latitude, longitude = body.longitude
                     )
                 }
 

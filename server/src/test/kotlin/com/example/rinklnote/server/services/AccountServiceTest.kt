@@ -45,15 +45,15 @@ class AccountServiceTest {
     }
 
     @Test
-    fun `ensureDefaultAccounts seeds the 3 defaults once and is idempotent`() {
+    fun `ensureDefaultAccounts seeds only the bucket account and is idempotent`() {
         service.ensureDefaultAccounts(1L)
-        assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
+        assertEquals(listOf("无账户"), service.accountsFor(1L).map { it.name })
         assertEquals(
-            listOf("WECHAT", "ALIPAY", "OTHER"),
+            listOf("OTHER"),
             service.accountsFor(1L).map { it.iconKey }
         )
         service.ensureDefaultAccounts(1L)
-        assertEquals(listOf("微信", "支付宝", "无账户"), service.accountsFor(1L).map { it.name })
+        assertEquals(listOf("无账户"), service.accountsFor(1L).map { it.name })
     }
 
     @Test
@@ -61,8 +61,8 @@ class AccountServiceTest {
         val w = service.createAccount(1L, "招商银行", "#123456", 0L, "BANK_CARD")
         assertTrue(w.id > 0)
         assertEquals("BANK_CARD", w.iconKey)
-        // 自定义账户与默认账户共存（无顺序要求）
-        assertEquals(setOf("微信", "支付宝", "无账户", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
+        // 自定义账户与默认兜底账户共存（无顺序要求）
+        assertEquals(setOf("无账户", "招商银行"), service.accountsFor(1L).map { it.name }.toSet())
     }
 
     @Test
@@ -103,15 +103,15 @@ class AccountServiceTest {
     @Test(expected = IllegalArgumentException::class)
     fun `createAccount rejects a duplicate name`() {
         service.ensureDefaultAccounts(1L)
-        service.createAccount(1L, "微信", "#000000", 0L)
+        service.createAccount(1L, "无账户", "#000000", 0L)
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun `renameAccount rejects renaming to an existing sibling`() {
         service.ensureDefaultAccounts(1L)
         val custom = service.createAccount(1L, "招商银行", "#123456", 0L)
-        val wechat = service.accountsFor(1L).first { it.name == "微信" }
-        service.renameAccount(wechat.id, 1L, "招商银行", "#000000")
+        val bucket = service.accountsFor(1L).first { it.name == "无账户" }
+        service.renameAccount(bucket.id, 1L, "招商银行", "#000000")
     }
 
     @Test
@@ -127,7 +127,7 @@ class AccountServiceTest {
         service.ensureDefaultAccounts(1L)
         service.ensureDefaultAccounts(2L)
         service.createAccount(1L, "招商银行", "#123456", 0L)
-        assertEquals(4, service.accountsFor(1L).size)
-        assertEquals(3, service.accountsFor(2L).size) // 用户2没有自定义账户
+        assertEquals(2, service.accountsFor(1L).size)
+        assertEquals(1, service.accountsFor(2L).size) // 用户2没有自定义账户，只有兜底桶
     }
 }

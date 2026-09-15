@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 每周预算 · 挑战卡图标（绿环钱包）：转自 resource/challenge/icon-challenge-budget.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#04A433" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#E4F4E7" />
+    <!-- 旗杆 -->
+    <path
+        android:pathData="M512,300 A10,10 0 0 1 522,310 V460 A10,10 0 0 1 512,470 A10,10 0 0 1 502,460 V310 A10,10 0 0 1 512,300 Z"
+        android:fillColor="#555555" />
+    <!-- 旗面 -->
+    <path
+        android:pathData="M512,310 L668,360 L512,410 Z"
+        android:fillColor="#04A433" />
+    <!-- 钱包主体 -->
+    <path
+        android:pathData="M356,460 H668 A44,44 0 0 1 712,504 V676 A44,44 0 0 1 668,720 H356 A44,44 0 0 1 312,676 V504 A44,44 0 0 1 356,460 Z"
+        android:fillColor="#555555" />
+    <!-- 钱包翻盖 -->
+    <path
+        android:pathData="M372,492 H652 A28,28 0 0 1 680,520 V660 A28,28 0 0 1 652,688 H372 A28,28 0 0 1 344,660 V520 A28,28 0 0 1 372,492 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- 搭扣 -->
+    <path
+        android:pathData="M586,590 A34,34 0 1 1 654,590 A34,34 0 1 1 586,590 Z"
+        android:fillColor="#04A433" />
+</vector>

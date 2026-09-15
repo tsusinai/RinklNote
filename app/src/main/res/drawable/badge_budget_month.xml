@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 单月不超支徽章（绿，仪表盘单星）：转自 resource/challenge/badge-budget-month.svg（纯填充无降级）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
+    <!-- 外环 -->
+    <path
+        android:pathData="M112,512 A400,400 0 1 1 912,512 A400,400 0 1 1 112,512 Z"
+        android:fillColor="#04A433" />
+    <!-- 内底 -->
+    <path
+        android:pathData="M168,512 A344,344 0 1 1 856,512 A344,344 0 1 1 168,512 Z"
+        android:fillColor="#E4F4E7" />
+    <!-- 仪表盘半环 -->
+    <path
+        android:pathData="M312,560 A200,200 0 0 1 712,560 L664,560 A148,148 0 0 0 360,560 Z"
+        android:fillColor="#555555" />
+    <!-- 指针（rotate(35) → group 旋转，围绕 512,560） -->
+    <group
+        android:rotation="35"
+        android:pivotX="512"
+        android:pivotY="560">
+        <path
+            android:pathData="M512,416 A12,12 0 0 1 524,428 V548 A12,12 0 0 1 512,560 A12,12 0 0 1 500,548 V428 A12,12 0 0 1 512,416 Z"
+            android:fillColor="#04A433" />
+    </group>
+    <!-- 轴心 -->
+    <path
+        android:pathData="M482,560 A30,30 0 1 1 542,560 A30,30 0 1 1 482,560 Z"
+        android:fillColor="#555555" />
+    <!-- 底座 -->
+    <path
+        android:pathData="M404,630 H620 A12,12 0 0 1 632,642 A12,12 0 0 1 620,654 H404 A12,12 0 0 1 392,642 A12,12 0 0 1 404,630 Z"
+        android:fillColor="#555555" />
+    <!-- 底部单星（translate+scale → group 平移 + 缩放） -->
+    <group
+        android:translateX="512"
+        android:translateY="736"
+        android:scaleX="1.5"
+        android:scaleY="1.5">
+        <path
+            android:pathData="M0,-40L9.4,-12.9L38,-12.4L15.2,4.9L23.6,32.4L0,16L-23.6,32.4L-15.2,4.9L-38,-12.4L-9.4,-12.9Z"
+            android:fillColor="#F8B62D" />
+    </group>
+</vector>
