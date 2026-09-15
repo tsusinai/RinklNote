@@ -1,7 +1,9 @@
 package com.example.rinklnote.ui.screen.login
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -36,8 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.pressScale
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 
@@ -59,6 +69,8 @@ fun LoginPage(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
+    // 第三方登录占位按钮的 Toast 用
+    val context = LocalContext.current
 
     // —— UI 层校验（R3-A4）：点击登录/注册（或键盘 Done）时判断，不通过则不派发 Login/Register 事件，
     //    避免拿明显非法的手机号/密码去打服务端。字段级错误在重新输入时即清除。
@@ -261,6 +273,57 @@ fun LoginPage(
                     Spacer(modifier = Modifier.height(16.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
+
+                // —— 其他登录方式（占位入口，暂不可用）——
+                // TODO 其他登录方式：QQ 可后续接服务端 qq-login 端点（server AuthRoutes 已有），微信需新增端点
+                Spacer(modifier = Modifier.height(32.dp))
+                // 分割行：中间 12sp 说明文字，左右各一段发丝线（1 物理像素 + 边框令牌色，与 RinklDivider 同规格；
+                // RinklDivider 只支持 endInset 单侧留白，做不了文字两侧对称线，故用 weight Box 等效实现）
+                val hairline = with(LocalDensity.current) { 1f.toDp() }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(hairline)
+                            .background(LocalRinklColors.current.dividerColor)
+                    )
+                    Text(
+                        text = "其他登录方式",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(hairline)
+                            .background(LocalRinklColors.current.dividerColor)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                // 圆形占位按钮：Row 不占满宽度，由外层 Column 的 CenterHorizontally 居中；
+                // 品牌色为官方固定值（微信 #07C160 / QQ #12B7F5），非主题语义色，不走 RinklColors 令牌
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SocialLoginCircle(
+                        label = "微信登录",
+                        char = "微",
+                        backgroundColor = Color(0xFF07C160),
+                        onClick = {
+                            Toast.makeText(context, "暂未开放，敬请期待", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    SocialLoginCircle(
+                        label = "QQ 登录",
+                        char = "Q",
+                        backgroundColor = Color(0xFF12B7F5),
+                        onClick = {
+                            Toast.makeText(context, "暂未开放，敬请期待", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
             }
         }
     }
@@ -274,6 +337,39 @@ fun LoginPage(
             confirmButton = {
                 TextButton(onClick = { showForgotDialog = false }) { Text("确定") }
             }
+        )
+    }
+}
+
+/**
+ * 第三方登录圆形占位按钮：48dp 品牌色圆底 + 白色单字，点击仅弹 Toast（登录能力暂未开放）。
+ * 品牌色为官方固定值，不属 App 主题语义色，故不走 RinklColors 令牌；后续接通真实登录时再替换官方图标。
+ *
+ * @param label 无障碍描述（TalkBack 朗读 + 点击动作标签），如「微信登录」
+ * @param char 圆底上的单字，如「微」/「Q」（项目无微信/QQ 图标资源，用文字最稳）
+ * @param backgroundColor 品牌底色（微信 #07C160 / QQ #12B7F5）
+ * @param onClick 点击回调（当前只弹「暂未开放，敬请期待」Toast）
+ */
+@Composable
+private fun SocialLoginCircle(
+    label: String,
+    char: String,
+    backgroundColor: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = char,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White
         )
     }
 }

@@ -9,7 +9,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,8 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.screen.bookkeeping.BillDragHost
-import com.example.rinklnote.ui.theme.DarkIncomeGreen
-import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.toDateString
@@ -99,7 +97,8 @@ fun BillCard(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+            // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+            val incomeGreen = LocalRinklColors.current.incomeColor
             val sign = if (totalAmount >= 0) "+" else "-"
             // 缓存金额格式化（重组时不重复计算）；金额为「分」，展示统一走 Money.format。
             val totalText = remember(totalAmount) {
@@ -217,7 +216,8 @@ internal fun BillRowContent(
     remark: String?,
     modifier: Modifier = Modifier
 ) {
-    val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+    // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+    val incomeGreen = LocalRinklColors.current.incomeColor
     val isExpense = billType == "EXPENSE"
     // 缓存金额格式化（重组时不重复计算）；金额为「分」，展示统一走 Money.format。
     val amountText = remember(amountMinor, isExpense) {

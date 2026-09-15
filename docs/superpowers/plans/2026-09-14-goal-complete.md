@@ -141,3 +141,36 @@ applyCardGlass 读 cardOverlayEnabled，开启时 border 前插白色蒙版 back
 - 集成 R3-2：AppNavigation 接 bill-search 路由与 CustomBottomBar navIconColor；编译 + 测试 + 提交。
 
 ## 终局：真机安装 + web build 验证 + 合并 main + 推送。
+
+---
+
+# 第四轮（2026-09-15，用户 6 项）
+
+## R4-A1（MoreDrawer.kt 独占）
+顶部 padding 继续优化：审计当前链（面板 0.88h 居中 + vertical 8dp + 内容列 statusBarsPadding + top 12dp）
+是否存在叠加/错位，给出干净的顶部节奏（状态栏 → 呼吸 → 头像区，单一来源），报告前后数值对比。
+
+## R4-A2（HazeBackground.kt 独占）
+卡片白蒙版柔化：亮色由 White 55% 改灰白更柔和（建议 #F2F3F5 @ ~0.42 或等效），暗色 Black 35% 同步柔化（~0.28），
+保持文字可读性与 ApplyCardGlass 语义；更新 KDoc 与取值理由。
+
+## R4-A3（LoginScreen.kt 独占）
+登录页预留其他登录方式：按钮区下方「— 其他登录方式 —」分割线 + 两个圆形占位按钮（微信/QQ），
+点击 Toast「暂未开放，敬请期待」；TODO 注释（QQ 可后续接服务端 qq-login 端点）。不引入新依赖。
+
+## R4-A4（SearchBillsScreen.kt 独占）
+分类筛选 UI 重构：集成到搜索栏**上方**且为 Row——每个分类占一个 box（横向滚动），
+点击 box 选中/取消该分类筛选；行尾「全部 ▾」box 点击经 AnimatedContent/Motion 动画展开
+扩展卡片（网格展示全部分类，多选或单选与现有 filter 对齐，再点收起）。动画走 Motion 令牌。
+
+## R4-A5（收支颜色个性化）
+RinklColors.kt（EXPENSE/INCOME 第 9/10 槽 + expenseColor/incomeColor 字段，默认按 dark 给
+ExpenseRed/DarkExpenseRed? tertiary 语义与 DarkIncomeGreen/IncomeGreen）、Theme.kt（colorScheme.tertiary = expenseColor）、
+SettingsManager.kt（theme_expense_color/theme_income_color）、MainActivity.kt（传参）、
+CustomThemeScreen.kt（两行 UI）、消费点替换：BillCard.kt/SummaryBar.kt/MonthDetailOverlay.kt/QuickAddDrawer.kt/BillEditOverlay.kt
+的 IncomeGreen 直引改 LocalRinklColors.incomeColor（SearchBillsScreen 由主会话集成替换）。
+
+## R4-A6（主会话自做）
+补全 toast 提醒：编辑账单保存「已保存」/删除「已删除」、预算确认「预算已更新」、导入完成「成功导入 N 笔」等关键动作 Toast（android.widget.Toast，导航层与页面内就地补）。
+
+## 集成 R4：SearchBillsScreen 收支色令牌替换、编译 + 测试 + 提交。

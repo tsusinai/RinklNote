@@ -11,14 +11,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +54,7 @@ import dev.chrisbanes.haze.hazeEffect
  *
  * 实现方式对齐 [com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer]：
  * Box 层级 + AnimatedVisibility（slideInHorizontally，走 Motion 令牌）；
+ * 面板满高顶天立地（不做 0.88h 居中悬浮），顶部节奏 = 状态栏避让 + 12dp 呼吸，单一来源；
  * 面板材质同款「雾面玻璃」（[RinklCardFrostedStyle] + [applyCardGlass]）——
  * `hazeState` 非空才挂 `hazeEffect`（有自选背景时由 nav 层传入），否则回落纯白实心。
  *
@@ -118,13 +124,14 @@ fun MoreDrawer(
                     ) { onDismiss() }
             )
 
-            // 抽屉面板：左缘贴边、宽 200dp、高 88%（几何对齐 QuickAddDrawer 面板，左右镜像）、右缘 18dp 圆角
+            // 抽屉面板：左缘贴边、宽 200dp、满高顶天立地、右缘 18dp 圆角。
+            // 不再用 0.88h 居中（那是底部抽屉 QuickAddDrawer 的镜像几何——空隙落在左右不显眼，
+            // 镜像到竖轴后顶部/底部各留 ~6% 空隙，与状态栏避让、内边距层层叠加，头部离屏顶过远）；
+            // 顶部节奏统一由 DrawerContent 的「状态栏避让 + 12dp 呼吸」单一来源承担
             Box(
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight(0.88f)
+                    .fillMaxHeight()
                     .width(200.dp)
-                    .padding(vertical = 8.dp)
                     .clip(panelShape)
                     .then(panelSurface)
                     .then(applyCardGlass(panelShape))
@@ -168,17 +175,24 @@ private fun DrawerContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            // 个人信息区避让状态栏：面板上缘可能顶进状态栏，内容整体下压
+            // 顶部节奏单一来源：状态栏避让（系统 insets，唯一系统层）+ 固定 12dp 呼吸（唯一呼吸层），
+            // 此后头像区不再叠加任何顶部间距（此前 12/10/8dp 三层内边距叠加已移除）
             .statusBarsPadding()
-            // 顶部呼吸：状态栏避让后再垫 12dp，头像区不顶死状态栏
             .padding(top = 12.dp)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            // 内容列左右留白 12dp（头像区行内再补 4dp 凑 16dp；列表行内自带 16dp 内边距）
+            .padding(horizontal = 12.dp)
+            // 底部兜底：面板满高后伸到手势条下面，只避让 Bottom 一侧（避免横屏时侧边
+            // 导航条 inset 把面板内容挤偏），再垫 8dp 收尾，末行「关于」不顶死手势条
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+            .padding(bottom = 8.dp)
     ) {
         // ---- 顶部个人信息区 ----
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 12.dp),
+                // 顶部间距统一交给内容列（状态栏避让 + 12dp 呼吸），行内不再留 top；
+                // 左右 4dp 叠加内容列 12dp = 头像区距面板缘 16dp，行内 CenterVertically 垂直居中
+                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AvatarBadge(

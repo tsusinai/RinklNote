@@ -58,7 +58,6 @@ import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklTopBarContentHeight
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -375,6 +374,8 @@ private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
 @Composable
 private fun DetailRow(bill: Bill, onEditBill: (Bill) -> Unit) {
     val isExpense = bill.billType == BillType.EXPENSE
+    // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+    val incomeColor = LocalRinklColors.current.incomeColor
     val localDate = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
     val dateLabel = "${localDate.monthValue}月${localDate.dayOfMonth}日"
     Row(
@@ -393,7 +394,7 @@ private fun DetailRow(bill: Bill, onEditBill: (Bill) -> Unit) {
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen)
+                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else incomeColor)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -415,7 +416,7 @@ private fun DetailRow(bill: Bill, onEditBill: (Bill) -> Unit) {
             text = (if (isExpense) "-" else "+") + Money.format(bill.amountMinor),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else incomeColor
         )
     }
 }

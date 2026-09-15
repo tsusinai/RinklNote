@@ -39,7 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.rememberPressHaptics
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
@@ -202,7 +202,7 @@ private fun AmountDisplay(
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor
         )
     }
 }
@@ -229,7 +229,7 @@ private fun TypeToggle(
             text = if (isExpense) "支出" else "收入",
             fontSize = 18.sp,
             fontWeight = FontWeight.Normal,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor
         )
     }
 }

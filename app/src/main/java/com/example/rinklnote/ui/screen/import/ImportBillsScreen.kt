@@ -44,13 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
-import com.example.rinklnote.ui.theme.DarkIncomeGreen
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -81,6 +82,18 @@ fun ImportBillsScreen(
     hazeState: HazeState? = null
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // 导入完成 toast 补提醒：页面内已有完成卡片，toast 让用户返回后也能感知结果。
+    LaunchedEffect(state.phase) {
+        if (state.phase == ImportPhase.DONE) {
+            Toast.makeText(
+                context,
+                "成功导入 ${state.importedCount} 笔账单",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     // 文件选择器：文件管理器对 CSV 的 MIME 标注五花八门（text/csv、octet-stream、vnd.ms-excel
     // 皆有），过滤器收窄反而选不到，故放开为任意文件，格式问题交给解析阶段容错提示。
@@ -318,7 +331,7 @@ private fun PreviewCard(rows: List<ImportableRow>) {
 private fun PreviewRow(row: ImportableRow) {
     val bill = row.bill
     val isExpense = bill.billType == BillType.EXPENSE
-    val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+    val incomeGreen = LocalRinklColors.current.incomeColor
     val remark = bill.remark
     Row(
         modifier = Modifier

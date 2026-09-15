@@ -46,8 +46,6 @@ import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.ui.theme.DarkIncomeGreen
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
@@ -316,7 +314,7 @@ private fun TotalBudgetCard(
 @Composable
 private fun LastMonthSurplusRow(surplusMinor: Long) {
     val sign = if (surplusMinor >= 0) "+" else "-"
-    val incomeGreen = if (isSystemInDarkTheme()) DarkIncomeGreen else IncomeGreen
+    val incomeGreen = LocalRinklColors.current.incomeColor
     val color = if (surplusMinor >= 0) incomeGreen else MaterialTheme.colorScheme.error
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(

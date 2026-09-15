@@ -57,7 +57,6 @@ import com.example.rinklnote.R
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
@@ -444,7 +443,7 @@ private fun MapContent(onBack: () -> Unit) {
     // 收支配色一次性转为 android 层 ARGB int（大头针与常驻标签文字共用）：
     // 支出 = tertiary（亮色主题即 ExpenseRed #CA3032），收入 = IncomeGreen #04A433
     val expenseColor = MaterialTheme.colorScheme.tertiary.toArgb()
-    val incomeColor = IncomeGreen.toArgb()
+    val incomeColor = LocalRinklColors.current.incomeColor.toArgb()
 
     // osmdroid 初始化只做一次：UA 必须在首个 MapView 创建前设置——OSM 官方源封锁
     // osmdroid 类默认 UA（AccessBlocked 的根源），改走高德瓦片后沿用应用包名 UA 即可；

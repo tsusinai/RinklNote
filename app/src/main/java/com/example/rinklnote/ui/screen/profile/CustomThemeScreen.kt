@@ -86,9 +86,10 @@ import kotlinx.coroutines.launch
  * 设计沿用 App 既有风格：纯白/照片背景 + 透明玻璃卡（[applyCardGlass]）+ 极简悬浮顶栏
  * + 4/8/12/16dp 间距梯度，和「我的」页的分组卡完全同构。
  *
- * 8 个可调槽位（[RinklThemeSlot]）：
+ * 10 个可调槽位（[RinklThemeSlot]）：
  * 1. 字体颜色 2. 主题色 3. 顶栏标题色 4. 图标/按钮色 5. 边框色（分割线跟随）
  * 6. 热力图颜色（深浅自动分配） 7. 折线/柱状颜色（不影响饼图配色） 8. 导航图标色（底栏独立色）
+ * 9. 支出颜色（支出金额与标记） 10. 收入颜色（收入金额与标记）
  *
  * 点任一行 → 底部色盘面板（预设色板 + HSV 自选色盘 + 十六进制输入 + 恢复默认）；
  * 「推荐配色」可一键写满 5 个槽位。所有改动即时写入 DataStore，
@@ -122,6 +123,9 @@ fun CustomThemeScreen(
         RinklThemeSlot.CHART -> colors.chartColor
         // 未自定义时底栏图标跟随 onSurface（与 CustomBottomBar 的既有回落一致；onSurface 已随字体色槽联动）。
         RinklThemeSlot.NAV_ICON -> colors.navIconColor ?: MaterialTheme.colorScheme.onSurface
+        // 收支两槽一定非空：未自定义时 rinklColorsOf 已按 dark 给默认色（亮 ExpenseRed/IncomeGreen，暗深色变体）。
+        RinklThemeSlot.EXPENSE -> colors.expenseColor
+        RinklThemeSlot.INCOME -> colors.incomeColor
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -213,6 +217,8 @@ private fun slotLabel(slot: RinklThemeSlot): String = when (slot) {
     RinklThemeSlot.HEATMAP -> "热力图颜色"
     RinklThemeSlot.CHART -> "折线/柱状颜色"
     RinklThemeSlot.NAV_ICON -> "导航图标色"
+    RinklThemeSlot.EXPENSE -> "支出颜色"
+    RinklThemeSlot.INCOME -> "收入颜色"
 }
 
 private fun slotDescription(slot: RinklThemeSlot): String = when (slot) {
@@ -224,6 +230,8 @@ private fun slotDescription(slot: RinklThemeSlot): String = when (slot) {
     RinklThemeSlot.HEATMAP -> "月历格子深浅自动分配"
     RinklThemeSlot.CHART -> "不影响饼图配色"
     RinklThemeSlot.NAV_ICON -> "底部导航栏图标，独立于字体色"
+    RinklThemeSlot.EXPENSE -> "支出金额与标记"
+    RinklThemeSlot.INCOME -> "收入金额与标记"
 }
 
 // ---------------------------------------------------------------------------

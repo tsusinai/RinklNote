@@ -31,7 +31,7 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            // 「自定义主题」的用户覆盖：8 个颜色槽读自 DataStore，未自定义的槽回落默认色。
+            // 「自定义主题」的用户覆盖：10 个颜色槽读自 DataStore，未自定义的槽回落默认色。
             val customColors by app.settingsManager.customThemeColors
                 .collectAsStateWithLifecycle(initialValue = emptyMap())
             val rinklColors = rinklColorsOf(
@@ -43,7 +43,9 @@ class MainActivity : ComponentActivity() {
                 borderColor = customColors[RinklThemeSlot.BORDER],
                 heatmapColor = customColors[RinklThemeSlot.HEATMAP],
                 chartColor = customColors[RinklThemeSlot.CHART],
-                navIconColor = customColors[RinklThemeSlot.NAV_ICON]
+                navIconColor = customColors[RinklThemeSlot.NAV_ICON],
+                expenseColor = customColors[RinklThemeSlot.EXPENSE],
+                incomeColor = customColors[RinklThemeSlot.INCOME]
             )
             // 展示偏好桥接：DataStore → DisplayPreferences 内存单例（Money.format 等
             // 非组合上下文同步读取；initialValue 与 DisplayPreferences 默认值一致，首帧不跳变）。

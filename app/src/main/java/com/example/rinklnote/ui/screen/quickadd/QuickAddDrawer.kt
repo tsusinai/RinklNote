@@ -81,7 +81,6 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.domain.BillType
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
@@ -691,7 +690,8 @@ private fun CountBefore(
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen,
+                // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+                color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor,
                 modifier = Modifier.width(140.dp)
             )
         }

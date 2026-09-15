@@ -28,7 +28,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.rinklnote.ui.theme.IncomeGreen
+import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
@@ -72,6 +72,8 @@ fun SummaryBar(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // 收入/支出合计行
+        // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+        val incomeColor = LocalRinklColors.current.incomeColor
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -98,13 +100,13 @@ fun SummaryBar(
                 text = "收入",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = IncomeGreen
+                color = incomeColor
             )
             Text(
                 text = "${Money.formatPlain(totalIncome)}  ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = IncomeGreen
+                color = incomeColor
             )
             if (hasSummary) {
                 Spacer(modifier = Modifier.weight(1f))

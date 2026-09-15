@@ -41,7 +41,7 @@ class SettingsManager(private val context: Context) {
         // 展示偏好：金额货币符号开关（默认显示）；卡片白色蒙版开关（默认关闭）。
         private val KEY_SHOW_CURRENCY_SYMBOL = booleanPreferencesKey("show_currency_symbol")
         private val KEY_CARD_OVERLAY = booleanPreferencesKey("card_overlay")
-        // 自定义主题：8 个颜色槽，均存 "#AARRGGBB"；缺省 = 未自定义（回落到默认色）。
+        // 自定义主题：10 个颜色槽，均存 "#AARRGGBB"；缺省 = 未自定义（回落到默认色）。
         private val KEY_THEME_FONT_COLOR = stringPreferencesKey("theme_font_color")
         private val KEY_THEME_PRIMARY_COLOR = stringPreferencesKey("theme_primary_color")
         private val KEY_THEME_TOPBAR_COLOR = stringPreferencesKey("theme_topbar_color")
@@ -50,6 +50,8 @@ class SettingsManager(private val context: Context) {
         private val KEY_THEME_HEATMAP_COLOR = stringPreferencesKey("theme_heatmap_color")
         private val KEY_THEME_CHART_COLOR = stringPreferencesKey("theme_chart_color")
         private val KEY_THEME_NAVICON_COLOR = stringPreferencesKey("theme_navicon_color")
+        private val KEY_THEME_EXPENSE_COLOR = stringPreferencesKey("theme_expense_color")
+        private val KEY_THEME_INCOME_COLOR = stringPreferencesKey("theme_income_color")
 
         /** 槽位 → DataStore 键 的映射（读写共用，避免两处各写一遍 when）。 */
         private fun keyOf(slot: RinklThemeSlot) = when (slot) {
@@ -61,13 +63,16 @@ class SettingsManager(private val context: Context) {
             RinklThemeSlot.HEATMAP -> KEY_THEME_HEATMAP_COLOR
             RinklThemeSlot.CHART -> KEY_THEME_CHART_COLOR
             RinklThemeSlot.NAV_ICON -> KEY_THEME_NAVICON_COLOR
+            RinklThemeSlot.EXPENSE -> KEY_THEME_EXPENSE_COLOR
+            RinklThemeSlot.INCOME -> KEY_THEME_INCOME_COLOR
         }
 
         /** 全部自定义主题键（清空用，顺序与 keyOf 无关）。 */
         private val THEME_COLOR_KEYS = listOf(
             KEY_THEME_FONT_COLOR, KEY_THEME_PRIMARY_COLOR, KEY_THEME_TOPBAR_COLOR,
             KEY_THEME_ICON_COLOR, KEY_THEME_BORDER_COLOR,
-            KEY_THEME_HEATMAP_COLOR, KEY_THEME_CHART_COLOR, KEY_THEME_NAVICON_COLOR
+            KEY_THEME_HEATMAP_COLOR, KEY_THEME_CHART_COLOR, KEY_THEME_NAVICON_COLOR,
+            KEY_THEME_EXPENSE_COLOR, KEY_THEME_INCOME_COLOR
         )
     }
 
@@ -98,7 +103,7 @@ class SettingsManager(private val context: Context) {
     val dailyReportMinute: Flow<Int> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_MINUTE] ?: 0 }
     val dailyReportQqBot: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_QQ_BOT] ?: false }
 
-    /** 自定义主题的 8 个颜色槽；未自定义的槽不会出现在 map 里。 */
+    /** 自定义主题的 10 个颜色槽；未自定义的槽不会出现在 map 里。 */
     val customThemeColors: Flow<Map<RinklThemeSlot, Color>> = context.settingsDataStore.data.map { prefs ->
         buildMap {
             RinklThemeSlot.entries.forEach { slot ->

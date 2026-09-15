@@ -42,7 +42,9 @@ data class BillSearchFilter(
     val month: YearMonth? = null,
     /** 自定义起止（含两端）；任一端为 null = 该侧不限。 */
     val rangeStart: LocalDate? = null,
-    val rangeEnd: LocalDate? = null
+    val rangeEnd: LocalDate? = null,
+    /** 分类筛选：精确匹配分类名；null = 未选（「全部」，该维度不生效）。 */
+    val categoryName: String? = null
 )
 
 /** 搜索页状态（金额一律整数分）。 */
@@ -58,7 +60,13 @@ data class BillSearchState(
     /** 结果中支出合计（分）。 */
     val expenseTotal: Long = 0L,
     /** 结果中收入合计（分）。 */
-    val incomeTotal: Long = 0L
+    val incomeTotal: Long = 0L,
+    /**
+     * 出现过的分类名列表（供分类筛选 box 行/扩展卡片展示）。
+     * 取自**全量账单** distinct（不受当前筛选影响，否则选中某分类后其余 box 会消失无法切换），
+     * 按出现频次降序（高频分类前置更快触达）、频次相同按名称升序（保证顺序稳定）。
+     */
+    val categories: List<String> = emptyList()
 )
 
 /** 搜索页事件（State + Event 模式，经 [BillSearchViewModel.onEvent] 分发）。 */
@@ -81,6 +89,9 @@ sealed interface BillSearchEvent {
     /** 自定义起止（两端一起提交；null = 该侧不限）。 */
     data class CustomRangeChanged(val start: LocalDate?, val end: LocalDate?) : BillSearchEvent
 
+    /** 分类筛选：单选某分类（[category]）；null = 取消选择回「全部」。 */
+    data class CategoryChanged(val category: String?) : BillSearchEvent
+
     /** 清空：关键词与全部筛选条件一键还原默认。 */
     data object Clear : BillSearchEvent
 }
@@ -97,6 +108,7 @@ sealed interface BillSearchEvent {
  * - 关键词：分类名 / 子分类名 / 备注 文本包含（忽略大小写）；
  *   纯数字或「¥xx」形式额外按**金额**匹配（分值相等，或「分→元」文本包含，见 [matchesQuery] 注释）；
  * - 种类：全部 / 支出 / 收入；
+ * - 分类：全部 / 单个分类精确匹配（与关键词等其他维度 AND 叠加）；
  * - 日期：全部 / 某天 / 某月 / 自定义起止（业务时区 Asia/Shanghai 判定）。
  *
  * VM 只依赖 [BillRepository]（Factory 见类尾），主会话接线用：
@@ -138,6 +150,8 @@ class BillSearchViewModel(private val repository: BillRepository) : ViewModel() 
                         filter = it.filter.copy(rangeStart = event.start, rangeEnd = event.end)
                     )
                 }
+            is BillSearchEvent.CategoryChanged ->
+                _state.update { it.copy(filter = it.filter.copy(categoryName = event.category)) }
             BillSearchEvent.Clear -> _state.update { BillSearchState() }
         }
     }
@@ -178,17 +192,29 @@ private fun deriveResults(bills: List<Bill>, input: BillSearchState): BillSearch
     val results = bills.asSequence()
         .filter { it.matchesQuery(input.query) }
         .filter { it.matchesType(filter.type) }
+        .filter { it.matchesCategory(filter.categoryName) }
         .filter { it.matchesDate(filter) }
         // sortedByDescending 稳定：同日内保留 observeAll 既有的 sort_order/created_at 兜底顺序
         .sortedByDescending { it.date }
         .toList()
+    // 分类候选清单取自全量账单（distinct），与当前筛选无关，保证行内 box 始终可切换
+    val categories = bills.groupingBy { it.categoryName }
+        .eachCount()
+        .entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
     return input.copy(
+        categories = categories,
         results = results,
         totalCount = results.size,
         expenseTotal = results.filter { it.billType == BillType.EXPENSE }.sumOf { it.amountMinor },
         incomeTotal = results.filter { it.billType == BillType.INCOME }.sumOf { it.amountMinor }
     )
 }
+
+/** 分类过滤：精确匹配分类名；null（「全部」）直接放行。 */
+private fun Bill.matchesCategory(categoryName: String?): Boolean =
+    categoryName == null || this.categoryName == categoryName
 
 /** 种类过滤；ALL 直接放行。 */
 private fun Bill.matchesType(type: SearchTypeFilter): Boolean = when (type) {

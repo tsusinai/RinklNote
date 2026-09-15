@@ -27,6 +27,33 @@ class RinklColorsTest {
         // 2026-09-14 第 8 槽 NAV_ICON：默认 null（未自定义，消费端回落现状），明暗两种模式下都不反转。
         assertNull(c.navIconColor)
         assertNull(rinklColorsOf(dark = true).navIconColor)
+        // 2026-09-15 第 9/10 槽 EXPENSE/INCOME：未自定义按 dark 给默认（亮 ExpenseRed/IncomeGreen，暗深色变体）。
+        assertEquals(ExpenseRed, c.expenseColor)
+        assertEquals(IncomeGreen, c.incomeColor)
+        val dark = rinklColorsOf(dark = true)
+        assertEquals(DarkExpenseRed, dark.expenseColor)
+        assertEquals(DarkIncomeGreen, dark.incomeColor)
+    }
+
+    /**
+     * 用户覆盖收支两槽 → 原样透传；覆盖后是固定色，**不随 dark 反转**，且互不串色。
+     * tertiary（支出语义）经 Theme.kt 的 colorScheme.copy 消费 expenseColor，本测试保证解析层正确。
+     */
+    @Test
+    fun expenseIncomePassThroughIndependently() {
+        val expense = Color(0xFFAA1122)
+        val income = Color(0xFF11AA33)
+        val light = rinklColorsOf(dark = false, expenseColor = expense, incomeColor = income)
+        assertEquals(expense, light.expenseColor)
+        assertEquals(income, light.incomeColor)
+        // 暗色模式下覆盖值优先，不再反转。
+        val dark = rinklColorsOf(dark = true, expenseColor = expense, incomeColor = income)
+        assertEquals(expense, dark.expenseColor)
+        assertEquals(income, dark.incomeColor)
+        // 只覆盖支出时，收入回落默认（亮 = IncomeGreen）。
+        val onlyExpense = rinklColorsOf(dark = false, expenseColor = expense)
+        assertEquals(expense, onlyExpense.expenseColor)
+        assertEquals(IncomeGreen, onlyExpense.incomeColor)
     }
 
     /** 用户给 NAV_ICON 槽选了色 → navIconColor 原样透传（不与图标/按钮色、字体色联动）。 */

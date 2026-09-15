@@ -6,10 +6,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 /**
- * 「自定义主题」可调的 8 个槽位。与设置项一一对应，也是 DataStore 的存储键。
+ * 「自定义主题」可调的 10 个槽位。与设置项一一对应，也是 DataStore 的存储键。
  *
  * 设计约束：
  * - 每个槽位**默认为 null**（未自定义）→ 渲染时回落到各处的既有默认色，保证「不动设置 = 观感不变」。
+ *   （HEATMAP/CHART/EXPENSE/INCOME 四槽例外：槽值非空，未自定义时按 [defaultRinklColors] 给现状默认色。）
  * - 用户在自定义主题页选了颜色才写入。
  */
 enum class RinklThemeSlot {
@@ -20,7 +21,9 @@ enum class RinklThemeSlot {
     BORDER,  // 5. 边框色（分割线跟随）
     HEATMAP, // 6. 热力图颜色（月历格子按支出强度自动分配深浅/透明度）
     CHART,   // 7. 折线/柱状图颜色（不影响饼图配色）
-    NAV_ICON // 8. 底栏导航图标色（独立于字体色/图标按钮色）
+    NAV_ICON,// 8. 底栏导航图标色（独立于字体色/图标按钮色）
+    EXPENSE, // 9. 支出颜色（支出金额文字与圆点标记，写进 colorScheme.tertiary）
+    INCOME   // 10. 收入颜色（收入金额文字与圆点标记）
 }
 
 /**
@@ -34,6 +37,9 @@ enum class RinklThemeSlot {
  *   （`iconButtonColor ?: onSurface`）；不随 dark 反转（null 时消费端自会按当前明暗取色）。
  * - [heatmapColor] / [chartColor] 一定非空：未自定义时取各自的现状默认色
  *   （热力=Blue40、图表=折线红 [DefaultChartColor]），深浅/高亮由使用方组件处理。
+ * - [expenseColor] / [incomeColor] 一定非空（2026-09-15 第 9/10 槽）：未自定义时按 dark
+ *   自动给默认色（支出=ExpenseRed/DarkExpenseRed、收入=IncomeGreen/DarkIncomeGreen），
+ *   与原 tertiary / IncomeGreen 直引观感完全一致；**用户覆盖后不再随 dark 反转**（存的是固定色）。
  */
 @Immutable
 data class RinklColors(
@@ -45,7 +51,9 @@ data class RinklColors(
     val dividerColor: Color,
     val heatmapColor: Color,
     val chartColor: Color,
-    val navIconColor: Color? = null
+    val navIconColor: Color? = null,
+    val expenseColor: Color,
+    val incomeColor: Color
 ) {
     /** 无自选背景（纯白/纯黑底）时顶栏标题色；滚动后略淡，保留层级。 */
     val topBarTitleColorScrolled: Color get() = topBarTitleColor.copy(alpha = 0.62f)
@@ -57,7 +65,7 @@ data class RinklColors(
  */
 val LocalRinklColors = staticCompositionLocalOf { defaultRinklColors(dark = false) }
 
-/** 默认（未自定义）配色。[dark] 只影响字体色/顶栏色这类需要随明暗反转的槽位。 */
+/** 默认（未自定义）配色。[dark] 只影响需要随明暗反转的槽位（字体/顶栏/收支两色）。 */
 fun defaultRinklColors(dark: Boolean): RinklColors = RinklColors(
     fontColor = if (dark) Color.White else Color.Black,
     themeColor = Blue80,
@@ -70,7 +78,12 @@ fun defaultRinklColors(dark: Boolean): RinklColors = RinklColors(
     heatmapColor = Blue40,
     chartColor = DefaultChartColor,
     // 导航图标槽默认 null（未自定义）：消费端回落现状，不随 dark 反转（回落色由消费端按明暗自取）。
-    navIconColor = null
+    navIconColor = null,
+    // 收支两槽（2026-09-15 第 9/10 槽）：未自定义时按 dark 给既有默认——
+    // 支出 = tertiary 语义色（亮 ExpenseRed / 暗 DarkExpenseRed）、收入 = IncomeGreen/DarkIncomeGreen，
+    // 保证「不动设置 = 观感不变」；用户覆盖后存的是固定色，不再随 dark 反转。
+    expenseColor = if (dark) DarkExpenseRed else ExpenseRed,
+    incomeColor = if (dark) DarkIncomeGreen else IncomeGreen
 )
 
 /**
@@ -89,7 +102,9 @@ fun rinklColorsOf(
     borderColor: Color? = null,
     heatmapColor: Color? = null,
     chartColor: Color? = null,
-    navIconColor: Color? = null
+    navIconColor: Color? = null,
+    expenseColor: Color? = null,
+    incomeColor: Color? = null
 ): RinklColors {
     val baseFont = if (dark) Color.White else Color.Black
     val resolvedFont = fontColor ?: baseFont
@@ -106,7 +121,11 @@ fun rinklColorsOf(
         heatmapColor = heatmapColor ?: Blue40,
         chartColor = chartColor ?: DefaultChartColor,
         // 导航图标槽：null = 未自定义（消费端回落现状），透传即可，不随 dark 反转。
-        navIconColor = navIconColor
+        navIconColor = navIconColor,
+        // 收支两槽：null = 未自定义 → 按 dark 给默认（亮 ExpenseRed/IncomeGreen，暗 DarkExpenseRed/DarkIncomeGreen），
+        // 与原 tertiary / IncomeGreen 直引一致；用户覆盖后不再随 dark 反转。
+        expenseColor = expenseColor ?: if (dark) DarkExpenseRed else ExpenseRed,
+        incomeColor = incomeColor ?: if (dark) DarkIncomeGreen else IncomeGreen
     )
 }
 

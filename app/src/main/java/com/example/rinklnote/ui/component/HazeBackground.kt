@@ -64,9 +64,14 @@ val RinklCardFrostedStyle: HazeStyle = HazeStyle(
  *
  * **卡片白色蒙版开关**（「我的 → 个性化」组，[DisplayPreferences.cardOverlayEnabled]）：
  * - 关闭（默认）：行为与 2026-09-11 版完全一致——只有边框、无任何蒙版。
- * - 开启：在边框**之前**铺一层雾蒙版压住照片背景，保证正文可读。浅色主题用白雾
- *   （`White.copy(alpha = 0.55f)`）；暗色主题用黑雾（`Black.copy(alpha = 0.35f)`）——
+ * - 开启：在边框**之前**铺一层雾蒙版压住照片背景，保证正文可读。浅色主题用灰白雾
+ *   （`Color(0xFFF2F3F5).copy(alpha = 0.42f)`）；暗色主题用黑雾（`Black.copy(alpha = 0.28f)`）——
  *   暗底下白雾会把卡片抬亮、白字读不清。
+ *   取值理由（2026-09-15 用户反馈「纯白蒙版偏死白、不够柔和」）：亮色由纯白 55% 改为
+ *   带轻微冷灰调的灰白 `0xFFF2F3F5` 并降不透明度到 42%——灰调消掉「粉刷感」、更低的
+ *   alpha 让背景照片多透一些，雾感更轻；暗色同步由 35% 降到 28%（同反馈下取更柔者，
+ *   比 `0xFF141417 @ 0.4f` 透出度更高、压暗更轻）。正文可读性优先于透出度，
+ *   若真机上深色文字发虚，优先回调亮色 alpha（0.42 → 0.48 一档）而非改回纯白。
  * - 蒙版与边框相互独立：即使槽位是「不描边」（透明边框），蒙版照常生效。
  *
  * @param shape 卡片圆角（与调用方 `clip` 用同一 shape，保证边框贴合圆角）
@@ -78,9 +83,9 @@ fun applyCardGlass(shape: Shape): Modifier {
     // 明暗判断不用 isSystemInDarkTheme：App 支持「设置 → 深色模式」在应用内强制 LIGHT/DARK，
     // 系统明暗可能与实际渲染主题相反；当前主题 background 的亮度在三种模式下都如实反映明暗。
     val overlayColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {
-        Color.Black.copy(alpha = 0.35f) // 暗色：黑雾
+        Color.Black.copy(alpha = 0.28f) // 暗色：黑雾（0.35 → 0.28，2026-09-15 柔化）
     } else {
-        Color.White.copy(alpha = 0.55f) // 浅色：白雾
+        Color(0xFFF2F3F5).copy(alpha = 0.42f) // 浅色：灰白雾（纯白 0.55 → 灰白 0.42，2026-09-15 柔化）
     }
     val border = LocalRinklColors.current.borderColor
     val overlay = if (overlayEnabled) Modifier.background(overlayColor) else Modifier

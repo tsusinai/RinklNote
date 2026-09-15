@@ -86,7 +86,7 @@ fun RinklNoteTheme(
     content: @Composable () -> Unit
 ) {
     // 「自定义主题」的用户覆盖叠在基础色板之上：只改被用户改过的那几个角色，
-    // 其余（语义红/绿、容器色、surface 层级）保持 App 既有观感。
+    // 其余（容器色、surface 层级）保持 App 既有观感。
     val baseScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val colorScheme = baseScheme.copy(
         primary = rinklColors.themeColor,
@@ -97,6 +97,11 @@ fun RinklNoteTheme(
         // 次级文字/说明文字/次级图标 → 字体色降透明度。全 App 约 80 处用的是 onSurfaceVariant，
         // 在这里统一收口，用户改「字体颜色」时说明文字才会跟着变（否则永远停在 IconGray 灰）。
         onSurfaceVariant = rinklColors.fontColor.copy(alpha = 0.62f),
+        // 支出语义色 → 第 9 槽（EXPENSE）：tertiary 本就是支出色（全 App 支出金额文字/圆点都走它），
+        // 改用令牌后用户自定义「支出颜色」即可全局生效。基础色板的 tertiary 原值
+        // （亮 ExpenseRed / 暗 DarkExpenseRed）只经本 copy 一条路径消费，未自定义时观感不变。
+        // error（删除等危险操作红）保持基础色板原值不动——错误语义与支出语义解耦。
+        tertiary = rinklColors.expenseColor,
     )
     val view = LocalView.current
     if (!view.isInEditMode) {

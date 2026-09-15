@@ -607,6 +607,7 @@ fun AppNavigation(app: RinklNoteApp) {
                                     )
                                     null -> Unit
                                 }
+                                Toast.makeText(context, "预算已更新", Toast.LENGTH_SHORT).show()
                             },
                             onBillClick = { bill ->
                                 // 账单联动：跳账单编辑页，保存/删除后返回预算页，数据经 Flow 自动刷新。
@@ -655,10 +656,12 @@ fun AppNavigation(app: RinklNoteApp) {
                                 bookkeepingVM.onEvent(BookkeepingEvent.DeleteBill(bill))
                                 bookkeepingVM.onEvent(BookkeepingEvent.CancelEdit)
                                 navController.popBackStack()
+                                Toast.makeText(context, "账单已删除", Toast.LENGTH_SHORT).show()
                             },
                             onConfirm = { newBill ->
                                 bookkeepingVM.onEvent(BookkeepingEvent.ConfirmEdit(newBill))
                                 navController.popBackStack()
+                                Toast.makeText(context, "账单已保存", Toast.LENGTH_SHORT).show()
                             },
                             onLoadSubCategories = bookkeepingVM::subCategories
                         )

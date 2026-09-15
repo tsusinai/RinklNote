@@ -1,11 +1,17 @@
 package com.example.rinklnote.ui.screen.search
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
@@ -67,8 +74,8 @@ import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklTopBarContentHeight
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.ui.theme.IncomeGreen
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
@@ -87,8 +94,9 @@ private val SearchFieldShape = RoundedCornerShape(14.dp)
 /**
  * 「搜索账单」整页（路由 `bill-search` 由主会话接线，非 tab 路由 → 底栏自动隐藏）。
  *
- * 结构：悬浮返回顶栏 + 搜索框（分类/备注/金额）+ 筛选行（种类三段 + 日期模式 + 日期选择）
- * + 汇总条（共 N 笔 · 支出/收入小计）+ 按日分组的 15dp 卡片链；空态「无匹配账单」。
+ * 结构：悬浮返回顶栏 + 分类筛选行（整页第一行，横向滚动 box + 可展开扩展卡片）+ 搜索框（分类/备注/金额）
+ * + 筛选行（种类三段 + 日期模式 + 日期选择）+ 汇总条（共 N 笔 · 支出/收入小计）
+ * + 按日分组的 15dp 卡片链；空态「无匹配账单」。
  * 账单行点击 [onEditBill]（主会话接 EditBill 事件 + `bill-edit` 路由）。
  *
  * 背景/材质走项目标准：有自选照片时由 nav 层整窗铺满，本页只铺纯白 haze 源；
@@ -144,6 +152,19 @@ fun SearchBillsScreen(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
+            item(key = "category-filter") {
+                CategoryFilterRow(
+                    categories = state.categories,
+                    selected = state.filter.categoryName,
+                    onSelect = { name ->
+                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
+                        viewModel.onEvent(
+                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
+                        )
+                    }
+                )
+            }
+
             item(key = "search-field") {
                 SearchField(
                     query = state.query,
@@ -346,6 +367,163 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
+// 分类筛选行（整页第一行，位于搜索栏上方）
+// ---------------------------------------------------------------------------
+
+/**
+ * 分类筛选：首行为横向滚动的分类 box 行（「全部」固定在最前），行尾固定「全部 ▾」展开触发 box；
+ * 点击触发经 [AnimatedVisibility]（Motion.Expand 上下展开/收起）铺开一张 15dp 扩展卡片，
+ * 卡片内 FlowRow 网格展示全部分类 box（同样式、同样点选行为），底部「收起」。
+ *
+ * 选中态与种类/日期筛选 AND 叠加；单选语义：点击未选分类 = 选中，再点 = 取消回「全部」。
+ * 展开/收起为纯 UI 态，不影响筛选条件。
+ *
+ * @param categories 出现过的分类名列表（VM 从全量账单 distinct，按频次降序）
+ * @param selected 当前选中的分类名；null = 「全部」
+ * @param onSelect 分类点选回调（null = 回「全部」；选中态的取消逻辑由调用方统一处理）
+ */
+@Composable
+private fun CategoryFilterRow(
+    categories: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit
+) {
+    // 展开/收起状态：默认收起
+    var expanded by remember { mutableStateOf(false) }
+    // chevron 随展开旋转 180°（Motion.Fade，对齐首页 SummaryBar 的 ▾ 旋转）
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = Motion.Fade,
+        label = "分类展开箭头"
+    )
+    Column(
+        modifier = Modifier.padding(horizontal = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // box 行：可横向滚动，窄屏放不下时滑出来
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CategoryBox(label = "全部", selected = selected == null) { onSelect(null) }
+            categories.forEach { name ->
+                CategoryBox(label = name, selected = selected == name) { onSelect(name) }
+            }
+            // 行尾固定展开触发 box：「全部 ▾」，点击展开扩展卡片，再点收起
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "全部",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "▾",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.rotate(chevronRotation)
+                    )
+                }
+            }
+        }
+        // 扩展卡片：上下展开/收起动画（Motion.Expand），与 SummaryBar 同款节奏
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(animationSpec = Motion.Expand),
+            exit = shrinkVertically(animationSpec = Motion.Expand)
+        ) {
+            CategoryExpandCard(
+                categories = categories,
+                selected = selected,
+                onSelect = onSelect,
+                onCollapse = { expanded = false }
+            )
+        }
+    }
+}
+
+/** 展开的分类扩展卡片：15dp 卡片链 + FlowRow 网格铺开全部分类 box，底部「收起」。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CategoryExpandCard(
+    categories: List<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    onCollapse: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .rinkShadow(SearchCardShape)
+            .clip(SearchCardShape)
+            .then(applyCardGlass(SearchCardShape))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CategoryBox(label = "全部", selected = selected == null) { onSelect(null) }
+            categories.forEach { name ->
+                CategoryBox(label = name, selected = selected == name) { onSelect(name) }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "收起",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .align(Alignment.End)
+                .clickable(onClick = onCollapse)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+    }
+}
+
+/**
+ * 分类筛选 box：8dp 圆角、内边距 10/6、文案 13sp。
+ * 未选中 = surfaceVariant 半透明底 + 次要字；选中 = 主色浅底 + 主色字（与种类/日期 toggle 选中态一致）。
+ */
+@Composable
+private fun CategoryBox(label: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                }
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 筛选行
 // ---------------------------------------------------------------------------
 
@@ -515,7 +693,7 @@ private fun SummaryBar(totalCount: Int, expenseTotal: Long, incomeTotal: Long) {
         Text(
             text = "收入 ${Money.format(incomeTotal)}",
             fontSize = 12.sp,
-            color = IncomeGreen
+            color = LocalRinklColors.current.incomeColor
         )
     }
 }
@@ -604,7 +782,7 @@ private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
                 modifier = Modifier
                     .size(7.dp)
                     .clip(CircleShape)
-                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen)
+                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
@@ -626,7 +804,7 @@ private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
             text = (if (isExpense) "-" else "+") + Money.format(bill.amountMinor),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else IncomeGreen
+            color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor
         )
     }
 }
