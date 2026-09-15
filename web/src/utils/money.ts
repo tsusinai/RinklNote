@@ -33,6 +33,16 @@ export function formatSigned(minor: number): string {
   return n < 0 ? '-' + s : '+' + s
 }
 
+/** 纯小数字符串（无货币符号、无千分位、固定 2 位小数）：`1234.56`、`-12.30`。
+ *  全程整数拆分，不引入任何浮点除法，用于 CSV 导出、输入框回显等
+ *  机器可读场景（替代会破坏整数分契约的 `minor / 100` 浮点除法）。 */
+export function minorToDecimal(minor: number): string {
+  const n = Math.round(minor)
+  const sign = n < 0 ? '-' : ''
+  const abs = Math.abs(n)
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, '0')}`
+}
+
 /** 把用户输入的「元」字符串解析为「分」整数，最多 2 位小数。
  *  策略：正则拆分整数/小数部分后做整数运算，杜绝 parseFloat(x) * 100 的浮点误差
  *  （如 "57.97" 必须得到 5797 而非 5796.999…）。

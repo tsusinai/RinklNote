@@ -4,6 +4,11 @@ import { useDataStore } from '../../stores/data'
 import { bills } from '../../api/bills'
 import { useToast } from '../../composables/useToast'
 import { parseMoneyToMinor } from '../../utils/money'
+import { categoryEmoji } from '../../utils/categoryIcon'
+import Card from '../../components/ui/Card.vue'
+import Btn from '../../components/ui/Btn.vue'
+import Skeleton from '../../components/ui/Skeleton.vue'
+import EmptyState from '../../components/ui/EmptyState.vue'
 import type { MoneyStyle } from '../../types'
 
 const data = useDataStore()
@@ -17,12 +22,16 @@ const acctId = ref<number | null>(null)
 const remark = ref('')
 const msg = ref('')
 const busy = ref(false)
+// 首屏骨架：分类/账户数据未到位前渲染 Skeleton，避免空白
+const loading = ref(true)
 
 const cats = computed(() => data.cats.filter((c) => c.type === billType.value))
 const selectedCat = computed(() => data.cats.find((c) => c.id === catId.value) ?? null)
 const subs = computed(() => selectedCat.value?.subCategories ?? [])
 
-onMounted(() => { if (!data.cats.length) data.loadData() })
+onMounted(async () => {
+  try { if (!data.cats.length) await data.loadData() } finally { loading.value = false }
+})
 
 function switchType(t: MoneyStyle) {
   billType.value = t
@@ -50,20 +59,11 @@ async function submit() {
     await data.loadData()
   } catch (e: any) {
     msg.value = e?.message || '记账失败'
+    toast.push(e?.message || '记账失败', 'err') // 提交失败同样走全局 toast 反馈
   } finally { busy.value = false }
 }
 
-// 图标映射：iconName 字符串 → emoji。键与服务端/App 端 seed 的 iconName 一致，未命中回退首字符。
-function icon(name: string): string {
-  const map: Record<string, string> = {
-    meals: '🍚', daily: '🧴', transport: '🚌', study: '📚', sports: '🏋️',
-    entertainment: '🎬', shopping: '🛒', medical: '💊', home: '🏠', social: '🎁',
-    pet: '🐱', beauty: '💄', clothing: '👗', baby: '🍼', car: '🚗',
-    digital: '📱', insurance: '🛡️', travel: '✈️', salary: '💰', parttime: '💼',
-    finance: '📈', other: '📦', reimburse: '🧾', resale: '♻️', redpacket: '🧧',
-  }
-  return map[name] ?? name[0] ?? '●'
-}
+// 内联提示配色：失败类文案标红，其余标绿
 function msgClass(m: string): string {
   return /失败|错误|不能为空|已注册|不存在/.test(m) ? 'err' : 'ok'
 }
@@ -72,40 +72,58 @@ function msgClass(m: string): string {
 <template>
   <div class="page">
     <h2>快速记账</h2>
-    <div class="card">
-      <div class="toggle">
-        <button :class="['toggle-btn', { on: billType === 'EXPENSE', exp: billType === 'EXPENSE' }]" @click="switchType('EXPENSE')">支出</button>
-        <button :class="['toggle-btn', { on: billType === 'INCOME', inc: billType === 'INCOME' }]" @click="switchType('INCOME')">收入</button>
+    <Card>
+      <!-- 首屏数据未到时渲染骨架占位 -->
+      <div v-if="loading" class="sk" aria-hidden="true">
+        <Skeleton height="40px" round />
+        <Skeleton height="48px" width="55%" />
+        <div class="sk-grid">
+          <Skeleton v-for="i in 8" :key="i" height="64px" round />
+        </div>
+        <Skeleton height="44px" />
+        <Skeleton height="44px" />
+        <Skeleton height="48px" />
       </div>
 
-      <input class="amount-input amount" type="number" step="0.01" placeholder="0.00" v-model="amount" @input="msg=''" />
+      <template v-else>
+        <div class="toggle">
+          <button :class="['toggle-btn pressable', { on: billType === 'EXPENSE', exp: billType === 'EXPENSE' }]" @click="switchType('EXPENSE')">支出</button>
+          <button :class="['toggle-btn pressable', { on: billType === 'INCOME', inc: billType === 'INCOME' }]" @click="switchType('INCOME')">收入</button>
+        </div>
 
-      <div class="section-label">分类</div>
-      <div class="grid-4">
-        <button v-for="c in cats" :key="c.id" :class="['cat-btn', { on: catId === c.id }]" @click="pickCat(c.id)">
-          <span class="cat-icon">{{ c.iconName ? icon(c.iconName) : c.name[0] }}</span>
-          <span class="cat-name">{{ c.name }}</span>
-        </button>
-        <div v-if="!cats.length" class="empty-inline">{{ cats.length ? '' : '暂无分类数据' }}</div>
-      </div>
+        <input class="amount-input amount" type="number" step="0.01" placeholder="0.00" v-model="amount" @input="msg=''" />
 
-      <div v-if="subs.length" class="grid-4 sub">
-        <button :class="['cat-btn', { on: subCatName === '' }]" @click="pickSub('')">全部</button>
-        <button v-for="s in subs" :key="s.name" :class="['cat-btn', { on: subCatName === s.name }]" @click="pickSub(s.name)">{{ s.name }}</button>
-      </div>
+        <div class="section-label">分类</div>
+        <!-- 响应式网格：auto-fill 自适应列数，窄屏不再被写死的 4 列压垮 -->
+        <div v-if="cats.length" class="cat-grid">
+          <button v-for="c in cats" :key="c.id" :class="['cat-btn', { on: catId === c.id }]" @click="pickCat(c.id)">
+            <span class="cat-icon">{{ categoryEmoji(c.iconName, c.name) }}</span>
+            <span class="cat-name">{{ c.name }}</span>
+          </button>
+        </div>
+        <EmptyState v-else icon="book" text="暂无分类数据" hint="同步分类数据后再来记一笔" />
 
-      <div class="section-label">账户</div>
-      <select v-model.number="acctId" class="sel">
-        <option disabled value="">选择账户</option>
-        <option v-for="a in data.accts" :key="a.id" :value="a.id">{{ a.name }}</option>
-      </select>
+        <template v-if="subs.length">
+          <div class="section-label">子分类</div>
+          <div class="cat-grid sub">
+            <button :class="['cat-btn', { on: subCatName === '' }]" @click="pickSub('')">全部</button>
+            <button v-for="s in subs" :key="s.name" :class="['cat-btn', { on: subCatName === s.name }]" @click="pickSub(s.name)">{{ s.name }}</button>
+          </div>
+        </template>
 
-      <input class="sel" type="text" placeholder="备注 (可选)" v-model="remark" />
+        <div class="section-label">账户</div>
+        <select v-model.number="acctId" class="sel">
+          <option disabled value="">选择账户</option>
+          <option v-for="a in data.accts" :key="a.id" :value="a.id">{{ a.name }}</option>
+        </select>
 
-      <div v-if="msg" :class="['msg', msgClass(msg)]">{{ msg }}</div>
+        <input class="sel" type="text" placeholder="备注 (可选)" v-model="remark" />
 
-      <button class="btn btn-primary block" :disabled="busy" @click="submit">记一笔</button>
-    </div>
+        <div v-if="msg" :class="['msg', msgClass(msg)]">{{ msg }}</div>
+
+        <Btn class="block submit-btn" :loading="busy" @click="submit">记一笔</Btn>
+      </template>
+    </Card>
   </div>
 </template>
 
@@ -117,18 +135,20 @@ function msgClass(m: string): string {
 .toggle-btn.on.inc { background: var(--income); color: #fff; border-color: transparent; font-weight: 600; }
 .amount-input { width: 100%; font-size: 38px; font-weight: 800; border: none; border-bottom: 2px solid var(--border); padding: 12px 0; background: none; color: var(--text); margin-bottom: 16px; }
 .section-label { font-size: 12px; color: var(--muted); margin: 14px 0 8px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.grid-4.sub { grid-template-columns: repeat(4, 1fr); }
-.cat-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
-.cat-btn.on { background: var(--primary-soft); border-color: var(--primary); }
+/* 响应式网格：auto-fill 自适应列数（窄屏 3~4 列、宽屏 8~9 列），替代写死列数的 .grid-4 */
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+.cat-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 13px; font-family: inherit; /* 选中态颜色 220ms 过渡 */ transition: background-color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease), color var(--dur-expand) var(--ease); }
+.cat-btn.on { background: var(--primary-soft); border-color: var(--primary); /* 选中 pop：scale 1.03 回落 */ animation: cat-pop var(--dur-expand) var(--ease); }
+@keyframes cat-pop { 0% { transform: scale(1); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
 .cat-icon { font-size: 22px; }
 .cat-name { font-size: 12px; }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; }
-.empty-inline { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 13px; padding: 16px 0; }
+.sel + .sel { margin-top: 10px; }
 .msg { margin: 12px 0; font-size: 14px; }
 .msg.ok { color: var(--income); }
 .msg.err { color: var(--expense); }
-.btn { padding: 14px 18px; border-radius: 12px; border: none; font-size: 15px; cursor: pointer; }
-.btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
-.block { width: 100%; margin-top: 12px; }
+.submit-btn { margin-top: 12px; }
+/* 骨架占位 */
+.sk { display: flex; flex-direction: column; gap: 14px; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
 </style>
