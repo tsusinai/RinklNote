@@ -242,6 +242,7 @@ QQ 通道已在生产运行，其结构是新通道的模板。以下全部为�
 ### 飞书（主线，优先冒烟）
 
 - [ ] 飞书开放平台 → 自建应用 → 事件与回调 → 请求地址配置填 `http://118.31.184.221/api/feishu/bot/webhook`
+  - ⚠️ 安全修复（217530c）后的硬顺序：**必须先在 Web 管理卡保存飞书凭证（verification_token 必填，Encrypt Key 可选），再去飞书后台配回调**——双未配状态下服务端对回调一律拒绝（503「机器人未完成安全配置」），飞书后台会保存失败；只配 token 未配 Encrypt Key 时，请求也必须带平台下发的 token 才放行
   - 平台会先发 `url_verification`：服务端回 challenge 即通过（若配了 Encrypt Key，先在 Web 卡片填入再配回调）
 - [ ] 订阅事件 `im.message.receive_v1`
 - [ ] 飞书 App 内向机器人发「午餐20元」→ App/Web 账单列表出现该笔，`source = FEISHU`
