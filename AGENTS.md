@@ -144,7 +144,7 @@ Compose UI（collectAsStateWithLifecycle）
 - `services/`：`nlu/`（规则 + LLM 双引擎）、`insight/`、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`FeishuBotService` / `WecomBotService` / `MpBotService`（三通道收发与 bot_config KV，配置走 Web 管理页非 env）、`BotCommands`（多通道共享指令常量：推送开关 / 登录码正则 / source 词表）、`wx/WxCryptUtil`（微信系 SHA1 验签 + AES-256-CBC/PKCS7 + 手写 XML，零依赖）、`PushScheduler`（分通道 send，目标通道 飞书>企微>QQ）、`Money`。
 - `tables/`：Exposed 表定义（users / bills / budgets / bot_config / push_log …）。`users` 的多通道 bot 身份列（均可空 + 唯一索引）：`qq_openid`、`feishu_open_id`、`wechat_openid`（订阅号）、`wecom_userid`（企业微信）。
 - 分类种子：`BillService.seedCategories()` 启动时**无条件幂等回填**；其清单**必须与 App `BillRepositoryImpl.seedCategories()` 逐字同序、只增不改**（id 按列表顺序续编），改分类种子两侧要同步改。默认账户两侧均**仅预置「无账户」**（`ensureDefaultAccounts` / App `seedAccounts` 已同步收敛，勿再预置微信 / 支付宝）。
-- 认证：JWT 保护除健康检查外的业务接口；限流见 `InMemoryRateLimiter`。
+- 认证：JWT 保护除健康检查外的业务接口；限流见 `InMemoryRateLimiter`。身份 = 手机号或邮箱（`users.email` 可空唯一，register/login 请求体可选 `email`，非空走邮箱身份；`/qq-login` 登录码端点已从三端 UI 移除但保留运行）。**新设定密码规则 = ≥6 位且必须含大小写字母**（服务端 `PasswordPolicy` + App `util/PasswordRules` + Web 预校验三处一致，只约束新设定、存量密码不受影响）；个人资料（昵称/签名/生日/头像/展示徽章）走 `PUT /api/auth/profile` + `POST /api/auth/avatar`（`uploads/avatars/`，经 `/uploads/*` 静态暴露）。
 
 ### Web —— Vue 3 SPA
 
