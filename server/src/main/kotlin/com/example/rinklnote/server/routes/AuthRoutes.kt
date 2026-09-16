@@ -3,6 +3,7 @@ package com.example.rinklnote.server.routes
 import com.example.rinklnote.server.plugins.AdminIdentities
 import com.example.rinklnote.server.services.AvatarStorage
 import com.example.rinklnote.server.services.InMemoryRateLimiter
+import com.example.rinklnote.server.services.PasswordPolicy
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserInfo
 import com.example.rinklnote.server.services.UserService
@@ -17,11 +18,22 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 
+// 2026-09-17 优化登录方式：新增 email 可选身份，与 phone 同级 ——
+// email 非空走邮箱身份，否则走手机号；phone 保持原语义（非空字符串，邮箱模式传空串），
+// 旧客户端只发 phone 完全不受影响。新客户端邮箱模式可不传 phone（有默认值）。
 @Serializable
-data class RegisterRequest(val phone: String, val password: String)
+data class RegisterRequest(
+    val phone: String = "",
+    val password: String,
+    val email: String? = null
+)
 
 @Serializable
-data class LoginRequest(val phone: String, val password: String)
+data class LoginRequest(
+    val phone: String = "",
+    val password: String,
+    val email: String? = null
+)
 
 @Serializable
 data class AuthResponse(val userId: Long, val token: String)
@@ -33,6 +45,8 @@ data class MessageResponse(val message: String)
 data class MeResponse(
     val id: Long,
     val phone: String?,
+    // 邮箱身份（2026-09-17）：可空下发，未设置/旧库为 null。
+    val email: String? = null,
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,
@@ -83,10 +97,18 @@ data class AvatarUploadResponse(val avatarUrl: String? = null, val message: Stri
 /** 徽章展示上限（与 App「我的」卡片约定一致）。 */
 private const val MAX_SHOWCASE_BADGES = 3
 
+/** 邮箱格式（仅服务端兜底校验用）：本地段@域名.顶级域，三端同构的宽松标准 email 正则。 */
+private val EmailPattern = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+
+/** 邮箱身份归一：去空白 + 转小写 + 空串归 null（与 UserService 存取同构，大小写不敏感）。 */
+private fun normalizeEmail(email: String?): String? =
+    email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+
 /** UserInfo → MeResponse（头像 URL 附加 ?v= 文件时间，防多端缓存）。 */
 private fun meResponseOf(user: UserInfo, avatarStorage: AvatarStorage): MeResponse = MeResponse(
     id = user.id,
     phone = user.phone,
+    email = user.email,
     qqNumber = user.qqNumber,
     qqOpenid = user.qqOpenid,
     createdAt = user.createdAt,
@@ -122,21 +144,36 @@ fun Route.authRoutes(
                 return@post
             }
             val body = call.receive<RegisterRequest>()
-            if (body.phone.isBlank() || body.password.isBlank()) {
-                call.respond(HttpStatusCode.BadRequest, MessageResponse("手机号或密码不能为空"))
+            // 邮箱身份归一（小写、去空白）；email 非空走邮箱身份，否则走手机号（旧客户端语义不变）。
+            val email = normalizeEmail(body.email)
+            val phone = body.phone.trim()
+            if (phone.isBlank() && email == null) {
+                call.respond(HttpStatusCode.BadRequest, MessageResponse("手机号或邮箱不能为空"))
                 return@post
             }
-            if (body.password.length < 6) {
-                call.respond(HttpStatusCode.BadRequest, MessageResponse("密码长度至少6位"))
+            // 邮箱格式仅做宽松兜底校验（App/Web 已有前置提示，这里防脏数据入库）。
+            if (email != null && !EmailPattern.matches(email)) {
+                call.respond(HttpStatusCode.BadRequest, MessageResponse("邮箱格式不正确"))
                 return@post
             }
-            val existing = userService.findByPhone(body.phone)
+            // 密码规则（2026-09-17）：≥6 位且同时含大小写字母；只约束新设定，存量老密码不受影响。
+            val passwordError = PasswordPolicy.validate(body.password)
+            if (passwordError != null) {
+                call.respond(HttpStatusCode.BadRequest, MessageResponse(passwordError))
+                return@post
+            }
+            val existing = userService.findByPhone(phone)
             if (existing != null) {
                 registerLimiter.recordFailure(ip)
                 call.respond(HttpStatusCode.Conflict, MessageResponse("该手机号已注册"))
                 return@post
             }
-            val (userId, token) = userService.register(body.phone, body.password)
+            if (email != null && userService.findByEmail(email) != null) {
+                registerLimiter.recordFailure(ip)
+                call.respond(HttpStatusCode.Conflict, MessageResponse("该邮箱已注册"))
+                return@post
+            }
+            val (userId, token) = userService.register(phone.takeIf { it.isNotBlank() }, email, body.password)
             call.respond(HttpStatusCode.Created, AuthResponse(userId, token))
         }
 
@@ -147,10 +184,17 @@ fun Route.authRoutes(
                 return@post
             }
             val body = call.receive<LoginRequest>()
-            val result = userService.login(body.phone, body.password)
+            // email 非空走邮箱登录，否则按手机号（旧客户端只发 phone，文案保持不变）。
+            val email = normalizeEmail(body.email)
+            val result = if (email != null) {
+                userService.loginByEmail(email, body.password)
+            } else {
+                userService.login(body.phone, body.password)
+            }
             if (result == null) {
                 loginLimiter.recordFailure(ip)
-                call.respond(HttpStatusCode.Unauthorized, MessageResponse("手机号或密码错误"))
+                val message = if (email != null) "邮箱或密码错误" else "手机号或密码错误"
+                call.respond(HttpStatusCode.Unauthorized, MessageResponse(message))
                 return@post
             }
             loginLimiter.recordSuccess(ip)
@@ -299,8 +343,10 @@ fun Route.authRoutes(
                     call.respond(HttpStatusCode.BadRequest, MessageResponse("密码不能为空"))
                     return@post
                 }
-                if (body.newPassword.length < 6) {
-                    call.respond(HttpStatusCode.BadRequest, MessageResponse("密码长度至少6位"))
+                // 新密码规则与注册一致（≥6 位 + 大小写字母）；老密码不受影响，仅约束本次新设定。
+                val passwordError = PasswordPolicy.validate(body.newPassword)
+                if (passwordError != null) {
+                    call.respond(HttpStatusCode.BadRequest, MessageResponse(passwordError))
                     return@post
                 }
                 val success = userService.updatePassword(userId, body.oldPassword, body.newPassword)

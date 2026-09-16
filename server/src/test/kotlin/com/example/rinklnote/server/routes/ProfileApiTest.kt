@@ -61,7 +61,8 @@ class ProfileApiTest {
         private const val ISSUER = "test-issuer"
         private const val AUDIENCE = "test-audience"
         private const val PHONE = "13800000201"
-        private const val PASSWORD = "pass123456"
+        // 夹具密码须满足新密码规则（≥6 位 + 大小写字母，2026-09-17 起），否则注册会被 400 拦下
+        private const val PASSWORD = "Pass123456"
 
         private lateinit var server: ApplicationEngine
         private var port: Int = 0

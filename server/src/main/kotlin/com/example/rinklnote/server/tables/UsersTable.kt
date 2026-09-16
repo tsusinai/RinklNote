@@ -5,6 +5,9 @@ import org.jetbrains.exposed.sql.Table
 object UsersTable : Table("users") {
     val id = long("id").autoIncrement()
     val phone = varchar("phone", 20).nullable().uniqueIndex()
+    // 邮箱身份（2026-09-17 优化登录方式）：与 phone 同级、可空 + 唯一索引；统一存小写。
+    // createMissingTablesAndColumns 只给新建库建唯一索引，既有库由 runMigrations 幂等补建（见 Database.kt）。
+    val email = varchar("email", 255).nullable().uniqueIndex()
     val passwordHash = varchar("password_hash", 255).nullable()
     val qqNumber = varchar("qq_number", 20).nullable().uniqueIndex()
     val qqOpenid = varchar("qq_openid", 64).nullable().uniqueIndex()

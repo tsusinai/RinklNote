@@ -13,6 +13,8 @@ import java.util.*
 data class UserInfo(
     val id: Long,
     val phone: String?,
+    // 邮箱身份（2026-09-17 优化登录方式）：与 phone 同级，均可空。
+    val email: String? = null,
     val qqNumber: String?,
     val qqOpenid: String?,
     // 多通道 bot 身份（B1 通道底座）：与 qqOpenid 同构，一个用户可同时绑定多个通道。
@@ -37,11 +39,19 @@ class UserService(
     private val jwtIssuer: String,
     private val jwtAudience: String
 ) {
-    fun register(phone: String, password: String): Pair<Long, String> {
+    /** 旧签名兼容入口：手机号注册（唯一性由路由层查重，这里直接落库）。 */
+    fun register(phone: String, password: String): Pair<Long, String> = register(phone, null, password)
+
+    /**
+     * 注册（2026-09-17 起支持邮箱身份）：phone / email 至少给一个，都给则同时写入。
+     * 邮箱统一以小写存取（大小写不敏感，见 [normalizeEmail]）；唯一性查重在路由层完成。
+     */
+    fun register(phone: String?, email: String?, password: String): Pair<Long, String> {
         val hash = BCrypt.hashpw(password, BCrypt.gensalt())
         val userId = transaction {
             UsersTable.insert {
-                it[UsersTable.phone] = phone
+                it[UsersTable.phone] = phone?.takeIf { p -> p.isNotBlank() }
+                it[UsersTable.email] = normalizeEmail(email)
                 it[passwordHash] = hash
                 it[createdAt] = LocalDateTime.now().toString()
             } get UsersTable.id
@@ -50,16 +60,25 @@ class UserService(
         return Pair(userId, token)
     }
 
-    fun login(phone: String, password: String): Pair<Long, String>? {
+    /** 手机号登录（唯一性由 phone 唯一索引保证）。 */
+    fun login(phone: String, password: String): Pair<Long, String>? =
+        loginByIdentity(UsersTable.phone, phone, password)
+
+    /** 邮箱登录（2026-09-17）：与手机号登录同构，邮箱按小写匹配。 */
+    fun loginByEmail(email: String, password: String): Pair<Long, String>? =
+        loginByIdentity(UsersTable.email, normalizeEmail(email), password)
+
+    /** 通用身份登录：按列匹配 + BCrypt 校验，失败返回 null。 */
+    private fun loginByIdentity(column: Column<String?>, value: String?, password: String): Pair<Long, String>? {
         val user = transaction {
-            UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()
+            UsersTable.selectAll().where { column eq value }.singleOrNull()
         } ?: return null
 
-        val hash = user[UsersTable.passwordHash]
+        val hash = user[UsersTable.passwordHash] ?: return null
         if (!BCrypt.checkpw(password, hash)) return null
 
         val userId = user[UsersTable.id]
-        val token = generateToken(userId, phone)
+        val token = generateToken(userId, user[UsersTable.phone])
         return Pair(userId, token)
     }
 
@@ -86,6 +105,16 @@ class UserService(
             UsersTable.selectAll().where { UsersTable.phone eq phone }.singleOrNull()?.toUserInfo()
         }
     }
+
+    /** 按邮箱查用户（小写归一后匹配，与注册/登录同构）。 */
+    fun findByEmail(email: String): UserInfo? {
+        return transaction {
+            UsersTable.selectAll().where { UsersTable.email eq normalizeEmail(email) }.singleOrNull()?.toUserInfo()
+        }
+    }
+
+    /** 邮箱归一：去空白 + 转小写；null 原样返回。三端约定邮箱身份大小写不敏感。 */
+    private fun normalizeEmail(email: String?): String? = email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
     fun findByQQ(qqNumber: String): UserInfo? {
         return transaction {
@@ -238,6 +267,7 @@ class UserService(
     private fun ResultRow.toUserInfo() = UserInfo(
         id = this[UsersTable.id],
         phone = this[UsersTable.phone],
+        email = this[UsersTable.email],
         qqNumber = this[UsersTable.qqNumber],
         qqOpenid = this[UsersTable.qqOpenid],
         feishuOpenId = this[UsersTable.feishuOpenId],

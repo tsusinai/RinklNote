@@ -218,4 +218,54 @@ class UserServiceTest {
         assertFalse("仅订阅号用户不应进入推送枚举", ids.contains(u4.id))
         assertEquals(3, pushUsers.size)
     }
+
+    // ── 邮箱身份（2026-09-17 优化登录方式）──
+
+    @Test
+    fun `register with email creates account and email login works`() {
+        val (id, _) = service.register(null, "user@example.com", "Good123")
+
+        val user = service.findById(id)
+        assertNotNull(user)
+        assertEquals("user@example.com", user!!.email)
+        assertNull("纯邮箱注册不应写 phone", user.phone)
+
+        // 邮箱登录成功 / 密码错误失败 / 手机号登录不可用
+        assertEquals(id, service.loginByEmail("user@example.com", "Good123")!!.first)
+        assertNull(service.loginByEmail("user@example.com", "wrong"))
+        assertNull(service.login("", "Good123"))
+    }
+
+    @Test
+    fun `email is normalized to lowercase on register and lookup`() {
+        val (id, _) = service.register(null, "  USER@Example.COM  ", "Good123")
+
+        // 落库为小写；小写形式可查可登录
+        assertEquals("user@example.com", service.findById(id)!!.email)
+        assertEquals(id, service.findByEmail("USER@EXAMPLE.COM")!!.id)
+        assertEquals(id, service.loginByEmail("  User@Example.com ", "Good123")!!.first)
+    }
+
+    @Test
+    fun `email unique index rejects duplicate registration`() {
+        service.register(null, "dup@example.com", "Good123")
+        // 唯一索引兜底：路由层已查重（409），这里验证索引本身也会拦截脏数据
+        try {
+            service.register(null, "dup@example.com", "Good123")
+            org.junit.Assert.fail("重复邮箱注册应抛唯一约束异常")
+        } catch (_: Exception) {
+            // 预期路径（Exposed 包裹的 H2 唯一冲突）
+        }
+    }
+
+    @Test
+    fun `phone register with optional email writes both identities`() {
+        val (id, _) = service.register("13800000020", "mail@example.com", "Good123")
+        val user = service.findById(id)!!
+        assertEquals("13800000020", user.phone)
+        assertEquals("mail@example.com", user.email)
+        // 手机号与邮箱两种登录都可用
+        assertNotNull(service.login("13800000020", "Good123"))
+        assertNotNull(service.loginByEmail("mail@example.com", "Good123"))
+    }
 }

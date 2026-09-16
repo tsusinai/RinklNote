@@ -114,6 +114,9 @@ private fun Transaction.runMigrations() {
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_feishu_open_id ON users(feishu_open_id)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_wechat_openid ON users(wechat_openid)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_wecom_userid ON users(wecom_userid)",
+        // 邮箱登录（2026-09-17）：email 列同属「给既有库补唯一索引」的范畴 ——
+        // createMissingTablesAndColumns 只加列不建索引，这里幂等补齐；多行 NULL（未填邮箱）不受影响。
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users(email)",
         // v13 补充：各层预算的唯一性约束（部分唯一索引，Postgres/H2 均支持）。
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_total_month ON budgets(user_id, month_start) WHERE category_id IS NULL AND sub_category_id IS NULL",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_budgets_category_month ON budgets(user_id, month_start, category_id) WHERE category_id IS NOT NULL AND sub_category_id IS NULL",
