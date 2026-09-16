@@ -3,10 +3,8 @@ package com.example.rinklnote.ui.screen.ai
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.component.RinklTopBarContentHeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
@@ -83,11 +82,14 @@ fun AiScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        // 标题栏：左侧返回键 + 居中标题（与搜索账单/自定义主题等二级页一致）
+        // 标题栏：左侧返回键 + 居中标题（与搜索账单/自定义主题等二级页一致）。
+        // 高度收敛为全局顶栏 46dp：此前 vertical 8dp padding + 48dp IconButton 撑出 64dp，
+        // 顶部留白明显大于其它二级页（顶部 padding 过大的根因）。
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .height(RinklTopBarContentHeight)
+                .padding(horizontal = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
@@ -153,16 +155,20 @@ fun AiScreen(
         }
 
         // 快捷询问 chips：点击以预设文案直接走现有发送链路（AiViewModel.send），
-        // 文案措辞对齐服务端意图关键词（总结 / 异常 / 分析），横排三个，小屏可横向滚动。
+        // 文案措辞对齐服务端意图关键词（总结 / 异常 / 分析）。三枚等宽填满整行
+        // （各占 weight(1f)），不再按内容收缩、也不再横向滚动——此前右端留一大块空白。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .horizontalScroll(rememberScrollState()),
+                .padding(horizontal = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             quickAsks.forEach { (label, query) ->
-                QuickAskChip(text = label) { viewModel.send(query) }
+                QuickAskChip(
+                    text = label,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.send(query) }
+                )
             }
         }
 
@@ -257,12 +263,12 @@ private val quickAsks = listOf(
     "支出分析" to "分析一下我的支出"
 )
 
-/** 胶囊询问 chip：边框走边框令牌（未自定义时回落内置描边灰，与输入框同款处理），文字走字体令牌。 */
+/** 胶囊询问 chip：边框走边框令牌（未自定义时回落内置描边灰，与输入框同款处理），文字走字体令牌；等宽布局下文字居中。 */
 @Composable
-private fun QuickAskChip(text: String, onClick: () -> Unit) {
+private fun QuickAskChip(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val rinkl = LocalRinklColors.current
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surface)
             .border(
@@ -271,9 +277,10 @@ private fun QuickAskChip(text: String, onClick: () -> Unit) {
                 shape = RoundedCornerShape(24.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Text(text = text, fontSize = 13.sp, color = rinkl.fontColor)
+        Text(text = text, fontSize = 13.sp, color = rinkl.fontColor, maxLines = 1)
     }
 }
 
