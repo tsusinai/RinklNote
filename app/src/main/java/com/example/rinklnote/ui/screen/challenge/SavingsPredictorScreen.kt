@@ -37,7 +37,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
-import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
 
