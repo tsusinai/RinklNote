@@ -9,6 +9,7 @@ import Card from '../../components/ui/Card.vue'
 import Btn from '../../components/ui/Btn.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
 import EmptyState from '../../components/ui/EmptyState.vue'
+import ParticleBackground from '../../components/ParticleBackground.vue'
 import type { MoneyStyle } from '../../types'
 
 const data = useDataStore()
@@ -71,6 +72,8 @@ function msgClass(m: string): string {
 
 <template>
   <div class="page">
+    <!-- 粒子星空背景：fixed 层（z-index:0），.page 抬到 z-index:1 浮在星点之上 -->
+    <ParticleBackground />
     <h2>快速记账</h2>
     <Card>
       <!-- 首屏数据未到时渲染骨架占位 -->
@@ -128,7 +131,8 @@ function msgClass(m: string): string {
 </template>
 
 <style scoped>
-.page { max-width: 760px; }
+/* position:relative + z-index:1：保证页面内容浮在粒子星空（fixed z-index:0）之上 */
+.page { max-width: 760px; position: relative; z-index: 1; }
 .toggle { display: flex; gap: 8px; margin-bottom: 16px; }
 .toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
 .toggle-btn.on.exp { background: var(--expense); color: #fff; border-color: transparent; font-weight: 600; }

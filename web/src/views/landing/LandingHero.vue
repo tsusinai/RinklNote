@@ -9,6 +9,8 @@ const router = useRouter()
 
 // 数据源隔离：落地页不 import src/stores/**、src/api/**. 已登录判断直接读 localStorage（与 http.ts 的 rkl_token 一致）。
 function cta() { router.push(localStorage.getItem('rkl_token') ? '/console' : '/login') }
+// 主标题点击同样跳「主页」：与 CTA 按 token 切换的逻辑保持一致（已登录→控制台，未登录→登录页）
+function goHome() { cta() }
 function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
 
 /* Hero 统计数字 countUp（W3c）：进入视口才起表（IntersectionObserver 触发一次）；
@@ -49,7 +51,17 @@ onUnmounted(() => { io?.disconnect(); io = undefined })
 <template>
   <section class="hero" v-reveal>
     <span class="hero-chip">个人记账 · 资产 · AI 洞察</span>
-    <h1 class="hero-title">把钱记在账本里，<br /><span class="grad">每一笔都值得被看见</span></h1>
+    <!-- 主标题可点：跳「主页」（已登录→控制台 / 未登录→登录页，与 CTA 同逻辑）；
+         role="link" + 键盘回车/空格触发，键盘可达性不降级 -->
+    <h1
+      class="hero-title"
+      role="link"
+      tabindex="0"
+      title="进入控制台"
+      @click="goHome"
+      @keydown.enter.prevent="goHome"
+      @keydown.space.prevent="goHome"
+    >把钱记在账本里，<br /><span class="grad">每一笔都值得被看见</span></h1>
     <p class="hero-sub">快速记账、收入支出一目了然；资产净额、月度预算、AI 月结复盘，一个控制台全搞定。</p>
     <div class="hero-cta">
       <button class="btn btn-primary" @click="cta">进入控制台</button>
@@ -68,7 +80,9 @@ onUnmounted(() => { io?.disconnect(); io = undefined })
 <style scoped>
 .hero { max-width: 1080px; margin: 0 auto; padding: 72px 24px 40px; text-align: center; }
 .hero-chip { display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-size: 13px; font-weight: 600; margin-bottom: 24px; }
-.hero-title { font-size: clamp(34px, 6vw, 60px); line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 20px; }
+.hero-title { font-size: clamp(34px, 6vw, 60px); line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 20px; cursor: pointer; transition: opacity var(--dur-expand) var(--ease); }
+/* 可点主标题的悬停反馈：轻微降不透明度（克制，不加下划线破坏大字排版） */
+.hero-title:hover { opacity: .88; }
 .hero-title .grad { background: linear-gradient(120deg, var(--income), var(--primary) 60%, var(--expense)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero-sub { font-size: 17px; color: var(--muted); max-width: 620px; margin: 0 auto 32px; line-height: 1.6; }
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 56px; }

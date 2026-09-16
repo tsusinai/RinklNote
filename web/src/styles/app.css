@@ -85,6 +85,8 @@
  * 页面转场（RouterView <Transition>，方向由 router/transition.ts 判定）
  * 前进 page-forward / 后退 page-back / 纯 fade page-fade；
  * 只动 transform/opacity，时长取 --dur-page(280ms)；reduced-motion 由 theme.css 全局规则冻结。
+ * 审计结论（2026-09-17）：控制台内已按 tab 序号定向转场；此处唯一补齐点——
+ * 纯 fade（landing↔login、进出控制台）入场加 6px 上浮，落定更柔和，方向感中立。
  * ============================================================ */
 .page-forward-enter-active, .page-forward-leave-active,
 .page-back-enter-active, .page-back-leave-active,
@@ -97,5 +99,6 @@
 /* 后退：新页从左侧滑入，旧页向右滑出 */
 .page-back-enter-from { opacity: 0; transform: translateX(-24px); }
 .page-back-leave-to   { opacity: 0; transform: translateX(24px); }
-/* 纯 fade（Landing↔Login / 进出控制台 / 首次进入） */
-.page-fade-enter-from, .page-fade-leave-to { opacity: 0; }
+/* 纯 fade + 微上浮入场（离场保持纯 fade，方向中立） */
+.page-fade-enter-from { opacity: 0; transform: translateY(6px); }
+.page-fade-leave-to { opacity: 0; }

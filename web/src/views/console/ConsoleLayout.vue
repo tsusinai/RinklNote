@@ -125,12 +125,15 @@ function logout() {
 .console { display: flex; min-height: 100vh; background: var(--bg); }
 
 /* ── 桌面侧栏 ── */
+/* background + z-index:1：记账页粒子星空（fixed z-index:0）不透进侧栏文字区；
+ * 这里保留既有 sticky（z-index 对 sticky 同样生效），不改回 relative 以免破坏吸顶 */
 .sidebar {
   width: 208px; flex-shrink: 0;
   padding: 20px 12px 16px;
   display: flex; flex-direction: column;
   border-right: 1px solid var(--border-light);
-  position: sticky; top: 0; height: 100vh;
+  background: var(--bg);
+  position: sticky; top: 0; height: 100vh; z-index: 1;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 20px; }
 .brand-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
