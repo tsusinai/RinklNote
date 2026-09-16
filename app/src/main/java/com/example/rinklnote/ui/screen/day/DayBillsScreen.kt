@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -173,7 +174,11 @@ fun DayBillsScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                // 状态栏内边距必须由列表自己垫：悬浮顶栏（statusBarsPadding + 46dp）浮在其上，
+                // 漏掉这层会让 contentPadding 只按 46dp 计算 → 顶栏标题压住汇总卡（重叠 bug）。
+                .statusBarsPadding(),
             contentPadding = PaddingValues(
                 // 顶部垫高 = 统一顶栏高度 + 起始留白（对齐搜索账单/月度明细页）
                 top = RinklTopBarContentHeight + 8.dp,
