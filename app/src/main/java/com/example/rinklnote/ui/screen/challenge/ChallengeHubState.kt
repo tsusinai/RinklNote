@@ -145,7 +145,7 @@ internal fun deriveHubCards(state: ChallengeState): List<HubCardState> {
             key = HubCardKey.ENVELOPE,
             emoji = "💌",
             title = "预算信封",
-            subtitle = if (state.weeklyChallenge?.goal ?: 0L > 0) {
+            subtitle = if ((state.weeklyChallenge?.goal ?: 0L) > 0) {
                 "本周已花 ${Money.format(state.weekExpenseMinor)}"
             } else {
                 "还没设本周上限，装一个？"

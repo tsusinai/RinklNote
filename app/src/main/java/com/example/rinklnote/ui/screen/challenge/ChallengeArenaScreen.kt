@@ -266,9 +266,11 @@ fun ChallengeDetailScreen(
         ChallengeType.BOOKKEEPING_STREAK -> today.plusDays(1).toDayStartEpoch()
         else -> monthEndExclusive(today).toDayStartEpoch()
     }
-    // 周期内的真实账单（Room Flow，删账单后列表实时回落）。
-    val bills by app.database.billDao().observeByMonth(periodStart, periodEnd)
-        .collectAsStateWithLifecycle(initialValue = emptyList())
+    // 周期内的真实账单（Room Flow，删账单后列表实时回落）；remember 固定 Flow 实例，
+    // 防止每次重组都重新订阅 observeByMonth。
+    val bills by remember(periodStart, periodEnd) {
+        app.database.billDao().observeByMonth(periodStart, periodEnd)
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
 
     Box(modifier = Modifier.fillMaxSize()) {
         DefaultHazeBackground(hazeState = hazeState)

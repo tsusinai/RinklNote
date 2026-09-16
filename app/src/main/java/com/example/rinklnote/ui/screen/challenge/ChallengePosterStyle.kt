@@ -175,7 +175,7 @@ fun PosterCard(
             .drawBehind {
                 // 实心偏移阴影：在卡片正下方画一个同形圆角矩形，无模糊、硬边（大字报质感的关键）。
                 drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.85f),
+                    color = Color.Black,
                     topLeft = Offset(0f, depth.toPx()),
                     size = size,
                     cornerRadius = CornerRadius(cornerRadius.toPx()),
@@ -342,7 +342,7 @@ fun StickerButton(
             .graphicsLayer { translationY = depth.toPx() }
             .drawBehind {
                 drawRoundRect(
-                    color = Color.Black.copy(alpha = 0.85f),
+                    color = Color.Black,
                     topLeft = Offset(0f, depth.toPx()),
                     size = size,
                     cornerRadius = CornerRadius(12.dp.toPx()),
