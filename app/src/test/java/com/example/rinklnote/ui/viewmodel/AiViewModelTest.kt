@@ -11,6 +11,8 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.AccountDTO
 import com.example.rinklnote.data.network.dto.AiDisabledRequest
 import com.example.rinklnote.data.network.dto.AnomalyAlert
+import com.example.rinklnote.data.network.dto.AvatarUploadResponse
+import com.example.rinklnote.data.network.dto.ProfileUpdateRequest
 import com.example.rinklnote.data.network.dto.CategoryAmount
 import com.example.rinklnote.data.network.dto.MonthlySpike
 import com.example.rinklnote.data.network.dto.MonthlyReviewResponse
@@ -381,6 +383,9 @@ class AiViewModelTest {
         override suspend fun wecomBotBindStatus(): BotBindStatusResponse = BotBindStatusResponse()
         override suspend fun unbindWecomBot(): MessageResponse = MessageResponse("")
         override suspend fun getMe(): MeResponse = MeResponse(0, "")
+        override suspend fun updateProfile(request: ProfileUpdateRequest): MeResponse = MeResponse(0, "")
+        override suspend fun uploadAvatar(file: okhttp3.MultipartBody.Part): AvatarUploadResponse =
+            AvatarUploadResponse()
         override suspend fun changePassword(request: ChangePasswordRequest): MessageResponse = MessageResponse("")
         override suspend fun syncBills(after: Long?, afterId: Long?, limit: Int): SyncResponse = SyncResponse(emptyList(), 0L)
         override suspend fun uploadBill(bill: CreateBillRequest): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)
