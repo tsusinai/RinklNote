@@ -14,7 +14,6 @@ export const auth = {
   setAiDisabled: (disabled: boolean) =>
     api<MessageResponse>('/api/auth/ai', { method: 'PUT', body: { disabled } }),
   aiStatus: () => api<{ disabled: boolean }>('/api/auth/ai'),
-  bindQq: (qqNumber: string) =>
-    api<MessageResponse>('/api/auth/bind-qq', { method: 'POST', body: { qqNumber } }),
-  unbindQq: () => api<MessageResponse>('/api/auth/unbind-qq', { method: 'POST' }),
 }
+// 说明：旧 bindQq / unbindQq（/api/auth/bind-qq、/api/auth/unbind-qq）已随服务端下线删除；
+// 机器人绑定一律走 /api/{qq,feishu,wecom}-bot/{bind,unbind,bind-status}（设置页机器人管理区）。

@@ -14,6 +14,7 @@ import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.SettingsRow
 import com.example.rinklnote.ui.viewmodel.AuthState
+import com.example.rinklnote.ui.viewmodel.BotChannel
 
 /**
  * 「我的」页的五张设置分组卡。
@@ -197,17 +198,20 @@ internal fun PersonalizationCard(
 }
 
 /**
- * «账户与安全» 组：AI 推送开关在前，接口配置、密码与 QQ 绑定类低频安全操作垫后。
+ * «账户与安全» 组：AI 推送开关在前，接口配置、密码与机器人绑定类低频安全操作垫后。
  *
  * 2026-09-15 拆分：主题 / 自定义主题 / 背景图等个性化行迁入 [PersonalizationCard]，
  * 本卡只保留账号与安全语义的行。
+ *
+ * Phase D 三通道收敛：旧「绑定/解绑QQ号」（输 QQ 号）入口移除，改为 QQ / 飞书 / 企业微信
+ * 三行通道状态——已绑定行点击走解绑确认，未绑定行点击进「机器人绑定」页输码绑定。
  */
 @Composable
 internal fun AccountCard(
     state: AuthState,
     onPasswordClick: () -> Unit,
-    onBindQQClick: () -> Unit,
-    onUnbindQQ: () -> Unit,
+    onBindBotClick: () -> Unit,
+    onUnbindBot: (BotChannel) -> Unit,
     onQqBotGuideClick: () -> Unit,
     onSetAiDisabled: (Boolean) -> Unit,
     onAiTokenClick: () -> Unit
@@ -232,12 +236,21 @@ internal fun AccountCard(
             label = "修改密码",
             onClick = onPasswordClick
         )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_link,
-            label = if (state.isQQBound) "解绑QQ号" else "绑定QQ号",
-            onClick = if (state.isQQBound) onUnbindQQ else onBindQQClick
-        )
+        // 三通道机器人绑定状态：值列展示「已绑定（尾号后 6 位）/ 未绑定」
+        BotChannel.entries.forEach { channel ->
+            RinklDivider()
+            val binding = state.bindingOf(channel)
+            SettingsRow(
+                icon = R.drawable.ic_link,
+                label = "${channel.label}机器人",
+                value = if (binding.bound) {
+                    if (binding.maskedId.isNotBlank()) "已绑定 …${binding.maskedId}" else "已绑定"
+                } else {
+                    "未绑定"
+                },
+                onClick = { if (binding.bound) onUnbindBot(channel) else onBindBotClick() }
+            )
+        }
         RinklDivider()
         SettingsRow(
             icon = R.drawable.ic_link,

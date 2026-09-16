@@ -17,7 +17,8 @@ import com.example.rinklnote.data.network.dto.MonthlyReviewResponse
 import com.example.rinklnote.data.network.dto.HabitResponse
 import com.example.rinklnote.data.network.dto.AnomalyResponse
 import com.example.rinklnote.data.network.dto.BillDTO
-import com.example.rinklnote.data.network.dto.BindQQRequest
+import com.example.rinklnote.data.network.dto.BotBindCodeRequest
+import com.example.rinklnote.data.network.dto.BotBindStatusResponse
 import com.example.rinklnote.data.network.dto.ChallengeDTO
 import com.example.rinklnote.data.network.dto.UpsertChallengeRequest
 import com.example.rinklnote.data.network.dto.BudgetDTO
@@ -370,10 +371,17 @@ class AiViewModelTest {
         // --- stubs for the rest of the interface ---
         override suspend fun register(request: LoginRequest): LoginResponse = LoginResponse(0, "")
         override suspend fun login(request: LoginRequest): LoginResponse = LoginResponse(0, "")
-        override suspend fun bindQQ(request: BindQQRequest): MessageResponse = MessageResponse("")
+        override suspend fun bindQQBot(request: BotBindCodeRequest): MessageResponse = MessageResponse("")
+        override suspend fun qqBotBindStatus(): BotBindStatusResponse = BotBindStatusResponse()
+        override suspend fun unbindQQBot(): MessageResponse = MessageResponse("")
+        override suspend fun bindFeishuBot(request: BotBindCodeRequest): MessageResponse = MessageResponse("")
+        override suspend fun feishuBotBindStatus(): BotBindStatusResponse = BotBindStatusResponse()
+        override suspend fun unbindFeishuBot(): MessageResponse = MessageResponse("")
+        override suspend fun bindWecomBot(request: BotBindCodeRequest): MessageResponse = MessageResponse("")
+        override suspend fun wecomBotBindStatus(): BotBindStatusResponse = BotBindStatusResponse()
+        override suspend fun unbindWecomBot(): MessageResponse = MessageResponse("")
         override suspend fun getMe(): MeResponse = MeResponse(0, "")
         override suspend fun changePassword(request: ChangePasswordRequest): MessageResponse = MessageResponse("")
-        override suspend fun unbindQQ(): MessageResponse = MessageResponse("")
         override suspend fun syncBills(after: Long?, afterId: Long?, limit: Int): SyncResponse = SyncResponse(emptyList(), 0L)
         override suspend fun uploadBill(bill: CreateBillRequest): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)
         override suspend fun updateBill(id: Long, bill: CreateBillRequest): BillDTO = BillDTO(id = 0, amountMinor = 0L, billType = "", categoryId = 0, categoryName = "", accountId = 0, date = 0L, source = "", createdAt = 0L)

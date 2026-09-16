@@ -4,16 +4,20 @@ import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
+import com.example.rinklnote.server.services.BotCommands
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
+import com.example.rinklnote.server.services.FeishuBotService
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.MpBotService
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQBotWebSocketClient
 import com.example.rinklnote.server.services.PushScheduler
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.WecomBotService
 import com.example.rinklnote.server.services.asr.AsrConfig
 import com.example.rinklnote.server.services.asr.WhisperAsrService
 import com.example.rinklnote.server.services.insight.InsightService
@@ -123,7 +127,40 @@ fun Application.module() {
     val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
     qqWsClient.start(appScope)
 
-    // QQ 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）
+    // 飞书自建应用机器人（B2）——配置存 bot_config，经 Web 管理端维护；
+    // 事件收口 webhook（FeishuBotWebhookRoutes），消息处理走 FeishuMessageProcessor。
+    val feishuBotService = FeishuBotService()
+    feishuBotService.loadFromDb()
+    if (feishuBotService.isConfigured()) {
+        log.info("飞书 Bot 已加载配置（AppID: ${feishuBotService.getMaskedAppId()}）")
+    } else {
+        log.info("飞书 Bot 未配置 —— 可在 Web 设置页维护")
+    }
+
+    // 企业微信智能机器人（C-W1）——配置存 bot_config（wecom_token / wecom_encoding_aes_key /
+    // wecom_push_webhook_url），回调收口 WecomBotWebhookRoutes（同步被动回复，5s 窗口），
+    // 消息处理走 WecomMessageProcessor；主动推送走「消息推送」群机器人 webhook（见 send 分发处）。
+    val wecomBotService = WecomBotService()
+    wecomBotService.loadFromDb()
+    if (wecomBotService.isConfigured()) {
+        log.info("企微 Bot 已加载配置（Token: ${wecomBotService.getToken()?.take(2)}**）") // 掩码：只露前 2 位（安全评审修复）
+    } else {
+        log.info("企微 Bot 未配置 —— 可在 Web 设置页维护")
+    }
+
+    // 个人订阅号（C-W2）——只收不推：配置仅 mp_token（+可选 mp_encoding_aes_key 安全模式），
+    // 唯一出口是回调里的 5s 被动回复（MpWebhookRoutes），消息处理走 MpMessageProcessor。
+    val mpBotService = MpBotService()
+    mpBotService.loadFromDb()
+    if (mpBotService.isConfigured()) {
+        log.info("订阅号已加载配置（明文${if (mpBotService.getEncodingAesKey() != null) "以外还配了加密 key（安全模式）" else "模式"}）")
+    } else {
+        log.info("订阅号未配置 —— 可在 Web 设置页维护")
+    }
+
+    // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
+    // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
+    // 目标通道已在调度器内按 飞书 > 企业微信 > QQ 取第一个已绑定，这里只做「通道 → 发送实现」的映射。
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
@@ -134,9 +171,27 @@ fun Application.module() {
             val dayStart = now.toLocalDate().atStartOfDay(zone).toInstant().toEpochMilli()
             insightService.dailyPushCopy(userId, dayStart - 86_400_000L, dayStart)
         },
-        // 主动推送：msg_id 传空串 → QQ 会省略该字段（随机 UUID 会被拒 40034024）。
-        // 被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
-        send = { openid, content, _ -> qqBotService.sendC2CMessage(openid, content, "") },
+        // QQ 通道：接现有发送实现。主动推送 msg_id 传空串 → QQ 会省略该字段
+        // （随机 UUID 会被拒 40034024）；被动回复（QQMessageProcessor）仍传真实事件 id，不受影响。
+        // FEISHU 通道（B2 已接线）：sendText 不传消息 id 即主动发送（tenant_access_token 由服务内缓存）。
+        // WECOM 通道（C-W1 已接线）：企微「消息推送」webhook 主动推。⚠️ 边界：webhook 机器人推送是
+        // **群 / 群机器人维度**（消息发到配置该 webhook 的群会话），不是按用户单聊——按人单聊主动
+        // 触达需要企业微信「应用消息」接口 message/send（corpid + 应用 secret 换 access_token），
+        // 本期不做（调研文档 3.4/3.6）。因此企微绑定用户的推送统一落到群机器人会话。
+        // ⚠️ 安全评审修复：正因群维度会跨用户，调度器（PushScheduler）仅在全库企微绑定用户数 == 1
+        // 时才选中 WECOM 通道，多用户绑定时会跳过企微落 QQ —— 此处的 pushText 只承接调度器放行的场景。
+        // MP 分支（订阅号）：无任何主动推送能力（客服/模板/订阅通知均需认证服务号，调研文档 4.5），
+        // 唯一出口是回调里的 5s 被动回复（MpWebhookRoutes）。调度器也不会选到该通道
+        // （findAllPushUsers 只看飞书/企微/QQ，B1 已保证），此分支不可达，no-op 兜底返回 false。
+        send = { channel, targetId, content, _ ->
+            when (channel) {
+                BotCommands.SOURCE_QQ -> qqBotService.sendC2CMessage(targetId, content, "")
+                BotCommands.SOURCE_FEISHU -> feishuBotService.sendText(targetId, content)
+                BotCommands.SOURCE_WECOM -> wecomBotService.pushText(content)
+                BotCommands.SOURCE_MP -> false // 订阅号无主动推送能力，no-op（见上方边界注释）
+                else -> false
+            }
+        },
         monthlyProvider = { userId, month ->
             val (y, m) = month.split("-").map { it.toInt() }
             val zone = java.time.ZoneId.of("Asia/Shanghai")
@@ -213,6 +268,8 @@ fun Application.module() {
         llmParser.shutdown()
         qqWsClient.shutdown()
         qqBotService.shutdown()
+        feishuBotService.shutdown()
+        wecomBotService.shutdown()
         asrService.shutdown()
     }
 
@@ -229,6 +286,11 @@ fun Application.module() {
         insightRoutes(insightService)
         qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
         qqBotManageRoutes(qqBotService, userService)
+        feishuBotWebhookRoutes(feishuBotService, userService, billService, nluService, budgetService, insightService)
+        feishuBotManageRoutes(feishuBotService, userService)
+        wecomBotWebhookRoutes(wecomBotService, userService, billService, nluService, budgetService, insightService)
+        wecomBotManageRoutes(wecomBotService, userService)
+        mpWebhookRoutes(mpBotService, userService, billService, nluService, budgetService, insightService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
     }

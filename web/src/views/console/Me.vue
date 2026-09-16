@@ -3,16 +3,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { auth } from '../../api/auth'
-import { useToast } from '../../composables/useToast'
 import { useDataStore } from '../../stores/data'
 
 const authStore = useAuthStore()
 const data = useDataStore()
 const router = useRouter()
-const toast = useToast()
 
 const me = ref(authStore.user)
-const qqNumber = ref('')
 const oldPwd = ref('')
 const newPwd = ref('')
 const busy = ref(false)
@@ -22,19 +19,8 @@ onMounted(async () => {
   if (authStore.token) { await authStore.refresh(); me.value = authStore.user }
 })
 
-async function bindQq() {
-  busy.value = true
-  try { await auth.bindQq(qqNumber.value); toast.push('已绑定'); await refreshMe() }
-  catch (e: any) { toast.push(e?.message || '绑定失败', 'err') }
-  finally { busy.value = false }
-}
-async function unbindQq() {
-  if (!confirm('解绑QQ号？')) return
-  busy.value = true
-  try { await auth.unbindQq(); toast.push('已解绑'); await refreshMe() }
-  catch (e: any) { toast.push(e?.message || '解绑失败', 'err') }
-  finally { busy.value = false }
-}
+// 机器人绑定迁移（Phase D）：旧「输 QQ 号绑定 / 解绑QQ号」已下线，
+// QQ / 飞书 / 企业微信统一到设置页机器人管理区（绑定码流程）。
 async function changePwd() {
   if (newPwd.value.length < 6) { pwdMsg.value = '新密码至少6位'; return }
   busy.value = true
@@ -74,16 +60,10 @@ function logout() {
       </div>
 
       <div class="card">
-        <div class="card-title">QQ号绑定</div>
-        <div v-if="me.qqNumber">
-          <div class="row"><span class="k">已绑定 QQ号</span><span class="v">{{ me.qqNumber }}</span></div>
-          <button class="btn ghost" @click="unbindQq">解绑QQ号</button>
-        </div>
-        <div v-else>
-          <p class="hint">绑定QQ号后可通过QQ机器人快捷记账</p>
-          <input class="sel" placeholder="QQ号" v-model="qqNumber" />
-          <button class="btn primary" :disabled="busy" @click="bindQq">绑定QQ</button>
-        </div>
+        <div class="card-title">机器人绑定</div>
+        <div class="row"><span class="k">QQ机器人</span><span class="v">{{ me.qqOpenid ? '已绑定 …' + me.qqOpenid.slice(-6) : '未绑定' }}</span></div>
+        <p class="hint">到「设置 → 机器人」管理绑定（QQ / 飞书 / 企业微信，绑定码流程）</p>
+        <router-link class="row link" to="/console/settings"><span class="k">设置 → 机器人</span><span class="v arrow">进入 ›</span></router-link>
       </div>
 
       <div class="card">

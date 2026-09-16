@@ -12,17 +12,43 @@ interface ApiService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
-    @POST("api/auth/bind-qq")
-    suspend fun bindQQ(@Body request: BindQQRequest): MessageResponse
+    // ── 机器人三通道绑定（绑定码流程，Phase D）──
+    // QQ / 飞书 / 企微三个管理面完全同构：在对应 App 里向机器人发「登录」拿 6 位绑定码，
+    // App 端输码调 {channel}-bot/bind 换绑；绑定状态一律以服务端 bind-status 为准。
+    // QQ 管理路由识别的是官方 openid（qqOpenid），与旧 /api/auth/bind-qq（QQ 号）无关。
+
+    @POST("api/qq-bot/bind")
+    suspend fun bindQQBot(@Body request: BotBindCodeRequest): MessageResponse
+
+    @GET("api/qq-bot/bind-status")
+    suspend fun qqBotBindStatus(): BotBindStatusResponse
+
+    @POST("api/qq-bot/unbind")
+    suspend fun unbindQQBot(): MessageResponse
+
+    @POST("api/feishu-bot/bind")
+    suspend fun bindFeishuBot(@Body request: BotBindCodeRequest): MessageResponse
+
+    @GET("api/feishu-bot/bind-status")
+    suspend fun feishuBotBindStatus(): BotBindStatusResponse
+
+    @POST("api/feishu-bot/unbind")
+    suspend fun unbindFeishuBot(): MessageResponse
+
+    @POST("api/wecom-bot/bind")
+    suspend fun bindWecomBot(@Body request: BotBindCodeRequest): MessageResponse
+
+    @GET("api/wecom-bot/bind-status")
+    suspend fun wecomBotBindStatus(): BotBindStatusResponse
+
+    @POST("api/wecom-bot/unbind")
+    suspend fun unbindWecomBot(): MessageResponse
 
     @GET("api/auth/me")
     suspend fun getMe(): MeResponse
 
     @POST("api/auth/password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
-
-    @POST("api/auth/unbind-qq")
-    suspend fun unbindQQ(): MessageResponse
 
     @GET("api/auth/ai")
     suspend fun getAiDisabled(): Map<String, Boolean>

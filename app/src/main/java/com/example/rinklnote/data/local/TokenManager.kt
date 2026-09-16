@@ -36,7 +36,6 @@ class TokenManager(private val context: Context) {
     }
     val userId: Flow<Long> = context.dataStore.data.map { it[KEY_USER_ID] ?: -1L }
     val lastSyncTime: Flow<Long> = context.dataStore.data.map { it[KEY_LAST_SYNC] ?: 0L }
-    val qqNumber: Flow<String?> = context.dataStore.data.map { it[KEY_QQ_BOUND] }
 
     suspend fun saveAuth(token: String, userId: Long) {
         context.dataStore.edit {
@@ -46,11 +45,11 @@ class TokenManager(private val context: Context) {
         cachedToken = token
     }
 
-    suspend fun saveQQ(qqNumber: String) {
-        context.dataStore.edit { it[KEY_QQ_BOUND] = qqNumber }
-    }
-
-    suspend fun clearQQ() {
+    /**
+     * 清掉旧版「QQ 号本地缓存」键（Phase D 遗留收敛：只清理不迁移）。
+     * 机器人绑定状态一律以服务端 /api/{channel}-bot/bind-status 为准，本地不再缓存。
+     */
+    suspend fun clearLegacyQQCache() {
         context.dataStore.edit { it.remove(KEY_QQ_BOUND) }
     }
 
@@ -69,8 +68,6 @@ class TokenManager(private val context: Context) {
     }
 
     suspend fun isLoggedIn(): Boolean = context.dataStore.data.first()[KEY_TOKEN] != null
-
-    suspend fun isQQBound(): Boolean = context.dataStore.data.first()[KEY_QQ_BOUND] != null
 
     /** Synchronous fallback for OkHttp interceptor (runs on background thread) */
     fun getTokenSync(): String? {

@@ -68,6 +68,7 @@ import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.ui.viewmodel.BotChannel
 import com.example.rinklnote.util.exportBillsToCsv
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.first
@@ -99,7 +100,7 @@ import kotlinx.coroutines.launch
  * @param repository 账单仓库（导出 / 登出清数据）
  * @param aiTokenViewModel AI Token VM
  * @param onLoginClick 跳登录页
- * @param onBindQQClick 跳绑定 QQ 页
+ * @param onBindBotClick 跳「机器人绑定」页（QQ / 飞书 / 企业微信绑定码流程）
  * @param onQqBotGuideClick 跳机器人引导
  * @param onCustomThemeClick 跳「自定义主题」页（字体色/主题色/顶栏色/图标色/边框色）
  * @param onCropBackground 选好背景图后进入取景框裁剪
@@ -115,7 +116,7 @@ fun ProfileScreen(
     repository: BillRepository,
     aiTokenViewModel: AiTokenViewModel,
     onLoginClick: () -> Unit,
-    onBindQQClick: () -> Unit,
+    onBindBotClick: () -> Unit,
     onQqBotGuideClick: () -> Unit,
     onCustomThemeClick: () -> Unit,
     onCropBackground: (Uri) -> Unit,
@@ -334,8 +335,8 @@ fun ProfileScreen(
                 AccountCard(
                     state = state,
                     onPasswordClick = { dialog = ProfileDialog.Password },
-                    onBindQQClick = onBindQQClick,
-                    onUnbindQQ = { dialog = ProfileDialog.UnbindQQ },
+                    onBindBotClick = onBindBotClick,
+                    onUnbindBot = { dialog = ProfileDialog.UnbindBot(it) },
                     onQqBotGuideClick = onQqBotGuideClick,
                     onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) },
                     onAiTokenClick = { dialog = ProfileDialog.AiToken }
@@ -373,15 +374,14 @@ fun ProfileScreen(
         ProfileDialog.Password ->
             PasswordDialog(viewModel = authViewModel, onDismiss = dismissDialog)
 
-        ProfileDialog.UnbindQQ -> if (state.isQQBound) {
-            UnbindQQDialog(
-                onConfirm = {
-                    dismissDialog()
-                    authViewModel.onEvent(AuthEvent.UnbindQQ)
-                },
-                onDismiss = dismissDialog
-            )
-        }
+        is ProfileDialog.UnbindBot -> UnbindBotDialog(
+            channel = current.channel,
+            onConfirm = {
+                dismissDialog()
+                authViewModel.onEvent(AuthEvent.UnbindBot(current.channel))
+            },
+            onDismiss = dismissDialog
+        )
 
         ProfileDialog.Theme ->
             ThemeModeDialog(
@@ -529,8 +529,9 @@ private fun ProfileHeader(
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = if (state.isLoggedIn) {
-                    "QQ ${if (state.isQQBound) state.qqNumber else "未绑定"} · " +
-                        "机器人 ${if (state.botBound) "已绑定" else "未绑定"}"
+                    "机器人绑定 " + BotChannel.entries.joinToString(" · ") { channel ->
+                        channel.label + if (state.bindingOf(channel).bound) "已绑" else "未绑"
+                    }
                 } else {
                     "登录后即可云端同步账单"
                 },

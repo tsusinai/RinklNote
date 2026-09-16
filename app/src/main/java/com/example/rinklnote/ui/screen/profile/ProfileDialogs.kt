@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.ui.viewmodel.BotChannel
 
 /**
  * 「我的」页同一时刻**至多只有一个弹窗**，用单一 sealed 状态表达。
@@ -44,8 +45,8 @@ sealed interface ProfileDialog {
     /** 修改密码 */
     data object Password : ProfileDialog
 
-    /** 解绑 QQ 号二次确认 */
-    data object UnbindQQ : ProfileDialog
+    /** 解绑机器人通道二次确认（QQ / 飞书 / 企业微信，按通道分发事件） */
+    data class UnbindBot(val channel: BotChannel) : ProfileDialog
 
     /** 主题模式选择（跟随系统 / 浅色 / 深色） */
     data object Theme : ProfileDialog
@@ -103,13 +104,13 @@ internal fun PasswordDialog(viewModel: AuthViewModel, onDismiss: () -> Unit) {
     )
 }
 
-/** 解绑 QQ 二次确认。 */
+/** 解绑机器人通道二次确认（QQ / 飞书 / 企业微信按通道分发 [AuthEvent.UnbindBot]）。 */
 @Composable
-internal fun UnbindQQDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun UnbindBotDialog(channel: BotChannel, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("解绑QQ号") },
-        text = { Text("解绑后可通过QQ机器人快捷记账功能将关闭。确定解绑？") },
+        title = { Text("解绑${channel.label}") },
+        text = { Text("解绑后将无法继续用${channel.guideApp}给机器人发消息记账。确定解绑？") },
         confirmButton = { TextButton(onClick = onConfirm) { Text("解绑") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

@@ -56,6 +56,22 @@
 - [ ] QQ 端主动推送（月结 / 超预算 / 习惯提醒）
 - [ ] 微信 / 钉钉平台扩展
 
+### 多通道机器人（飞书 / 企业微信 / 订阅号）
+
+#### 当前实现
+- [x] 飞书全量接入：webhook 事件订阅（challenge 回验证 + Encrypt Key AES-256-CBC 解密 + X-Lark-Signature 验签）、收发 `im/v1/messages`（tenant_access_token 2h 缓存 Mutex 单飞）、**日报主动推送无窗口限制**
+- [x] 企业微信智能机器人：回调收消息（SHA1 验签 + AES-256-CBC/PKCS7 + XML，`wx/WxCryptUtil` 手写零依赖）+ 同步被动回复 + 「消息推送」webhook 主动推
+- [x] 微信订阅号：echostr 验证 + 5 秒同步被动回复（管线内 LLM 兜底 4s 硬超时）、语音 `Recognition` 免费转写；**只收不推**（主动推送需认证服务号）
+- [x] 三通道绑定：`users` 新增 `feishu_open_id` / `wechat_openid` / `wecom_userid` 身份列（可空 + 唯一索引）；6 位绑定码流程三通道同构（App 绑定页通道选择 + Web「多通道机器人」卡片），绑定码防爆破限流照 QQ
+- [x] 分通道推送调度：日报 / 提醒按 **飞书 > 企业微信 > QQ** 取第一个已绑定通道；记账落库 source 标记 `FEISHU` / `WECOM` / `MP`（`BotCommands` 共享词表）
+- [x] Web 控制台「多通道机器人」配置卡片：三通道状态 / 凭证 / 绑定统一管理（chip 切换），secret 类字段掩码输入可切明文，服务端掩码回显（`web/src/api/bots.ts` 按 channel 统一封装三通道管理面）
+- [x] 旧 QQ 号绑定流程下线：`/api/auth/bind-qq`、`/api/auth/unbind-qq` 已删除，绑定状态以服务端三通道身份列为准；旧 `/api/qq/webhook` 共享密钥协议标注废弃但保留运行（防未知外部旧客户端断裂）
+
+#### 升级规划
+- [ ] 真机冒烟：飞书 / 企微后台回调配置需线上环境与账号（步骤见 `docs/bot渠道机制调研与选型.md` 末尾「部署冒烟清单」）
+- [ ] 企微单聊主动触达边界核对（对照官方文档确认智能机器人单聊推送窗口）
+- [ ] 语音转写扩展：企微语音接 ASR 兜底（飞书 v1 仅文本，订阅号已有免费 Recognition；QQ 平台自带 `asr_refer_text`）
+
 ---
 
 ## 4. 图表分析

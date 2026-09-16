@@ -4,7 +4,7 @@ import { useDataStore } from '../../stores/data'
 import ThemeCard from './settings/ThemeCard.vue'
 import SyncCard from './settings/SyncCard.vue'
 import AiPushCard from './settings/AiPushCard.vue'
-import QqBotSection from './settings/QqBotSection.vue'
+import BotChannelsSection from './settings/BotChannelsSection.vue'
 import KeywordsSection from './settings/KeywordsSection.vue'
 import TemplatesSection from './settings/TemplatesSection.vue'
 import SuggestSection from './settings/SuggestSection.vue'
@@ -24,6 +24,6 @@ onMounted(() => { if (!data.cats.length) data.loadData() })
     <KeywordsSection />
     <TemplatesSection />
     <SuggestSection />
-    <QqBotSection />
+    <BotChannelsSection />
   </div>
 </template>

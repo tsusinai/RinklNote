@@ -19,9 +19,6 @@ data class RegisterRequest(val phone: String, val password: String)
 data class LoginRequest(val phone: String, val password: String)
 
 @Serializable
-data class BindQQRequest(val qqNumber: String)
-
-@Serializable
 data class AuthResponse(val userId: Long, val token: String)
 
 @Serializable
@@ -132,20 +129,6 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
         }
 
         authenticate("auth-jwt") {
-            post("/bind-qq") {
-                val principal = call.principal<JWTPrincipal>()
-                val userId = principal?.payload?.getClaim("userId")?.asLong()
-                    ?: return@post call.respond(HttpStatusCode.Unauthorized)
-
-                val body = call.receive<BindQQRequest>()
-                val success = userService.bindQQ(userId, body.qqNumber)
-                if (success) {
-                    call.respond(MessageResponse("绑定成功"))
-                } else {
-                    call.respond(HttpStatusCode.Conflict, MessageResponse("该QQ号已被其他账号绑定"))
-                }
-            }
-
             get("/me") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()
@@ -188,15 +171,6 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
                 } else {
                     call.respond(HttpStatusCode.Unauthorized, MessageResponse("原密码错误"))
                 }
-            }
-
-            post("/unbind-qq") {
-                val principal = call.principal<JWTPrincipal>()
-                val userId = principal?.payload?.getClaim("userId")?.asLong()
-                    ?: return@post call.respond(HttpStatusCode.Unauthorized)
-
-                userService.unbindQQNumber(userId)
-                call.respond(MessageResponse("QQ号已解绑"))
             }
 
             get("/ai") {

@@ -6,7 +6,7 @@
 ## 这是什么
 
 - **客户端**：Android 单 Activity + Jetpack Compose + Material 3，本地 Room 存储，随时离线记账。
-- **服务端**：Ktor + Exposed + PostgreSQL（测试用 H2），提供账号、跨端同步、NLU 记账、AI 洞察与 QQ 记账机器人。
+- **服务端**：Ktor + Exposed + PostgreSQL（测试用 H2），提供账号、跨端同步、NLU 记账、AI 洞察与多通道记账机器人（QQ / 飞书 / 企业微信 / 订阅号）。
 - **端到端**：核心记账 | 多端双向同步 | 语音/文本自然语言记账 | 月度总结/异常/习惯提醒 | QQ 微信机器人。
 
 本库是一个 Gradle 多模块 Monorepo：
@@ -75,6 +75,8 @@ RinklNote/
 | `ANOMALY_THRESHOLD` | 异常支出增幅阈值 | 1.5 |
 | `ASR_API_KEY` / `ASR_BASE_URL` / `ASR_MODEL` / `ASR_TIMEOUT_MS` | 语音转文字（可选，未配置则 App 走本地识别） | whisper-1 |
 
+> **多通道机器人配置不在环境变量里**：QQ / 飞书 / 企业微信 / 订阅号的凭证（AppID、Secret、Token、Encrypt Key 等）统一存服务端 `bot_config` KV 表，在 Web 控制台「设置 → 多通道机器人」卡片中配置并掩码回显；环境变量只保留 `WEBHOOK_SECRET`（旧 QQ 共享密钥协议遗留）。
+
 数据库启动时对缺失列/索引自动迁移（`SchemaUtils.createMissingTablesAndColumns` + 迁移脚本），并 `seedIfNeeded` 幂等填充默认分类/账户。
 
 **运行**：
@@ -88,7 +90,7 @@ RinklNote/
 ### API 端点
 
 认证（JWT 保护除健康检查外的业务接口）：`/api/auth/*`
-- `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/bind-qq`、`POST /api/auth/unbind-qq`
+- `POST /api/auth/register`、`POST /api/auth/login`
 - `GET /api/auth/me`、`POST /api/auth/password`、`GET/PUT /api/auth/ai`（AI 主动推送开关）
 
 账单：`/api/bills/*`
@@ -103,7 +105,12 @@ RinklNote/
 - `GET /api/insights/suggest`、`GET/PUT /api/insights/suggest-config`（习惯推荐与配置）
 - `GET /api/insights/habit`（习惯提醒）
 
-QQ 机器人：`/api/qq-bot/*`、`/api/qq/webhook/*`（Bot 配置管理 + 消息处理，走 `member_openid`/`user_openid` 身份作用域）。
+QQ / 飞书 / 企微 / 订阅号机器人（配置均存 `bot_config` 表，经 Web 控制台「设置 → 多通道机器人」卡片管理，不走环境变量）：
+
+- 管理面（JWT，三通道同构：status / config / bind / unbind / bind-status）：`/api/qq-bot/*`、`/api/feishu-bot/*`、`/api/wecom-bot/*`
+- 官方回调 webhook：`POST /api/qq/bot/webhook`（QQ 官方 Bot API v2，Ed25519 验签）、`POST /api/feishu/bot/webhook`（飞书事件订阅，challenge + Encrypt Key 加密）、`GET/POST /api/wecom/bot/webhook`（企微智能机器人，echostr + AES-256-CBC）、`GET/POST /api/mp/bot/webhook`（微信订阅号，echostr 验证 + 5 秒被动回复，**只收不推**）
+- 推送调度：日报 / 提醒按 飞书 > 企业微信 > QQ 取第一个已绑定通道主动推送；订阅号无推送能力不参与
+- `/api/qq/webhook/*`：**已废弃**的旧共享密钥协议，仅为未知外部旧客户端保留运行，新接入勿用
 
 ## LLM / NLU
 
@@ -114,7 +121,7 @@ QQ 机器人：`/api/qq-bot/*`、`/api/qq/webhook/*`（Bot 配置管理 + 消息
 ## 数据模型
 
 - **Room（App，version 10）**：`bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`，外键 bills→categories/accounts。首次启动 `seedIfNeeded` 填 7 支出 + 4 收入分类（含子分类）与 3 账户。
-- **服务端（Exposed）**：`users`、`categories`、`sub_categories`、`accounts`、`bills`、`voice_keywords`、`correction_log`、`bot_config`、`bill_templates`、`budgets`、`webhook_events`、`push_log`。
+- **服务端（Exposed）**：`users`、`categories`、`sub_categories`、`accounts`、`bills`、`voice_keywords`、`correction_log`、`bot_config`、`bill_templates`、`budgets`、`webhook_events`、`push_log`。`users` 表含多通道 bot 身份列（均可空 + 唯一索引）：`qq_openid`、`feishu_open_id`、`wechat_openid`（订阅号）、`wecom_userid`（企业微信），一个账号可同时绑定多个通道，推送时按优先级取第一个已绑定通道。
 
 ## 数据同步
 
