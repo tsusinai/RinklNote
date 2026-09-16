@@ -74,6 +74,8 @@ import dev.chrisbanes.haze.hazeEffect
  * @param onOpenAbout 「关于」项回调（当前跳「我的」页，后续可接独立关于页）
  * @param onOpenMultiCurrency 「多币种」项回调（路由 `multi-currency` 由主会话接线）；
  *   默认空实现——现调用点（BookkeepingScreen）未传参也能编译，主会话集成时再接通
+ * @param onOpenChallenges 「Rk省钱计划」项回调（路由 `challenges` 由主会话接线）；
+ *   默认空实现——同上，主会话集成时接通
  * @param hazeState 毛玻璃状态；null = 无背景照片可采样，面板回落纯白实心
  */
 @Composable
@@ -88,6 +90,7 @@ fun MoreDrawer(
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenMultiCurrency: () -> Unit = {},
+    onOpenChallenges: () -> Unit = {},
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
@@ -148,6 +151,7 @@ fun MoreDrawer(
                     onOpenBillMap = onOpenBillMap,
                     onOpenImport = onOpenImport,
                     onOpenMultiCurrency = onOpenMultiCurrency,
+                    onOpenChallenges = onOpenChallenges,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout
                 )
@@ -169,6 +173,7 @@ private fun DrawerContent(
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenMultiCurrency: () -> Unit,
+    onOpenChallenges: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -274,6 +279,17 @@ private fun DrawerContent(
             },
             label = "多币种",
             onClick = closeThen(onDismiss, onOpenMultiCurrency)
+        )
+        MoreDrawerRow(
+            icon = { tint ->
+                Icon(
+                    painter = painterResource(R.drawable.icon_challenge_piggy),
+                    contentDescription = null,
+                    tint = tint
+                )
+            },
+            label = "Rk省钱计划",
+            onClick = closeThen(onDismiss, onOpenChallenges)
         )
         MoreDrawerRow(
             icon = { tint -> Icon(Icons.Filled.Settings, contentDescription = null, tint = tint) },

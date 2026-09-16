@@ -491,11 +491,10 @@ fun AppNavigation(app: RinklNoteApp) {
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         onEditBudget = { navController.navigate("budget-edit") },
-                        onOpenCategoryBudgets = { navController.navigate("budget-categories") },
-                        onOpenChallenges = { navController.navigate("challenges") }
+                        onOpenCategoryBudgets = { navController.navigate("budget-categories") }
                     )
                 }
-                // 省钱挑战：计划 tab 下属的二级页（非 tab 路由 → 底栏自动隐藏，默认缩放淡入转场）。
+                // Rk省钱计划：记账页「更多」抽屉下属的二级页（非 tab 路由 → 底栏自动隐藏，默认缩放淡入转场）。
                 composable("challenges") {
                     ChallengeScreen(onBack = { navController.popBackStack() })
                 }
@@ -680,6 +679,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenImport = { navController.navigate("bill-import") },
                         onOpenMultiCurrency = { navController.navigate("multi-currency") },
                         onOpenSearch = { navController.navigate("bill-search") },
+                        onOpenChallenges = { navController.navigate("challenges") },
                         onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") }
                     )
 

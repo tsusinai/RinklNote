@@ -99,11 +99,12 @@ fun BookkeepingScreen(
     // 「更多」抽屉所需：个人信息（未登录时抽屉显示「未登录」+ 引导副文案）
     profileName: String = "",
     profileLoggedIn: Boolean = false,
-    // 「更多」抽屉功能项：账单地图（路由 bill-map）/ 导入账单（路由 bill-import）/ 多币种（路由 multi-currency）/ 搜索账单（路由 bill-search）由主会话接线
+    // 「更多」抽屉功能项：账单地图（路由 bill-map）/ 导入账单（路由 bill-import）/ 多币种（路由 multi-currency）/ 搜索账单（路由 bill-search）/ Rk省钱计划（路由 challenges）由主会话接线
     onOpenBillMap: () -> Unit = {},
     onOpenImport: () -> Unit = {},
     onOpenMultiCurrency: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
+    onOpenChallenges: () -> Unit = {},
     // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
     // 默认空实现防接线前编译断。dayStart = 当日 0 点 epoch millis，业务时区）
     onOpenDay: (Long) -> Unit = {}
@@ -356,6 +357,7 @@ fun BookkeepingScreen(
             onOpenImport = onOpenImport,
             onOpenMultiCurrency = onOpenMultiCurrency,
             onOpenSearch = onOpenSearch,
+            onOpenChallenges = onOpenChallenges,
             onOpenSettings = onMoreClick,
             onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页
             hazeState = hazeState,

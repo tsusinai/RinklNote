@@ -249,7 +249,7 @@ fun ChallengeScreen(onBack: () -> Unit) {
     }
 }
 
-/** 挑战页悬浮顶栏：返回（AutoMirrored ArrowBack 24dp）+ 居中标题「省钱挑战」20sp Medium。 */
+/** 挑战页悬浮顶栏：返回（AutoMirrored ArrowBack 24dp）+ 居中标题「Rk省钱计划」20sp Medium。 */
 @Composable
 private fun ChallengeTopBar(
     scrimAlpha: Float,
@@ -281,7 +281,7 @@ private fun ChallengeTopBar(
             )
         }
         Text(
-            text = "省钱挑战",
+            text = "Rk省钱计划",
             fontSize = 20.sp,
             fontWeight = FontWeight.Medium,
             color = textColor,

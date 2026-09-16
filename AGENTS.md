@@ -116,7 +116,7 @@ Compose UI（collectAsStateWithLifecycle）
 | `widget/` | `RinklNoteAppWidget`（Glance 桌面小组件） |
 | `util/` | `DateUtil`（业务时区）、`Money`（分⇄元换算/格式化）、`ReorderRanks`（拖动排序）、`BillCsvExporter`、`VoiceInputUtil`、`VoiceRecorder` |
 
-**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**。flat route 全集：`ai`、`bill-edit`（编辑账单独立页）、`budget-categories`（分类预算）、`budget-edit`、`account-editor/{accountId}`、`month-detail`、`challenges`（省钱挑战，计划 tab 摘要卡进入）、`day-detail/{dayStart}`（当天账单页，Long 参数）、`bill-map`（账单地图，可选 `?focusBillId=` 聚焦指定账单）、`bill-import`（CSV 导入）、`multi-currency`（多币种）、`bill-search`（搜索账单）、`custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）、`web-view?url={url}&title={title}`（内嵌网页，参数 URL 编码）。记账页「更多抽屉」`MoreDrawer` 是 地图 / 导入 / 多币种 / 搜索 的统一入口。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判（有 `NavigationTransitionDirectionTest` 把关）。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
+**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**。flat route 全集：`ai`、`bill-edit`（编辑账单独立页）、`budget-categories`（分类预算）、`budget-edit`、`account-editor/{accountId}`、`month-detail`、`challenges`（Rk省钱计划，记账页「更多」抽屉进入）、`day-detail/{dayStart}`（当天账单页，Long 参数）、`bill-map`（账单地图，可选 `?focusBillId=` 聚焦指定账单）、`bill-import`（CSV 导入）、`multi-currency`（多币种）、`bill-search`（搜索账单）、`custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）、`web-view?url={url}&title={title}`（内嵌网页，参数 URL 编码）。记账页「更多抽屉」`MoreDrawer` 是 地图 / 导入 / 多币种 / 搜索 / Rk省钱计划 的统一入口。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判（有 `NavigationTransitionDirectionTest` 把关）。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
 
 **关键模式**
 
