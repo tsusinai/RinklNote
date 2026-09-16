@@ -52,18 +52,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 取景框裁剪模式：背景（屏幕比例矩形框）/ 头像（1:1 方形框 + 圆形蒙版提示）。 */
+enum class CropMode { BACKGROUND, AVATAR }
+
 /**
- * 背景选择取景框（裁剪）：图库选图后先进本屏，用户在**屏幕比例**的取景框内
- * 拖动/双指缩放，确认后把框内区域裁剪成图并保存到内部存储。
- * 比例取屏幕宽高比——背景以 ContentScale.Crop 铺满全屏，裁剪结果与显示 1:1 对应。
+ * 背景选择取景框（裁剪）：图库选图后先进本屏，用户在取景框内拖动/双指缩放，
+ * 确认后把框内区域裁剪成图并保存到内部存储。
+ *
+ * 两种模式（2026-09-17 扩展，不破坏背景裁剪既有用法）：
+ * - [CropMode.BACKGROUND]：比例取屏幕宽高比——背景以 ContentScale.Crop 铺满全屏，裁剪结果与显示 1:1 对应；
+ * - [CropMode.AVATAR]：1:1 方形取景框 + 圆形蒙版提示（头像上传前裁剪，产物交给资料页压缩上传）。
  *
  * @param imageUri 图库选出的照片（content://，仅会话内可读，须当场裁剪落盘）
+ * @param cropMode 裁剪模式，默认背景（与旧调用方兼容）
  * @param onConfirm 确认后回调，参数为裁剪图在内部存储的绝对路径
  * @param onCancel 取消（或读取失败）时回调
  */
 @Composable
 fun BackgroundCropScreen(
     imageUri: Uri,
+    cropMode: CropMode = CropMode.BACKGROUND,
     onConfirm: (String) -> Unit,
     onCancel: () -> Unit
 ) {
@@ -81,6 +89,7 @@ fun BackgroundCropScreen(
         }
     }
     var saving by remember { mutableStateOf(false) }
+    val isAvatarMode = cropMode == CropMode.AVATAR
 
     BoxWithConstraints(
         modifier = Modifier
@@ -92,12 +101,14 @@ fun BackgroundCropScreen(
         val screenHpx = with(density) { maxHeight.toPx() }
         val screenAspect = if (screenHpx > 0) screenWpx / screenHpx else 0.5f
 
-        // 取景框与屏幕同比例：上下给操作栏留空、左右留边；任一方向不够时按另一方向回推。
+        // 取景框：背景模式与屏幕同比例；头像模式固定 1:1。上下给操作栏留空、左右留边；
+        // 任一方向不够时按另一方向回推。
         val marginV = with(density) { 116.dp.toPx() }
         val marginH = with(density) { 16.dp.toPx() }
-        var frameW = (screenHpx - 2 * marginV) * screenAspect
+        val frameAspect = if (isAvatarMode) 1f else screenAspect
+        var frameW = (screenHpx - 2 * marginV) * frameAspect
         if (frameW > screenWpx - 2 * marginH) frameW = screenWpx - 2 * marginH
-        val frameH = if (screenAspect > 0) frameW / screenAspect else screenHpx - 2 * marginV
+        val frameH = if (frameAspect > 0) frameW / frameAspect else screenHpx - 2 * marginV
         val frameLeft = (screenWpx - frameW) / 2f
         val frameTop = (screenHpx - frameH) / 2f
         val frameRect = Rect(frameLeft, frameTop, frameLeft + frameW, frameTop + frameH)
@@ -141,18 +152,28 @@ fun BackgroundCropScreen(
                 }
 
                 // 暗色遮罩挖孔：整屏半透明黑，框内 BlendMode.Clear 挖空（offscreen 保证混合在层内完成）。
+                // 背景模式挖矩形孔；头像模式挖圆孔（1:1 框内切圆，提示圆形裁切成品）。
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 ) {
                     drawRect(color = Color.Black.copy(alpha = 0.62f), size = size)
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = frameRect.topLeft,
-                        size = frameRect.size,
-                        blendMode = BlendMode.Clear
-                    )
+                    if (isAvatarMode) {
+                        drawCircle(
+                            color = Color.Black,
+                            radius = min(frameRect.width, frameRect.height) / 2f,
+                            center = frameRect.center,
+                            blendMode = BlendMode.Clear
+                        )
+                    } else {
+                        drawRect(
+                            color = Color.Black,
+                            topLeft = frameRect.topLeft,
+                            size = frameRect.size,
+                            blendMode = BlendMode.Clear
+                        )
+                    }
                 }
 
                 // 取景框标：四角 L 形白色括角 + 淡三分线。
@@ -203,7 +224,7 @@ fun BackgroundCropScreen(
                         modifier = Modifier.align(Alignment.CenterStart)
                     ) { Text("取消", color = Color.White) }
                     Text(
-                        "调整背景位置",
+                        if (isAvatarMode) "调整头像位置（圆形裁切）" else "调整背景位置",
                         color = Color.White,
                         modifier = Modifier.align(Alignment.Center)
                     )

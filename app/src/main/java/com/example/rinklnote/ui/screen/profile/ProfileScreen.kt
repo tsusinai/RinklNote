@@ -9,7 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,12 +28,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -46,62 +46,63 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.example.rinklnote.R
 import com.example.rinklnote.data.local.SettingsManager
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.data.local.TokenManager
+import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
+import com.example.rinklnote.ui.component.achievementBadgeName
+import com.example.rinklnote.ui.component.achievementBadgeRes
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
-import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
-import com.example.rinklnote.ui.viewmodel.BotChannel
 import com.example.rinklnote.util.exportBillsToCsv
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * 我的页（Profile）—— 账户、同步、日报、AI 等设置入口。
+ * 我的页（Profile）—— 个人形象入口 + 数据、通知、个性化等设置。
+ *
+ * 2026-09-17 改版：个人卡片重做为「头像 + 昵称 + 签名 + 展示徽章行」，整卡点击进
+ * `personal-profile` 资料页；QQ/飞书/企微绑定状态、修改密码、AI 开关等账号事务
+ * **彻底迁出**本页（原 AccountCard 移入资料页）。本页只留：数据与同步、通知、
+ * 个性化（主题/背景/显示偏好）、通用（导出/关于）。
  *
  * 风格对齐首页（Bookkeeping）：`DefaultHazeBackground` 作毛玻璃 blur 源（无自选照片时铺纯白，
  * 有照片时由 nav 层整窗铺满）；极简悬浮顶栏；卡片统一 [applyCardGlass] 透明框 + `rinkShadow`。
  *
- * **文件职责（2026-09-11 重构后）**：本文件只保留「页面骨架」——
+ * 文件职责（2026-09-11 重构后）：本文件只保留「页面骨架」——
  * 收集状态 → 组装 LazyColumn → 分发弹窗，外加顶栏/头部两个私有组件。
- * - 五张设置卡 → `ProfileCards.kt`（SyncCard / DailyReportCard / PersonalizationCard /
- *   AccountCard / AboutCard），编排自上而下按使用逻辑分组：
- *   数据与同步 → 通知 → 个性化 → 账户与安全 → 通用
- * - 七个弹窗 → `ProfileDialogs.kt`，状态由本文件的 [ProfileDialog] 单状态机统一管理
- *   （昵称编辑弹窗不入该状态机，用本文件局部状态承载，见 [NicknameEditDialog]）
+ * - 设置卡 → `ProfileCards.kt`，编排自上而下按使用逻辑分组
+ * - 留存弹窗 → `ProfileDialogs.kt`，状态由本文件的 [ProfileDialog] 单状态机统一管理
+ *   （改密码 / 解绑 / AI Token 三个弹窗已随账号事务迁到个人资料页）
  * - 纯格式化函数 → `ProfileFormat.kt`
  * - CSV 导出 → `util/BillCsvExporter.kt`
- *
- * 业务不变量：所有事件回调、AuthState/SettingsManager/TokenManager 读写保持原样；
- * 本页签名只 +`backgroundUri` +`hazeState` 两个透传参数（nav 层提供）。
  *
  * @param authViewModel 登录态 VM
  * @param settingsManager 主题/自动同步/背景/日报/头像/昵称/卡片蒙版等本地设置
  * @param tokenManager 上次同步时间
  * @param syncManager 同步入口
  * @param repository 账单仓库（导出 / 登出清数据）
- * @param aiTokenViewModel AI Token VM
  * @param onLoginClick 跳登录页
- * @param onBindBotClick 跳「机器人绑定」页（QQ / 飞书 / 企业微信绑定码流程）
- * @param onQqBotGuideClick 跳机器人引导
+ * @param onEditProfileClick 跳「个人资料」页（personal-profile 路由）
  * @param onCustomThemeClick 跳「自定义主题」页（字体色/主题色/顶栏色/图标色/边框色）
  * @param onCropBackground 选好背景图后进入取景框裁剪
  * @param backgroundUri nav 层透传的自选背景照片 URI；`null` 时本页自铺纯白
@@ -114,10 +115,8 @@ fun ProfileScreen(
     tokenManager: TokenManager,
     syncManager: SyncManager,
     repository: BillRepository,
-    aiTokenViewModel: AiTokenViewModel,
     onLoginClick: () -> Unit,
-    onBindBotClick: () -> Unit,
-    onQqBotGuideClick: () -> Unit,
+    onEditProfileClick: () -> Unit,
     onCustomThemeClick: () -> Unit,
     onCropBackground: (Uri) -> Unit,
     backgroundUri: String?,
@@ -132,10 +131,13 @@ fun ProfileScreen(
     val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
     val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
     val dailyReportQqBot by settingsManager.dailyReportQqBot.collectAsStateWithLifecycle(initialValue = false)
-    // 个性化：头像 / 昵称 / 卡片白色蒙版（DataStore 持久化；默认无头像、无昵称、蒙版关闭）。
+    // 个性化：本地头像缓存 / 昵称缓存（登录后卡片优先服务端值，离线时回落这里）/ 卡片白色蒙版。
     val avatarUri by settingsManager.avatarUri.collectAsStateWithLifecycle(initialValue = null)
     val nickname by settingsManager.nickname.collectAsStateWithLifecycle(initialValue = null)
     val cardOverlay by settingsManager.cardOverlay.collectAsStateWithLifecycle(initialValue = false)
+    // 展示徽章：服务端勾选 ∩ 实时解锁态（删账单回退后自动隐藏，零存储特性的展示端兜底）。
+    val achievements by rememberAchievementStates()
+    val displayBadges = displayableShowcaseBadges(state.showcaseBadges, achievements)
 
     // 弹窗：全页共用一个状态（同时最多一个弹窗）。
     var dialog by remember { mutableStateOf<ProfileDialog?>(null) }
@@ -195,16 +197,6 @@ fun ProfileScreen(
     ) { uri ->
         if (uri != null) onCropBackground(uri)
     }
-
-    // 图库选头像：选完直接写入 DataStore（不做裁剪，ProfileHeader 内按圆形裁切显示）。
-    val pickAvatarLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) coroutineScope.launch { settingsManager.setAvatarUri(uri.toString()) }
-    }
-
-    // 昵称编辑弹窗：不入全局 ProfileDialog 状态机（ProfileDialogs.kt 不在本任务文件集内），用局部状态。
-    var showNicknameDialog by remember { mutableStateOf(false) }
 
     // 登出「先推后清」：尽力同步未同步项 → 成功则清本地 per-user 数据。
     val finishLogout: () -> Unit = {
@@ -274,7 +266,9 @@ fun ProfileScreen(
                     state = state,
                     nickname = nickname,
                     avatarUri = avatarUri,
-                    onLogin = onLoginClick
+                    displayBadges = displayBadges,
+                    onLogin = onLoginClick,
+                    onEditProfile = onEditProfileClick
                 )
             }
             item(key = "sync") {
@@ -310,8 +304,6 @@ fun ProfileScreen(
                 PersonalizationCard(
                     themeMode = themeMode,
                     backgroundUri = backgroundUri,
-                    avatarUri = avatarUri,
-                    nickname = nickname,
                     cardOverlay = cardOverlay,
                     onThemeClick = { dialog = ProfileDialog.Theme },
                     onCustomThemeClick = onCustomThemeClick,
@@ -321,25 +313,7 @@ fun ProfileScreen(
                         )
                     },
                     onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
-                    onAvatarClick = {
-                        pickAvatarLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    onRemoveAvatar = { coroutineScope.launch { settingsManager.setAvatarUri(null) } },
-                    onNicknameClick = { showNicknameDialog = true },
                     onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } }
-                )
-            }
-            item(key = "account") {
-                AccountCard(
-                    state = state,
-                    onPasswordClick = { dialog = ProfileDialog.Password },
-                    onBindBotClick = onBindBotClick,
-                    onUnbindBot = { dialog = ProfileDialog.UnbindBot(it) },
-                    onQqBotGuideClick = onQqBotGuideClick,
-                    onSetAiDisabled = { authViewModel.onEvent(AuthEvent.SetAiDisabled(it)) },
-                    onAiTokenClick = { dialog = ProfileDialog.AiToken }
                 )
             }
             item(key = "about") {
@@ -368,20 +342,9 @@ fun ProfileScreen(
     }
 
     // ---------- 弹窗分发（单一状态机） ----------
+    // 修改密码 / 解绑通道 / AI Token 三类弹窗已随账号事务迁到个人资料页（PersonalProfileScreen）。
     when (val current = dialog) {
         null -> Unit
-
-        ProfileDialog.Password ->
-            PasswordDialog(viewModel = authViewModel, onDismiss = dismissDialog)
-
-        is ProfileDialog.UnbindBot -> UnbindBotDialog(
-            channel = current.channel,
-            onConfirm = {
-                dismissDialog()
-                authViewModel.onEvent(AuthEvent.UnbindBot(current.channel))
-            },
-            onDismiss = dismissDialog
-        )
 
         ProfileDialog.Theme ->
             ThemeModeDialog(
@@ -416,9 +379,6 @@ fun ProfileScreen(
                 onDismiss = dismissDialog
             )
 
-        ProfileDialog.AiToken ->
-            AiTokenDialog(viewModel = aiTokenViewModel, onDismiss = dismissDialog)
-
         is ProfileDialog.Unsynced ->
             UnsyncedDataDialog(
                 count = current.count,
@@ -432,18 +392,6 @@ fun ProfileScreen(
                 },
                 onDismiss = dismissDialog
             )
-    }
-
-    // 昵称编辑弹窗：确认时空串视为清除（写 null，回落显示掩码手机号）。
-    if (showNicknameDialog) {
-        NicknameEditDialog(
-            current = nickname,
-            onConfirm = { value ->
-                showNicknameDialog = false
-                coroutineScope.launch { settingsManager.setNickname(value) }
-            },
-            onDismiss = { showNicknameDialog = false }
-        )
     }
 }
 
@@ -471,86 +419,117 @@ private fun ProfileTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolle
 }
 
 /**
- * 通栏宽头：左大号头像 + 右昵称/副行；未登录给「登录/注册」胶囊按钮。
+ * 通栏宽头（2026-09-17 重做）：整卡可点进「个人资料」页。
+ * 内容 = 头像 + 昵称/签名 + 展示徽章行，不再展示 QQ/微信等绑定状态（已迁入资料页）。
  *
- * 头像显示：设置了自定义头像（DataStore `avatarUri`）时用 Coil 圆形裁切显示；
- * 未设置回落「首字符徽章」（登录态优先取自定义昵称首字，其次手机号首字，兜底「账」）。
- * 名称显示优先级：自定义昵称 > 掩码手机号；未登录固定「未登录」。
+ * 头像显示优先级：服务端头像 URL（authState.avatarUrl）> 本地缓存（DataStore `avatarUri`）>
+ * 「首字符徽章」（登录态优先取自定义昵称首字，其次手机号首字，兜底「账」）。
+ * 名称显示优先级：服务端昵称 > 本地缓存昵称 > 掩码手机号；未登录固定「未登录」。
  */
 @Composable
 private fun ProfileHeader(
     state: AuthState,
     nickname: String?,
     avatarUri: String?,
-    onLogin: () -> Unit
+    displayBadges: List<String>,
+    onLogin: () -> Unit,
+    onEditProfile: () -> Unit
 ) {
-    Row(
+    val effectiveNickname = state.nickname ?: nickname
+    val avatarSource = resolveAvatarFullUrl(RetrofitClient.BASE_URL, state.avatarUrl) ?: avatarUri
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onEditProfile)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        if (avatarUri != null) {
-            // 自定义头像：按 56dp 圆形裁切显示（Coil 加载 content:// URI）。
-            AsyncImage(
-                model = avatarUri,
-                contentDescription = "头像",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-            )
-        } else {
-            AvatarBadge(
-                character = if (state.isLoggedIn) {
-                    nickname?.trim()?.firstOrNull()?.toString()
-                        ?: state.accountPhone.firstOrNull()?.toString()
-                        ?: "账"
-                } else {
-                    "账"
-                },
-                size = 56.dp
-            )
-        }
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = when {
-                    !state.isLoggedIn -> "未登录"
-                    else -> nickname?.takeIf { it.isNotBlank() } ?: maskPhone(state.accountPhone)
-                },
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (state.isLoggedIn) {
-                    "机器人绑定 " + BotChannel.entries.joinToString(" · ") { channel ->
-                        channel.label + if (state.bindingOf(channel).bound) "已绑" else "未绑"
-                    }
-                } else {
-                    "登录后即可云端同步账单"
-                },
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            // 注册时间只有登录态才显示。
-            if (state.isLoggedIn && state.createdAt.isNotBlank()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (avatarSource != null) {
+                // 自定义头像：按 56dp 圆形裁切显示（Coil 加载服务端 URL 或本地缓存）。
+                AsyncImage(
+                    model = avatarSource,
+                    contentDescription = "头像",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                AvatarBadge(
+                    character = if (state.isLoggedIn) {
+                        effectiveNickname?.trim()?.firstOrNull()?.toString()
+                            ?: state.accountPhone.firstOrNull()?.toString()
+                            ?: "账"
+                    } else {
+                        "账"
+                    },
+                    size = 56.dp
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = when {
+                        !state.isLoggedIn -> "未登录"
+                        else -> effectiveNickname?.takeIf { it.isNotBlank() } ?: maskPhone(state.accountPhone)
+                    },
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "注册于 ${state.createdAt.take(10)}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = when {
+                        !state.isLoggedIn -> "登录后即可云端同步账单"
+                        else -> state.signature?.takeIf { it.isNotBlank() } ?: "点击编辑资料，写下个性签名"
+                    },
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+            if (!state.isLoggedIn) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Button(onClick = onLogin) { Text("登录 / 注册") }
+            } else {
+                // 「点击编辑资料」affordance：铅笔角标
+                Icon(
+                    painter = painterResource(R.drawable.ic_edit),
+                    contentDescription = "编辑资料",
+                    tint = LocalRinklColors.current.iconButtonColor
+                        ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
-        if (!state.isLoggedIn) {
-            Spacer(modifier = Modifier.width(12.dp))
-            Button(onClick = onLogin) { Text("登录 / 注册") }
+        // 展示徽章行：勾选 ∩ 实时解锁态；未勾选或未解锁时不显示。
+        if (displayBadges.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                displayBadges.take(3).forEach { badgeId ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(achievementBadgeRes(badgeId)),
+                            contentDescription = achievementBadgeName(badgeId),
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = achievementBadgeName(badgeId),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -572,40 +551,4 @@ private fun AvatarBadge(character: String, size: androidx.compose.ui.unit.Dp = 5
             color = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
-}
-
-/**
- * 昵称编辑弹窗：确认时 trim 后为空则回调 `null`（清除自定义昵称，名称回落显示掩码手机号）。
- *
- * 不并入 [ProfileDialog] 状态机：ProfileDialogs.kt 不在本任务文件集内，
- * 由 ProfileScreen 用局部 `showNicknameDialog` 状态承载（同时至多一个弹窗的约束仍成立）。
- */
-@Composable
-private fun NicknameEditDialog(
-    current: String?,
-    onConfirm: (String?) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var text by remember { mutableStateOf(current.orEmpty()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("设置昵称") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("昵称") },
-                placeholder = { Text("留空恢复显示手机号") },
-                singleLine = true
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(text.trim().takeIf { it.isNotEmpty() }) }) {
-                Text("确定")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
 }

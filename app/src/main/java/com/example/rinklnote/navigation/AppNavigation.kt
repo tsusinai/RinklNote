@@ -103,7 +103,11 @@ import com.example.rinklnote.ui.screen.day.DayBillsScreen
 import com.example.rinklnote.ui.screen.web.WebScreen
 import com.example.rinklnote.ui.screen.profile.BotBindPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
+import com.example.rinklnote.ui.screen.profile.CropMode
 import com.example.rinklnote.ui.screen.profile.CustomThemeScreen
+import com.example.rinklnote.ui.screen.profile.PersonalProfileEvent
+import com.example.rinklnote.ui.screen.profile.PersonalProfileScreen
+import com.example.rinklnote.ui.screen.profile.PersonalProfileViewModel
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
 import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -255,6 +259,18 @@ fun AppNavigation(app: RinklNoteApp) {
     )
     val authVM: com.example.rinklnote.ui.viewmodel.AuthViewModel = viewModel(
         factory = com.example.rinklnote.ui.viewmodel.AuthViewModel.Factory(app.apiService, app.tokenManager)
+    )
+    // 个人资料页 VM：挂在 nav 层作用域（非路由内），从资料页跳裁剪路由再返回后状态不丢。
+    val personalProfileVM: PersonalProfileViewModel = viewModel(
+        factory = PersonalProfileViewModel.Factory(
+            context.applicationContext,
+            app.apiService,
+            app.tokenManager,
+            app.settingsManager,
+            app.database.billDao(),
+            app.challengeRepository,
+            app.budgetRepository
+        )
     )
     val authState by authVM.state.collectAsStateWithLifecycle()
     val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
@@ -764,10 +780,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         tokenManager = app.tokenManager,
                         syncManager = app.syncManager,
                         repository = app.repository,
-                        aiTokenViewModel = aiTokenVM,
                         onLoginClick = { showLogin = true },
-                        onBindBotClick = { showBotBind = true },
-                        onQqBotGuideClick = { showQqBotGuide = true },
+                        // 个人卡片整卡点击 → 个人资料页（账号中心，2026-09-17 改版）
+                        onEditProfileClick = { navController.navigate("personal-profile") },
                         onCustomThemeClick = { navController.navigate("custom-theme") },
                         onCropBackground = { uri ->
                             // 图库选完 → 取景框裁剪路由（content:// 仅会话内可读，须当场裁剪落盘）
@@ -775,6 +790,27 @@ fun AppNavigation(app: RinklNoteApp) {
                         },
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState
+                    )
+                }
+                // 个人资料页：形象资料（头像/昵称/签名/生日）+ 徽章展示管理 + 账号事务，
+                // 非 tab 路由 → 底栏自动隐藏、二级页缩放淡入转场。
+                composable("personal-profile") {
+                    PersonalProfileScreen(
+                        viewModel = personalProfileVM,
+                        authViewModel = authVM,
+                        aiTokenViewModel = aiTokenVM,
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
+                        onBack = { navController.popBackStack() },
+                        onLoginClick = { showLogin = true },
+                        onBindBotClick = { showBotBind = true },
+                        onQqBotGuideClick = { showQqBotGuide = true },
+                        onPickAvatar = { uri ->
+                            // 相册选完 → 取景框裁剪（mode=avatar：1:1 圆形蒙版），确认后 VM 压缩上传
+                            navController.navigate(
+                                "background-crop/" + Uri.encode(uri.toString()) + "?mode=avatar"
+                            )
+                        }
                     )
                 }
                 composable("ai") {
@@ -795,18 +831,39 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
                 }
                 // 背景取景框裁剪：图库选图后的中间路由，非 tab 路由 → 底栏自动隐藏、内容区占满全屏。
+                // mode=background（默认，屏幕比例框，产物写背景设置）/ mode=avatar（1:1 圆形提示，
+                // 产物交个人资料页压缩上传）。
                 composable(
-                    route = "background-crop/{uri}",
-                    arguments = listOf(navArgument("uri") { type = NavType.StringType })
+                    route = "background-crop/{uri}?mode={mode}",
+                    arguments = listOf(
+                        navArgument("uri") { type = NavType.StringType },
+                        navArgument("mode") {
+                            type = NavType.StringType
+                            defaultValue = "background"
+                        }
+                    )
                 ) { entry ->
                     val uriStr = entry.arguments?.getString("uri").orEmpty()
+                    val cropMode = if (entry.arguments?.getString("mode") == "avatar") {
+                        CropMode.AVATAR
+                    } else {
+                        CropMode.BACKGROUND
+                    }
                     if (uriStr.isNotBlank()) {
                         val scope = rememberCoroutineScope()
                         BackgroundCropScreen(
                             imageUri = Uri.parse(uriStr),
+                            cropMode = cropMode,
                             onConfirm = { path ->
                                 scope.launch {
-                                    app.settingsManager.setBackgroundUri(path)
+                                    if (cropMode == CropMode.AVATAR) {
+                                        // 头像：交给个人资料页 VM（未登录落本地，登录则压缩上传）
+                                        personalProfileVM.onEvent(
+                                            PersonalProfileEvent.AvatarCropConfirmed(path)
+                                        )
+                                    } else {
+                                        app.settingsManager.setBackgroundUri(path)
+                                    }
                                     navController.popBackStack()
                                 }
                             },
