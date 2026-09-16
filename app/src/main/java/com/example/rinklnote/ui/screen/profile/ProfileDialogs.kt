@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,11 +24,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.data.local.ThemeMode
+import com.example.rinklnote.ui.component.PasswordBox
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 import com.example.rinklnote.ui.viewmodel.BotChannel
@@ -59,7 +58,8 @@ sealed interface ProfileDialog {
     data class Unsynced(val count: Int) : ProfileDialog
 }
 
-/** 修改密码弹窗（读写 [AuthViewModel] 的 oldPassword/newPassword 与提示信息）。 */
+/** 修改密码弹窗（读写 [AuthViewModel] 的 oldPassword/newPassword 与提示信息）。
+ *  2026-09-17 起换用自定义 [PasswordBox]（圆点弹入 + 眼睛开合），新密码带实时强度提示。 */
 @Composable
 internal fun PasswordDialog(viewModel: AuthViewModel, onDismiss: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -68,19 +68,21 @@ internal fun PasswordDialog(viewModel: AuthViewModel, onDismiss: () -> Unit) {
         title = { Text("修改密码") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
+                PasswordBox(
                     value = state.oldPassword,
                     onValueChange = { viewModel.onEvent(AuthEvent.OldPasswordChanged(it)) },
-                    label = { Text("原密码") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    label = "原密码",
+                    placeholder = "请输入原密码"
                 )
-                OutlinedTextField(
+                PasswordBox(
                     value = state.newPassword,
                     onValueChange = { viewModel.onEvent(AuthEvent.NewPasswordChanged(it)) },
-                    label = { Text("新密码(至少6位)") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    label = "新密码",
+                    placeholder = "至少6位，含大小写字母",
+                    // 改密码属于「新设定」场景：开启实时强度提示
+                    showStrength = true,
+                    isError = state.error != null,
+                    errorMessage = null
                 )
                 val errorMsg = state.error
                 val successMsg = state.successMessage

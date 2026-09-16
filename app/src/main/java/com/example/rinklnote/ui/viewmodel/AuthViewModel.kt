@@ -12,6 +12,7 @@ import com.example.rinklnote.data.network.dto.ChangePasswordRequest
 import com.example.rinklnote.data.network.dto.DailyReportSettingDto
 import com.example.rinklnote.data.network.dto.LoginRequest
 import com.example.rinklnote.domain.parseShowcaseBadges
+import com.example.rinklnote.util.PasswordRules
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,10 +35,19 @@ enum class BotChannel(val label: String, val guideApp: String) {
 @androidx.compose.runtime.Immutable
 data class BotBinding(val bound: Boolean = false, val maskedId: String = "")
 
+/**
+ * 登录身份模式（2026-09-17 优化登录方式）：手机号 | 邮箱 同级切换。
+ * 邮箱模式下 phone 字段传空串、email 非空，服务端据此选择身份校验。
+ */
+enum class AuthMode { PHONE, EMAIL }
+
 @androidx.compose.runtime.Immutable
 data class AuthState(
     val isLoggedIn: Boolean = false,
     val phone: String = "",
+    // 邮箱登录（2026-09-17）：与 phone 同级的身份输入；authMode 决定登录/注册用哪个身份。
+    val email: String = "",
+    val authMode: AuthMode = AuthMode.PHONE,
     val password: String = "",
     val accountPhone: String = "",
     val createdAt: String = "",
@@ -71,6 +81,9 @@ data class AuthState(
 
 sealed interface AuthEvent {
     data class PhoneChanged(val value: String) : AuthEvent
+    data class EmailChanged(val value: String) : AuthEvent
+    /** 手机号 | 邮箱 身份切换（清错误提示，保留两个输入框各自的已输内容）。 */
+    data class AuthModeChanged(val mode: AuthMode) : AuthEvent
     data class PasswordChanged(val value: String) : AuthEvent
     data class OldPasswordChanged(val value: String) : AuthEvent
     data class NewPasswordChanged(val value: String) : AuthEvent
@@ -112,6 +125,8 @@ class AuthViewModel(
     fun onEvent(event: AuthEvent) {
         when (event) {
             is AuthEvent.PhoneChanged -> _state.update { it.copy(phone = event.value, error = null) }
+            is AuthEvent.EmailChanged -> _state.update { it.copy(email = event.value, error = null) }
+            is AuthEvent.AuthModeChanged -> _state.update { it.copy(authMode = event.mode, error = null) }
             is AuthEvent.PasswordChanged -> _state.update { it.copy(password = event.value, error = null) }
             is AuthEvent.OldPasswordChanged -> _state.update { it.copy(oldPassword = event.value, error = null) }
             is AuthEvent.NewPasswordChanged -> _state.update { it.copy(newPassword = event.value, error = null) }
@@ -135,14 +150,24 @@ class AuthViewModel(
 
     private fun login() {
         val s = _state.value
-        if (s.phone.isBlank() || s.password.isBlank()) {
+        // 邮箱模式：只校验邮箱非空（格式由登录页 UI 层校验，与手机号同分工）；手机号模式保持旧文案。
+        if (s.authMode == AuthMode.EMAIL) {
+            if (s.email.isBlank()) {
+                _state.update { it.copy(error = "邮箱或密码不能为空") }
+                return
+            }
+        } else if (s.phone.isBlank()) {
             _state.update { it.copy(error = "手机号或密码不能为空") }
+            return
+        }
+        if (s.password.isBlank()) {
+            _state.update { it.copy(error = if (s.authMode == AuthMode.EMAIL) "邮箱或密码不能为空" else "手机号或密码不能为空") }
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                val response = api.login(LoginRequest(s.phone, s.password))
+                val response = api.login(s.toLoginRequest())
                 tokenManager.saveAuth(response.token, response.userId)
                 _state.update { it.copy(isLoggedIn = true, isLoading = false, error = null) }
                 fetchProfile()
@@ -154,29 +179,48 @@ class AuthViewModel(
 
     private fun register() {
         val s = _state.value
-        if (s.phone.isBlank() || s.password.isBlank()) {
+        if (s.authMode == AuthMode.EMAIL) {
+            if (s.email.isBlank()) {
+                _state.update { it.copy(error = "邮箱或密码不能为空") }
+                return
+            }
+        } else if (s.phone.isBlank()) {
             _state.update { it.copy(error = "手机号或密码不能为空") }
             return
         }
-        if (s.password.length < 6) {
-            _state.update { it.copy(error = "密码长度至少6位") }
+        if (s.password.isBlank()) {
+            _state.update { it.copy(error = if (s.authMode == AuthMode.EMAIL) "邮箱或密码不能为空" else "手机号或密码不能为空") }
+            return
+        }
+        // 密码规则（2026-09-17）：≥6 位且同时含大小写字母（与服务端 PasswordPolicy 同构），
+        // 提交前本地拦截避免无效请求；存量老密码不受影响，只约束新设定。
+        PasswordRules.validate(s.password)?.let {
+            _state.update { st -> st.copy(error = it) }
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                val response = api.register(LoginRequest(s.phone, s.password))
+                val response = api.register(s.toLoginRequest())
                 tokenManager.saveAuth(response.token, response.userId)
                 _state.update { it.copy(isLoggedIn = true, isLoading = false, error = null) }
                 fetchProfile()
             } catch (e: Exception) {
-                // Server rejects re-registering an existing phone with 409 — tell the
+                // Server rejects re-registering an existing identity with 409 — tell the
                 // user the account exists and to log in instead of a raw HTTP code.
-                val msg = if (e is retrofit2.HttpException && e.code() == 409) "该手机号已注册，请直接登录"
+                val identityDuplicated = if (s.authMode == AuthMode.EMAIL) "该邮箱已注册，请直接登录" else "该手机号已注册，请直接登录"
+                val msg = if (e is retrofit2.HttpException && e.code() == 409) identityDuplicated
                 else "注册失败: ${e.message}"
                 _state.update { it.copy(isLoading = false, error = msg) }
             }
         }
+    }
+
+    /** 当前身份模式 → LoginRequest：邮箱模式 phone 传空串、email 非空（服务端据此选身份）。 */
+    private fun AuthState.toLoginRequest(): LoginRequest = if (authMode == AuthMode.EMAIL) {
+        LoginRequest(phone = "", password = password, email = email.trim())
+    } else {
+        LoginRequest(phone = phone, password = password)
     }
 
     /** 提交绑定码：按当前选中通道调 /api/{channel}-bot/bind（服务端消费一次性码完成绑定）。 */
@@ -240,7 +284,8 @@ class AuthViewModel(
                 val me = api.getMe()
                 _state.update {
                     it.copy(
-                        accountPhone = me.phone,
+                        // 纯邮箱 / QQ openid 用户无手机号 → 回落空串（展示层自判「未绑定」）
+                        accountPhone = me.phone ?: "",
                         createdAt = me.createdAt ?: "",
                         botBound = !me.qqOpenid.isNullOrBlank(),
                         aiDisabled = me.aiDisabled,
@@ -295,8 +340,10 @@ class AuthViewModel(
             _state.update { it.copy(error = "请填写原密码和新密码") }
             return
         }
-        if (s.newPassword.length < 6) {
-            _state.update { it.copy(error = "新密码长度至少6位") }
+        // 新密码规则与注册一致（≥6 位 + 大小写字母，2026-09-17），本地预校验避免无效请求；
+        // 老密码不受影响，只约束本次新设定。
+        PasswordRules.validate(s.newPassword)?.let {
+            _state.update { st -> st.copy(error = it) }
             return
         }
         viewModelScope.launch {

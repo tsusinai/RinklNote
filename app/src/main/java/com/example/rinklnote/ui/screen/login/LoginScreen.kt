@@ -1,23 +1,30 @@
 package com.example.rinklnote.ui.screen.login
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -35,6 +42,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,25 +50,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.ui.component.PasswordBox
 import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
+import com.example.rinklnote.ui.viewmodel.AuthMode
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.util.PasswordRules
 
 /** 大陆手机号：1 开头、第二位 3-9、共 11 位数字。 */
 private val PhonePattern = Regex("^1[3-9]\\d{9}$")
+
+/** 标准邮箱（仅客户端提示用，服务端有兜底校验）：本地段@域名.顶级域。 */
+private val EmailPattern = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
 @Composable
 fun LoginPage(
@@ -69,28 +79,68 @@ fun LoginPage(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
-    // 第三方登录占位按钮的 Toast 用
-    val context = LocalContext.current
 
     // —— UI 层校验（R3-A4）：点击登录/注册（或键盘 Done）时判断，不通过则不派发 Login/Register 事件，
-    //    避免拿明显非法的手机号/密码去打服务端。字段级错误在重新输入时即清除。
-    var phoneError by remember { mutableStateOf<String?>(null) }
+    //    避免拿明显非法的手机号/邮箱/密码去打服务端。字段级错误在重新输入时即清除。
+    var identityError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var showForgotDialog by remember { mutableStateOf(false) }
 
-    // 提交前统一校验：手机号 11 位大陆号段 + 密码非空；注册额外要求 ≥6 位
-    // （提示文案与 AuthViewModel.register 既有规则对齐：「密码长度至少6位」；登录仅要求非空，与 VM 一致）。
-    // 返回 true 表示校验通过、可以派发事件。
+    // —— 进场动效：表单整体「低阻尼 spring 位移 + 淡入」（无第三方库，走 Compose spring）
+    val enterProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        enterProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+        )
+    }
+
+    // —— 错误抖动（shake）：校验失败 / 提交出错时触发一次横向 keyframes 抖动
+    val shakeProgress = remember { Animatable(0f) }
+    var shakeTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(shakeTick) {
+        if (shakeTick > 0) {
+            shakeProgress.snapTo(0f)
+            shakeProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = keyframes {
+                    durationMillis = 320
+                    0f at 0
+                    -1f at 60
+                    1f at 120
+                    -0.7f at 180
+                    0.7f at 240
+                    0f at 320
+                }
+            )
+        }
+    }
+    // 服务端返回错误时也抖一下（提交后 error 非空即视为一次失败反馈）
+    LaunchedEffect(state.error) {
+        if (state.error != null) shakeTick++
+    }
+
+    // 提交前统一校验：按身份模式校验第一输入行（手机号 11 位大陆号段 / 邮箱格式）；
+    // 密码登录仅要求非空（与 AuthViewModel 一致），注册走 [PasswordRules]（≥6 位 + 大小写，
+    // 与服务端 PasswordPolicy 同构）。返回 true 表示校验通过、可以派发事件。
     fun validateAndMarkErrors(isRegister: Boolean): Boolean {
-        val phoneOk = PhonePattern.matches(state.phone)
-        val passwordTooShort = isRegister && state.password.length < 6
-        phoneError = if (phoneOk) null else "请输入正确的 11 位手机号"
+        val identityOk = when (state.authMode) {
+            AuthMode.PHONE -> PhonePattern.matches(state.phone)
+            AuthMode.EMAIL -> EmailPattern.matches(state.email.trim())
+        }
+        identityError = when {
+            identityOk -> null
+            state.authMode == AuthMode.EMAIL -> "请输入正确的邮箱地址"
+            else -> "请输入正确的 11 位手机号"
+        }
         passwordError = when {
             state.password.isBlank() -> "密码不能为空"
-            passwordTooShort -> "密码长度至少6位"
+            isRegister -> PasswordRules.validate(state.password)
             else -> null
         }
-        return phoneOk && state.password.isNotBlank() && !passwordTooShort
+        val ok = identityOk && passwordError == null
+        if (!ok) shakeTick++
+        return ok
     }
 
     LaunchedEffect(state.isLoggedIn) {
@@ -129,13 +179,18 @@ fun LoginPage(
             }
 
             // 居中表单（区块节奏：4/8/12/16，页面级大间隔 32/48 不在此列）
+            // 进场动效：alpha 淡入 + 轻微下移复位（低阻尼 spring，见 enterProgress）
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 24.dp)
+                    .graphicsLayer {
+                        alpha = enterProgress.value
+                        translationY = (1f - enterProgress.value) * 48f
+                    },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(modifier = Modifier.height(48.dp))
+                Spacer(modifier = Modifier.height(32.dp))
                 // 品牌区：主标题 28sp Bold primary + 副标语 14sp
                 Text(
                     text = "RinklNote",
@@ -149,70 +204,106 @@ fun LoginPage(
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(32.dp))
-                OutlinedTextField(
-                    value = state.phone,
-                    onValueChange = {
-                        phoneError = null // 重新输入即清除本字段错误
-                        viewModel.onEvent(AuthEvent.PhoneChanged(it))
-                    },
-                    label = { Text("手机号") },
-                    singleLine = true,
-                    isError = phoneError != null,
-                    supportingText = {
-                        if (phoneError != null) {
-                            Text(
-                                text = phoneError!!,
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 12.sp
-                            )
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Phone,
-                        imeAction = ImeAction.Next
-                    ),
-                    keyboardActions = KeyboardActions(
-                        // 键盘「下一项」：焦点落到密码框
-                        onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 「手机号 | 邮箱」同位切换：滑块随模式平移（spring），与 Web 登录页同构
+                IdentitySwitch(
+                    mode = state.authMode,
+                    onChange = {
+                        identityError = null
+                        viewModel.onEvent(AuthEvent.AuthModeChanged(it))
+                    }
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = state.password,
-                    onValueChange = {
-                        passwordError = null // 重新输入即清除本字段错误
-                        viewModel.onEvent(AuthEvent.PasswordChanged(it))
-                    },
-                    label = { Text("密码") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    isError = passwordError != null,
-                    supportingText = {
-                        if (passwordError != null) {
-                            Text(
-                                text = passwordError!!,
-                                color = MaterialTheme.colorScheme.error,
-                                fontSize = 12.sp
-                            )
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        // 键盘「完成」视同点「登录」：先收起键盘并校验，通过才派发
-                        onDone = {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 输入区：错误抖动作用在这一组（shakeProgress 0→1 的 keyframes 横向摆动）
+                Column(
+                    modifier = Modifier.graphicsLayer {
+                        translationX = shakeProgress.value * 10.dp.toPx()
+                    }
+                ) {
+                    // 第一输入行：随身份模式切换 手机号 / 邮箱
+                    if (state.authMode == AuthMode.PHONE) {
+                        OutlinedTextField(
+                            value = state.phone,
+                            onValueChange = {
+                                identityError = null // 重新输入即清除本字段错误
+                                viewModel.onEvent(AuthEvent.PhoneChanged(it))
+                            },
+                            label = { Text("手机号") },
+                            singleLine = true,
+                            isError = identityError != null,
+                            supportingText = {
+                                if (identityError != null) {
+                                    Text(
+                                        text = identityError!!,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Phone,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                // 键盘「下一项」：焦点落到密码框
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = state.email,
+                            onValueChange = {
+                                identityError = null
+                                viewModel.onEvent(AuthEvent.EmailChanged(it))
+                            },
+                            label = { Text("邮箱") },
+                            placeholder = { Text("name@example.com") },
+                            singleLine = true,
+                            isError = identityError != null,
+                            supportingText = {
+                                if (identityError != null) {
+                                    Text(
+                                        text = identityError!!,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Email,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // 自定义密码框（2026-09-17）：圆点弹入 + 手绘眼睛开合 + 实时强度
+                    PasswordBox(
+                        value = state.password,
+                        onValueChange = {
+                            passwordError = null // 重新输入即清除本字段错误
+                            viewModel.onEvent(AuthEvent.PasswordChanged(it))
+                        },
+                        label = "密码",
+                        showStrength = true,
+                        isError = passwordError != null,
+                        errorMessage = passwordError,
+                        onImeDone = {
                             focusManager.clearFocus()
+                            // 键盘「完成」视同点「登录」：先收起键盘并校验，通过才派发
                             if (validateAndMarkErrors(isRegister = false)) {
                                 viewModel.onEvent(AuthEvent.Login)
                             }
                         }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(4.dp))
                 // 忘记密码入口（右对齐小字按钮）——当前仅占位弹窗，服务端暂无对应端点。
                 // TODO 忘记密码接口：服务端补 POST /auth/forgot-password 后接入（AuthViewModel 加 AuthEvent.ForgotPassword）
@@ -273,57 +364,6 @@ fun LoginPage(
                     Spacer(modifier = Modifier.height(16.dp))
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
-
-                // —— 其他登录方式（占位入口，暂不可用）——
-                // TODO 其他登录方式：QQ 可后续接服务端 qq-login 端点（server AuthRoutes 已有），微信需新增端点
-                Spacer(modifier = Modifier.height(32.dp))
-                // 分割行：中间 12sp 说明文字，左右各一段发丝线（1 物理像素 + 边框令牌色，与 RinklDivider 同规格；
-                // RinklDivider 只支持 endInset 单侧留白，做不了文字两侧对称线，故用 weight Box 等效实现）
-                val hairline = with(LocalDensity.current) { 1f.toDp() }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(hairline)
-                            .background(LocalRinklColors.current.dividerColor)
-                    )
-                    Text(
-                        text = "其他登录方式",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(hairline)
-                            .background(LocalRinklColors.current.dividerColor)
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                // 圆形占位按钮：Row 不占满宽度，由外层 Column 的 CenterHorizontally 居中；
-                // 品牌色为官方固定值（微信 #07C160 / QQ #12B7F5），非主题语义色，不走 RinklColors 令牌
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SocialLoginCircle(
-                        label = "微信登录",
-                        char = "微",
-                        backgroundColor = Color(0xFF07C160),
-                        onClick = {
-                            Toast.makeText(context, "暂未开放，敬请期待", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                    SocialLoginCircle(
-                        label = "QQ 登录",
-                        char = "Q",
-                        backgroundColor = Color(0xFF12B7F5),
-                        onClick = {
-                            Toast.makeText(context, "暂未开放，敬请期待", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
             }
         }
     }
@@ -342,34 +382,64 @@ fun LoginPage(
 }
 
 /**
- * 第三方登录圆形占位按钮：48dp 品牌色圆底 + 白色单字，点击仅弹 Toast（登录能力暂未开放）。
- * 品牌色为官方固定值，不属 App 主题语义色，故不走 RinklColors 令牌；后续接通真实登录时再替换官方图标。
- *
- * @param label 无障碍描述（TalkBack 朗读 + 点击动作标签），如「微信登录」
- * @param char 圆底上的单字，如「微」/「Q」（项目无微信/QQ 图标资源，用文字最稳）
- * @param backgroundColor 品牌底色（微信 #07C160 / QQ #12B7F5）
- * @param onClick 点击回调（当前只弹「暂未开放，敬请期待」Toast）
+ * 「手机号 | 邮箱」同位分段切换（与 Web 登录页 .toggle 同构）：
+ * 滑块（主题色槽）随模式 spring 平移，选中字色走 onPrimary。
  */
 @Composable
-private fun SocialLoginCircle(
-    label: String,
-    char: String,
-    backgroundColor: Color,
-    onClick: () -> Unit
-) {
+private fun IdentitySwitch(mode: AuthMode, onChange: (AuthMode) -> Unit) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val segmentWidth = maxWidth / 2
+        val thumbX by animateDpAsState(
+            targetValue = if (mode == AuthMode.EMAIL) segmentWidth else 0.dp,
+            animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+            label = "identityThumb"
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+        ) {
+            // 滑块：四周留 4dp 呼吸，宽度 = 半宽 - 8dp
+            Box(
+                modifier = Modifier
+                    .offset(x = thumbX + 4.dp, y = 4.dp)
+                    .width(segmentWidth - 8.dp)
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(LocalRinklColors.current.themeColor)
+            )
+            Row(modifier = Modifier.fillMaxSize()) {
+                IdentityTab(
+                    text = "手机号",
+                    selected = mode == AuthMode.PHONE,
+                    onClick = { onChange(AuthMode.PHONE) },
+                    modifier = Modifier.weight(1f)
+                )
+                IdentityTab(
+                    text = "邮箱",
+                    selected = mode == AuthMode.EMAIL,
+                    onClick = { onChange(AuthMode.EMAIL) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+/** 分段切换的单个选项：文字居中、整格可点（TalkBack 选中态由 selected 语义体现）。 */
+@Composable
+private fun IdentityTab(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(backgroundColor)
-            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick),
+        modifier = modifier.clickable(onClickLabel = text, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = char,
+            text = text,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color.White
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

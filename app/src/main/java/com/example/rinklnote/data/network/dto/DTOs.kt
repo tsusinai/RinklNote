@@ -4,8 +4,17 @@ import com.example.rinklnote.util.Money
 import com.example.rinklnote.domain.resolveAccountIconKey
 import kotlinx.serialization.Serializable
 
+/**
+ * 登录 / 注册请求（2026-09-17 优化登录方式）：新增可选 email 身份，与 phone 同级 ——
+ * email 非空走邮箱身份（此时 phone 传空串），否则走手机号（旧语义不变）。
+ * 默认值 null 保证旧序列化行为不变（email 为空时该键可省略）。
+ */
 @Serializable
-data class LoginRequest(val phone: String, val password: String)
+data class LoginRequest(
+    val phone: String = "",
+    val password: String,
+    val email: String? = null
+)
 
 @Serializable
 data class LoginResponse(val userId: Long, val token: String)
@@ -37,7 +46,10 @@ data class MessageResponse(val message: String)
 @Serializable
 data class MeResponse(
     val id: Long,
-    val phone: String,
+    // phone 可空（默认 null）：纯邮箱注册 / QQ openid 开户的用户没有手机号，服务端该键为 null 或缺省。
+    val phone: String? = null,
+    // 邮箱身份（2026-09-17）：可空，未设置 / 旧服务端不下发时为 null。
+    val email: String? = null,
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,
