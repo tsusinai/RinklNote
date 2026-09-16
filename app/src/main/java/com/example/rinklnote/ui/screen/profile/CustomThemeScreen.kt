@@ -838,7 +838,7 @@ private data class ThemeUnlockSignals(
  * 明暗各一套 [PresetTheme]（font/topBar 为 null = 跟随系统明暗的默认字体色），
  * 应用时按当前明暗态取对应套写入。
  */
-private data class UnlockableThemePreset(
+internal data class UnlockableThemePreset(
     val id: String,
     val name: String,
     /** 解锁条件文案（不含「解锁」二字，行内文案与 Toast 拼接用）。 */
@@ -847,8 +847,11 @@ private data class UnlockableThemePreset(
     val dark: PresetTheme,
 )
 
-/** 三套成就解锁预设：晨曦=暖橙粉调、薄荷=青绿调、琥珀=金棕调；明暗两套、格式与常规预设一致。 */
-private val UnlockableThemePresets = listOf(
+/**
+ * 三套成就解锁预设：晨曦=暖橙粉调、薄荷=青绿调、琥珀=金棕调；明暗两套、格式与常规预设一致。
+ * internal：挑战区「主题换装间」（screen/challenge）陈列与预览切换复用同一份数据，避免两处漂移。
+ */
+internal val UnlockableThemePresets = listOf(
     UnlockableThemePreset(
         id = "dawn",
         name = "晨曦",

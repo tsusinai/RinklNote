@@ -75,6 +75,8 @@ data class ChallengeState(
     val hasAnyBill: Boolean = false,
     // —— 预测卡 ——
     val monthExpenseMinor: Long = 0L,
+    /** 本月收入合计（整数分）：hub 副行「本月结余 = 收入 − 支出」用。 */
+    val monthIncomeMinor: Long = 0L,
     val dayOfMonth: Int = 1,
     val daysInMonth: Int = 30,
     val dailyAverageMinor: Long = 0L,
@@ -213,6 +215,7 @@ internal fun deriveChallengeState(
     monthCategoryTotals: List<DailyCategoryAmount>,
     lessBuyCategory: String?,
     lessBuyPercent: Int,
+    monthIncomeMinor: Long = 0L,
 ): ChallengeState {
     val zone = bookkeepingZone()
     val monthStartDate = monthStartOf(today)
@@ -302,6 +305,7 @@ internal fun deriveChallengeState(
         isLoading = false,
         hasAnyBill = firstBillDate != null,
         monthExpenseMinor = monthExpense,
+        monthIncomeMinor = monthIncomeMinor,
         dayOfMonth = dayOfMonth,
         daysInMonth = daysInMonth,
         dailyAverageMinor = dailyAverage,
@@ -377,6 +381,11 @@ class ChallengeViewModel(
                     ),
                     lessBuyCategory = lessBuyCategory,
                     lessBuyPercent = lessBuyPercent,
+                    // 本月收入（整数分）：任一账单/挑战/预算变更都会重走本推导，结余实时回落。
+                    monthIncomeMinor = billDao.getTotalIncome(
+                        monthStartOf(today).toDayStartEpoch(),
+                        monthEndExclusive(today).toDayStartEpoch(),
+                    ) ?: 0L,
                 )
             }.collect { derived ->
                 _state.value = derived
