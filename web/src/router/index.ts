@@ -21,10 +21,20 @@ const consoleChildren = [
   { path: 'settings', name: 'settings', component: () => import('../views/console/Settings.vue'), meta: { title: '设置', tab: 5 } },
 ]
 
+/* 管理端子路由（/admin，守卫把非管理员 404 化——见 guards.ts）。
+ * 页面全只读；配置写操作留在用户控制台「设置 → 多通道机器人」。 */
+const adminChildren = [
+  { path: '', name: 'admin-overview', component: () => import('../views/admin/AdminOverview.vue'), meta: { title: '运维大盘' } },
+  { path: 'users', name: 'admin-users', component: () => import('../views/admin/AdminUsers.vue'), meta: { title: '用户管理' } },
+  { path: 'bots', name: 'admin-bots', component: () => import('../views/admin/AdminBots.vue'), meta: { title: '机器人运维' } },
+  { path: 'push-logs', name: 'admin-push-logs', component: () => import('../views/admin/AdminPushLogs.vue'), meta: { title: '推送历史' } },
+]
+
 const routes = [
   { path: '/', name: 'landing', component: () => import('../views/Landing.vue'), meta: { title: '记一笔' } },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { title: '登录' } },
   { path: '/console', name: 'console', component: () => import('../views/console/ConsoleLayout.vue'), children: consoleChildren },
+  { path: '/admin', name: 'admin', component: () => import('../views/admin/AdminLayout.vue'), children: adminChildren },
   /* 404 兜底：其余任何路径进 NotFound 页 */
   { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue'), meta: { title: '页面不存在' } },
 ]

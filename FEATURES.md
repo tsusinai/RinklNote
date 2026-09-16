@@ -255,6 +255,21 @@
 
 ---
 
+## 17. Web 管理员控制台（2026-09-16，P0）
+
+### 当前实现
+- [x] 权限模型：`ADMIN_IDENTITIES` 环境变量（手机号/userId）+ JWT admin claim 双保险；`/api/auth/me` 返回 `isAdmin`
+- [x] 漏洞收口：`POST /api/qq-bot/config`、`PUT /api/insights/suggest-config` 改为管理员专属（后者 GET 保持全员只读）
+- [x] 管理端只读 API：`GET /api/admin/{overview,users,push-logs,bot/status}`——聚合计数 + 手机号掩码，绝不返回备注/明细（隐私红线）
+- [x] WS 热重连：机器人配置保存后自动 `restartGateway()`，无需重启进程
+- [x] Web `/admin` 区：AdminLayout（深色侧栏 + 「运维」徽标）+ 四页（运维大盘/用户管理/机器人运维/推送历史），非管理员守卫 404 化（不暴露存在）
+- [x] 机器人离线红条「静态」告警（管理端零常驻动效——规格红线）
+
+### 升级规划（P1 蓝图，未实施）
+- [ ] 封禁/解封（disabled 列 + token_version 吊销）、重置密码、审计日志、手动推送、suggest-config 管理页
+
+---
+
 ## 架构演进方向
 
 ```

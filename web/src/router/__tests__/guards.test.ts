@@ -51,6 +51,28 @@ describe('authGuard', () => {
   })
 })
 
+describe('authGuard /admin（管理端守卫）', () => {
+  it('redirects non-admin user to 404 (不暴露管理端存在)', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true; s.user = { isAdmin: false } as any
+    expect(await authGuard({ path: '/admin' })).toEqual({ name: 'not-found' })
+    expect(await authGuard({ path: '/admin/users' })).toEqual({ name: 'not-found' })
+  })
+  it('redirects unauthenticated /admin to 404 (不送登录页防探测)', async () => {
+    const s = useAuthStore(); s.token = null; s.ready = true
+    expect(await authGuard({ path: '/admin' })).toEqual({ name: 'not-found' })
+  })
+  it('allows admin user into /admin', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true; s.user = { isAdmin: true } as any
+    expect(await authGuard({ path: '/admin' })).toBe(true)
+    expect(await authGuard({ path: '/admin/push-logs' })).toBe(true)
+  })
+  it('while user profile not loaded yet, falls through (hydrate 兜底由 ready 前置保证)', async () => {
+    const s = useAuthStore(); s.token = 't'; s.ready = true; s.user = null
+    // user 为 null（如 /me 失败）时不放行——保守视作非管理员
+    expect(await authGuard({ path: '/admin' })).toEqual({ name: 'not-found' })
+  })
+})
+
 describe('sanitizeRedirect', () => {
   it('accepts in-app absolute paths', () => {
     expect(sanitizeRedirect('/console/bills')).toBe('/console/bills')

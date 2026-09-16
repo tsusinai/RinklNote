@@ -19,6 +19,11 @@ export const authGuard = async (to: any) => {
   if (to.path === '/login' && store.token) {
     return sanitizeRedirect(to.query?.redirect) ?? '/console'
   }
+  // 管理端守卫：非管理员一律按 404 处理（不暴露 /admin 区的存在）
+  if (to.path === '/admin' || to.path.startsWith('/admin/')) {
+    if (!store.token) return { name: 'not-found' }
+    if (store.ready && !store.user?.isAdmin) return { name: 'not-found' }
+  }
   return true
 }
 

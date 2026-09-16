@@ -148,7 +148,7 @@ Compose UI（collectAsStateWithLifecycle）
 
 ### Web —— Vue 3 SPA
 
-`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,console/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。主题令牌是 `src/styles/theme.css` 的 CSS 变量（含 `--on-primary`，图表色已对齐 App 的 PiePalette）；提交信息里的「Web 端令牌同步」指 **CSS 设计令牌**，不是登录态同步，别会错意。**App 内 WebView 深链必须用 `/console/*`**：settings 等是 console 子路由，根路径没有 catch-all，深链打错（如 `/settings`）vue-router 会空渲染 → WebView 白屏（2026-09-16 已修的真实案例）。
+`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,console/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。主题令牌是 `src/styles/theme.css` 的 CSS 变量（含 `--on-primary`，图表色已对齐 App 的 PiePalette）；提交信息里的「Web 端令牌同步」指 **CSS 设计令牌**，不是登录态同步，别会错意。管理端在 `/admin`（AdminLayout + 四页：运维大盘/用户管理/机器人运维/推送历史），非管理员守卫直接 404（不暴露存在）；管理员判定走服务端 `ADMIN_IDENTITIES` 环境变量（`requireAdmin`，`/api/admin/*` 全只读 + 手机号掩码，隐私红线见 AdminService 注释头）。**App 内 WebView 深链必须用 `/console/*`**：settings 等是 console 子路由，根路径没有 catch-all，深链打错（如 `/settings`）vue-router 会空渲染 → WebView 白屏（2026-09-16 已修的真实案例）。
 
 ## 硬性约定
 
