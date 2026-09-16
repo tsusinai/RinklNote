@@ -3,7 +3,7 @@ import { reactive, ref, computed } from 'vue'
 import { bills } from '../../api/bills'
 import { useDataStore } from '../../stores/data'
 import { useToast } from '../../composables/useToast'
-import { parseMoneyToMinor } from '../../utils/money'
+import { parseMoneyToMinor, minorToDecimal } from '../../utils/money'
 import type { Bill } from '../../types'
 
 const props = defineProps<{ bill: Bill }>()
@@ -11,9 +11,9 @@ const emit = defineEmits<{ (e: 'close'): void; (e: 'saved'): void }>()
 const data = useDataStore()
 const toast = useToast()
 
-// 以展示值初始化（分 → 元字符串，便于 type=number 编辑）
+// 以展示值初始化（整数分 → 元串，走 money.ts 纯整数拆分，不用 minor/100 浮点除法）
 const st = reactive({
-  amount: (props.bill.amountMinor / 100).toFixed(2),
+  amount: minorToDecimal(props.bill.amountMinor),
   billType: props.bill.billType,
   catId: String(props.bill.categoryId),
   subCatName: props.bill.subCategoryName ?? '',
@@ -47,7 +47,7 @@ async function save() {
       // 条件 PUT 冲突：载入服务端最新行，提示确认后重存
       const fresh: Bill | undefined = e.data
       if (fresh) {
-        st.amount = (fresh.amountMinor / 100).toFixed(2)
+        st.amount = minorToDecimal(fresh.amountMinor)
         st.billType = fresh.billType
         st.catId = String(fresh.categoryId)
         st.subCatName = fresh.subCategoryName ?? ''
@@ -77,7 +77,7 @@ async function save() {
         <option disabled value="">选择分类</option>
         <option v-for="c in cats" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
       </select>
-      <div v-if="subs.length" class="grid-4 sub">
+      <div v-if="subs.length" class="sub-grid">
         <button :class="['cat-btn', { on: st.subCatName === '' }]" @click="st.subCatName = ''">全部</button>
         <button v-for="s in subs" :key="s.name" :class="['cat-btn', { on: st.subCatName === s.name }]" @click="st.subCatName = s.name">{{ s.name }}</button>
       </div>
@@ -105,7 +105,7 @@ async function save() {
 .toggle-btn.on.inc { background: var(--income); color: #fff; border-color: transparent; font-weight: 600; }
 .amount-input { width: 100%; font-size: 32px; font-weight: 800; border: none; border-bottom: 2px solid var(--border); padding: 8px 0; background: none; color: var(--text); }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
 .cat-btn { padding: 8px 4px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
 .cat-btn.on { background: var(--primary-soft); border-color: var(--primary); }
 .msg.err { color: var(--expense); font-size: 14px; }

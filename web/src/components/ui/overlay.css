@@ -1,0 +1,50 @@
+/* 浮层公共样式：Modal / Sheet 共用（ui- 前缀防冲突）
+ * 进场：遮罩 fade + 面板 scale .96→1（220ms，--dur-expand/--overlay-in）
+ * 退场：遮罩 fade + 面板 scale →1.02（--overlay-out）；Sheet 面板走 translateY（--dur-sheet） */
+
+.ui-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.ui-panel {
+  width: 100%;
+  background: var(--card); color: var(--text);
+  border-radius: 18px; padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 12px;
+  outline: none; /* 面板自身承接焦点，视觉焦点环交给内部控件 */
+}
+
+/* 进出场（Transition 类名挂在 .ui-overlay 根上，面板跟随缩放/位移） */
+.ui-pop-enter-active, .ui-pop-leave-active { transition: opacity var(--dur-expand) var(--ease); }
+.ui-pop-enter-active .ui-panel, .ui-pop-leave-active .ui-panel { transition: transform var(--dur-expand) var(--ease); }
+.ui-pop-enter-from, .ui-pop-leave-to { opacity: 0; }
+.ui-pop-enter-from .ui-panel { transform: scale(var(--overlay-in)); }
+.ui-pop-leave-to .ui-panel { transform: scale(var(--overlay-out)); }
+
+.ui-sheet-enter-active, .ui-sheet-leave-active { transition: opacity var(--dur-sheet) var(--ease); }
+.ui-sheet-enter-active .ui-panel, .ui-sheet-leave-active .ui-panel { transition: transform var(--dur-sheet) var(--ease); }
+.ui-sheet-enter-from, .ui-sheet-leave-to { opacity: 0; }
+.ui-sheet-enter-from .ui-panel, .ui-sheet-leave-to .ui-panel { transform: translateY(100%); }
+
+/* 面板头部/底部 */
+.ui-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ui-panel-head h3 { margin: 0; font-size: 17px; }
+.ui-panel-foot { display: flex; gap: 12px; margin-top: 8px; }
+.ui-x {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  padding: 4px; border-radius: 8px; display: grid; place-items: center;
+  transition: color var(--dur-press) var(--ease), background var(--dur-press) var(--ease);
+}
+.ui-x:hover { color: var(--text); background: var(--surface-2); }
+
+/* 底部 Sheet 变体 */
+.ui-overlay.sheet { align-items: flex-end; padding: 0; }
+.ui-overlay.sheet .ui-panel {
+  max-width: 640px; margin: 0 auto;
+  border-radius: 20px 20px 0 0;
+  max-height: 86vh; overflow-y: auto;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}

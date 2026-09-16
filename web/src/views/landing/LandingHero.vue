@@ -1,13 +1,49 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { demoBudget, demoNetAssets } from '../../mock/demo-data'
 import { formatMoney } from '../../utils/format'
+import { countUp } from '../../utils/countUp'
 
 const router = useRouter()
 
 // 数据源隔离：落地页不 import src/stores/**、src/api/**. 已登录判断直接读 localStorage（与 http.ts 的 rkl_token 一致）。
 function cta() { router.push(localStorage.getItem('rkl_token') ? '/console' : '/login') }
 function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }) }
+
+/* Hero 统计数字 countUp（W3c）：进入视口才起表（IntersectionObserver 触发一次）；
+ * from 滑动 / rAF 取消 / reduced-motion 定格均由 countUp 内部处理。
+ * 三个 key 全局唯一，重复进入落地页时从上次展示值续滑而非归零重涨。 */
+const spentEl = ref<HTMLSpanElement | null>(null)
+const netEl = ref<HTMLSpanElement | null>(null)
+const daysEl = ref<HTMLSpanElement | null>(null)
+const statsEl = ref<HTMLElement | null>(null)
+let io: IntersectionObserver | undefined
+
+// 演示数据：连续记账天数，与 demoInsight.highlights 的「连续 12 天打卡」镜像
+const DEMO_STREAK_DAYS = 12
+
+function runCountUps() {
+  if (spentEl.value) countUp(spentEl.value, demoBudget.spentMinor, 'landing:hero:spent', formatMoney, 800)
+  if (netEl.value) countUp(netEl.value, demoNetAssets, 'landing:hero:net', formatMoney, 800)
+  if (daysEl.value) countUp(daysEl.value, DEMO_STREAK_DAYS, 'landing:hero:days', (n) => `+${Math.round(n)}`, 800)
+}
+
+onMounted(() => {
+  // 兜底环境（如测试）无 IntersectionObserver：直接起表
+  if (typeof IntersectionObserver === 'undefined' || !statsEl.value) { runCountUps(); return }
+  io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue
+      runCountUps()
+      io?.disconnect()
+      io = undefined
+    }
+  }, { threshold: 0.3 })
+  io.observe(statsEl.value)
+})
+
+onUnmounted(() => { io?.disconnect(); io = undefined })
 </script>
 
 <template>
@@ -19,11 +55,12 @@ function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ be
       <button class="btn btn-primary" @click="cta">进入控制台</button>
       <button class="btn btn-ghost" @click="scrollTo('feature-bookkeeping')">查看演示 ↓</button>
     </div>
-    <div class="hero-stats">
-      <!-- 金额由 mock 派生，与 AiDemo 的 demoInsight「本月共支出 ¥3,520」一致；天数 +12 镜像 demoInsight.highlights 的「连续 12 天打卡」。 -->
-      <div class="stat"><span class="stat-num amount">{{ formatMoney(demoBudget.spentMinor) }}</span><span class="stat-label">本月记账</span></div>
-      <div class="stat"><span class="stat-num amount">{{ formatMoney(demoNetAssets) }}</span><span class="stat-label">净资</span></div>
-      <div class="stat"><span class="stat-num">+12</span><span class="stat-label">连续记账天数</span></div>
+    <div ref="statsEl" class="hero-stats">
+      <!-- 演示数据（静态 mock，无 API 拉取）：金额由 mock 派生，与 AiDemo 的 demoInsight「本月共支出 ¥3,520」一致。
+           模板先渲染终值兜底（无 JS / reduced-motion 直读），进入视口后由 countUp 起表。 -->
+      <div class="stat"><span ref="spentEl" class="stat-num amount">{{ formatMoney(demoBudget.spentMinor) }}</span><span class="stat-label">本月记账</span></div>
+      <div class="stat"><span ref="netEl" class="stat-num amount">{{ formatMoney(demoNetAssets) }}</span><span class="stat-label">净资</span></div>
+      <div class="stat"><span ref="daysEl" class="stat-num">+{{ DEMO_STREAK_DAYS }}</span><span class="stat-label">连续记账天数</span></div>
     </div>
   </section>
 </template>
@@ -35,8 +72,8 @@ function scrollTo(id: string) { document.getElementById(id)?.scrollIntoView({ be
 .hero-title .grad { background: linear-gradient(120deg, var(--income), var(--primary) 60%, var(--expense)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero-sub { font-size: 17px; color: var(--muted); max-width: 620px; margin: 0 auto 32px; line-height: 1.6; }
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 56px; }
-.btn { padding: 13px 22px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform .12s var(--ease), box-shadow .12s var(--ease); }
-.btn:active { transform: scale(.97); }
+.btn { padding: 13px 22px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: transform var(--dur-press) var(--ease), box-shadow var(--dur-press) var(--ease); }
+.btn:active { transform: scale(var(--press-scale)); }
 .btn-primary { background: var(--primary); color: var(--on-primary); box-shadow: 0 4px 18px rgba(126,193,252,.35); }
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .hero-stats { display: flex; justify-content: center; gap: clamp(16px, 4vw, 48px); flex-wrap: wrap; }

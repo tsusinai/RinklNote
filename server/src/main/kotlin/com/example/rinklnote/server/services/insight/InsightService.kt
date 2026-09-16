@@ -588,6 +588,9 @@ data class MonthlyFacts(
 
     // ── Smart Suggestion ──
 
+    // @Serializable 不能省：该配置直接作路由响应体 / 请求体（GET/PUT suggest-config），
+    // 缺注解时编译不报错、运行时 serializer(typeOf<...>) 找不到序列化器 → 接口 500。
+    @Serializable
     data class SuggestConfig(
         val enabled: Boolean = true,
         val lookbackDays: Int = 7,
@@ -600,6 +603,7 @@ data class MonthlyFacts(
         )
     )
 
+    @Serializable
     data class TimeWindow(val label: String, val startHour: Int, val endHour: Int)
 
     fun suggestDailyPattern(userId: Long): Map<String, String>? {

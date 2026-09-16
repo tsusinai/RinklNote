@@ -1,22 +1,66 @@
+/* ============================================================
+ * RinklNote Web 设计令牌（对齐 App RinklColors / Motion.kt）
+ * - 动效：全站唯一缓动 --ease（FastOutSlowIn 镜像），时长谱系 120~650ms
+ * - 金额三端整数分，颜色令牌在此集中定义，页面不得写死色值
+ * ============================================================ */
 :root {
+  /* 品牌与收支色 */
   --primary:#7EC1FC; --on-primary:#0b2b44; --expense:#CA3032; --income:#04A433;
-  --bg:#F7F7F9; --card:#FFFFFF; --text:#1f2937; --muted:#6b7280;
+  /* 收支底色上的文字色（消灭写死 #fff；App 侧对应 RinklColors EXPENSE/INCOME 槽位） */
+  --on-expense:#FFFFFF; --on-income:#FFFFFF;
+
+  /* 背景 / 表面层级 / 文字 */
+  --bg:#F7F7F9; --card:#FFFFFF; --surface-2:#F3F4F6; --text:#1f2937; --muted:#6b7280;
   --border:#e5e7eb; --border-light:#f3f4f6;
   --radius:15px;
   --primary-soft:#eff6ff;
+
+  /* 图表令牌（--chart-1…7 对齐 App PiePalette；轴文字随主题切换） */
+  --chart-1:#7EC1FC; --chart-2:#F97D1D; --chart-3:#04A433; --chart-4:#9B59B6;
+  --chart-5:#F2B134; --chart-6:#CA3032; --chart-7:#B0B0B0;
+  --chart-axis:#6b7280;
+
+  /* 持续动效背景：晨雾光斑（Landing/登录用，控制台只做卡片级光晕） */
+  --glow-1:rgba(126,193,252,.38);  /* 主蓝 */
+  --glow-2:rgba(4,164,51,.14);     /* 收入绿点缀 */
+  --glow-3:rgba(249,125,29,.12);   /* 暖橙点缀 */
+  /* 结余呼吸光晕（正=收入绿呼吸，负=支出红静态警示） */
+  --halo-income:rgba(4,164,51,.32);
+  --halo-expense:rgba(202,48,50,.30);
+  /* Skeleton 微光 */
+  --skeleton-sheen:rgba(255,255,255,.5);
+
+  /* 动效令牌：唯一缓动 + 时长谱系（对齐 App：120/220/240/250/300/500/650ms） */
+  --ease:cubic-bezier(0.2,0,0,1);
+  --dur-press:120ms; --dur-expand:220ms; --dur-drawer:240ms; --dur-sheet:250ms;
+  --dur-page:280ms; --dur-indicator:300ms; --dur-chart:500ms; --dur-breath:650ms;
+  --press-scale:.97; --overlay-in:.96; --overlay-out:1.02;
+  /* 持续背景节奏：blob1/blob2 反相慢漂移 + 结余呼吸 8s */
+  --dur-glow-a:90s; --dur-glow-b:70s; --dur-halo:8s;
+  /* 旧别名：保留既有引用兼容，统一指向新时长令牌 */
+  --dur-fast:var(--dur-press); --dur-med:var(--dur-expand); --dur-slow:var(--dur-indicator);
+
   --tag-web-bg:#dcfce7; --tag-web-fg:#16a34a;
   --tag-qq-bg:#dbeafe;  --tag-qq-fg:#2563eb;
   --tag-app-bg:#f3f4f6; --tag-app-fg:#6b7280;
   --shadow-sm:0 1px 3px rgba(0,0,0,.04); --shadow:0 1px 8px rgba(0,0,0,.06);
-  --ease:cubic-bezier(.4,0,.2,1);
-  --dur-fast:120ms; --dur-med:220ms; --dur-slow:320ms;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:#1A1A1E; --card:#252528; --text:#EAEAEA; --muted:#AAAAAA;
+    --bg:#1A1A1E; --card:#252528; --surface-2:#2D2D30; --text:#EAEAEA; --muted:#AAAAAA;
     --border:#333333; --border-light:#2D2D30;
     --primary-soft:rgba(126,193,252,.14);
+    /* 暗色收支色（更亮、对比度足够） */
+    --expense:#FF6B6B; --income:#4CD97B;
+    --chart-axis:#AAAAAA;
+    /* 暗色光斑：alpha 减半、色温更冷，避免夜间刺眼 */
+    --glow-1:rgba(126,193,252,.19);
+    --glow-2:rgba(76,217,123,.07);
+    --glow-3:rgba(249,125,29,.06);
+    --halo-income:rgba(76,217,123,.22);
+    --halo-expense:rgba(255,107,107,.22);
+    --skeleton-sheen:rgba(255,255,255,.07);
     --tag-web-bg:#0f2e1c; --tag-web-fg:#4ade80;
     --tag-qq-bg:#12294a;  --tag-qq-fg:#60a5fa;
     --tag-app-bg:#2D2D30; --tag-app-fg:#AAAAAA;
@@ -24,9 +68,17 @@
   }
 }
 :root[data-theme="dark"] {
-  --bg:#1A1A1E; --card:#252528; --text:#EAEAEA; --muted:#AAAAAA;
+  --bg:#1A1A1E; --card:#252528; --surface-2:#2D2D30; --text:#EAEAEA; --muted:#AAAAAA;
   --border:#333333; --border-light:#2D2D30;
   --primary-soft:rgba(126,193,252,.14);
+  --expense:#FF6B6B; --income:#4CD97B;
+  --chart-axis:#AAAAAA;
+  --glow-1:rgba(126,193,252,.19);
+  --glow-2:rgba(76,217,123,.07);
+  --glow-3:rgba(249,125,29,.06);
+  --halo-income:rgba(76,217,123,.22);
+  --halo-expense:rgba(255,107,107,.22);
+  --skeleton-sheen:rgba(255,255,255,.07);
   --tag-web-bg:#0f2e1c; --tag-web-fg:#4ade80;
   --tag-qq-bg:#12294a;  --tag-qq-fg:#60a5fa;
   --tag-app-bg:#2D2D30; --tag-app-fg:#AAAAAA;
@@ -43,11 +95,68 @@ body {
 a { color:inherit; text-decoration:none; }
 button { font-family:inherit; }
 
+/* 键盘可达性：统一焦点环（鼠标点击不触发） */
+:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+
 .amount { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
 
-/* Scroll reveal: .reveal → .revealed */
+/* Scroll reveal: .reveal → .revealed（进阶用法 v-reveal="delayMs" 见 directives/reveal.ts） */
 .reveal { opacity:0; transform:translateY(24px); transition:opacity .6s var(--ease), transform .6s var(--ease); }
 .reveal.revealed { opacity:1; transform:none; }
+
+/* ============================================================
+ * 晨雾光斑（持续动效背景，纯 CSS 零 JS）
+ * 用法：<div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+ * 只动 transform/opacity；reduced-motion 由下方全局规则自动冻结。
+ * ============================================================ */
+.aurora { position:fixed; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+.aurora i {
+  position:absolute; display:block; width:60vmin; height:60vmin; border-radius:50%;
+  filter:blur(90px); will-change:transform;
+}
+.aurora .a1 {
+  top:-12vmin; left:-10vmin;
+  background:radial-gradient(circle at center, var(--glow-1), transparent 70%);
+  animation:aurora-a var(--dur-glow-a) ease-in-out infinite alternate;
+}
+.aurora .a2 {
+  bottom:-14vmin; right:-8vmin;
+  background:radial-gradient(circle at center, var(--glow-2), transparent 70%);
+  animation:aurora-b var(--dur-glow-b) ease-in-out infinite alternate;
+}
+.aurora .a3 {
+  top:38%; left:52%;
+  background:radial-gradient(circle at center, var(--glow-3), transparent 70%);
+  animation:aurora-c var(--dur-glow-b) ease-in-out infinite;
+}
+/* blob1 向右下放大 / blob2 向左上缩小：反相慢漂移 */
+@keyframes aurora-a {
+  from { transform:translate3d(0,0,0) scale(1); }
+  to   { transform:translate3d(18vmin,10vmin,0) scale(1.15); }
+}
+@keyframes aurora-b {
+  from { transform:translate3d(0,0,0) scale(1.12); }
+  to   { transform:translate3d(-16vmin,-12vmin,0) scale(.94); }
+}
+/* blob3 纯 scale 呼吸 0.92↔1.08 */
+@keyframes aurora-c {
+  0%, 100% { transform:scale(.92); }
+  50%      { transform:scale(1.08); }
+}
+/* 小屏减为 2 层，省电省渲染 */
+@media (max-width: 767px) { .aurora .a3 { display:none; } }
+
+/* 页面隐藏时暂停全站动画（visibilitychange → anim-paused，见 utils/motion.ts） */
+.anim-paused *, .anim-paused *::before, .anim-paused *::after { animation-play-state:paused !important; }
+
+/* 结余呼吸光晕：结余≥0 → 收入绿晕 8s 呼吸；结余<0 → 支出红晕静态（负向静默警示） */
+@keyframes glow-breath {
+  0%, 100% { box-shadow:var(--shadow-sm), 0 0 0 0 transparent; }
+  50%      { box-shadow:var(--shadow-sm), 0 0 28px 2px var(--halo-income); }
+}
+.glow-positive { animation:glow-breath var(--dur-halo) ease-in-out infinite; }
+.glow-negative { box-shadow:var(--shadow-sm), 0 0 24px 0 var(--halo-expense); }
+
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity:1; transform:none; transition:none; }
   * { animation:none !important; transition:none !important; }

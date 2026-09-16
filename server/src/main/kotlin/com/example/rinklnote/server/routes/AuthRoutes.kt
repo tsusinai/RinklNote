@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.routes
 
+import com.example.rinklnote.server.plugins.AdminIdentities
 import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserService
@@ -31,6 +32,7 @@ data class MeResponse(
     val qqNumber: String? = null,
     val qqOpenid: String? = null,
     val createdAt: String? = null,
+    val isAdmin: Boolean = false,
     val aiDisabled: Boolean = false,
     val dailyReportEnabled: Boolean = false,
     val dailyReportHour: Int = 9,
@@ -143,6 +145,8 @@ fun Route.authRoutes(userService: UserService, qqBotService: QQBotService) {
                         qqNumber = user.qqNumber,
                         qqOpenid = user.qqOpenid,
                         createdAt = user.createdAt,
+                        // 管理员判定 = 身份在 ADMIN_IDENTITIES 名单（活的判定，不依赖 token claim 快照）。
+                        isAdmin = AdminIdentities.matches(user.phone, user.id),
                         aiDisabled = user.aiDisabled,
                         dailyReportEnabled = user.dailyReportEnabled,
                         dailyReportHour = user.dailyReportHour,

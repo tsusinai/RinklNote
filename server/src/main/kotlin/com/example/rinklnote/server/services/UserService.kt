@@ -2,6 +2,7 @@ package com.example.rinklnote.server.services
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.example.rinklnote.server.plugins.AdminIdentities
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.mindrot.jbcrypt.BCrypt
@@ -291,6 +292,9 @@ class UserService(
             .withIssuer(jwtIssuer)
             .withClaim("userId", userId)
         if (phone != null) builder.withClaim("phone", phone)
+        // 双保险之一：名单内的身份签发 admin claim（签发时刻的快照）。
+        // 名单本身仍是每请求的活判定，token 24h 过期，claim 只是辅助授信通道。
+        if (AdminIdentities.matches(phone, userId)) builder.withClaim("admin", true)
         return builder
             .withExpiresAt(Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000))
             .sign(Algorithm.HMAC256(jwtSecret))

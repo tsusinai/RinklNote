@@ -18,6 +18,6 @@ const { toasts, close } = useToast()
 .toast { padding: 10px 18px; border-radius: 12px; background: var(--card); color: var(--text); box-shadow: var(--shadow); cursor: pointer; font-size: 14px; }
 .toast.ok { border-left: 3px solid var(--income, #04A433); }
 .toast.err { border-left: 3px solid var(--expense, #CA3032); }
-.toast-enter-active, .toast-leave-active { transition: all .2s var(--ease, ease); }
+.toast-enter-active, .toast-leave-active { transition: all var(--dur-expand) var(--ease); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

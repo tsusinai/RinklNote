@@ -39,7 +39,9 @@ export interface MessageResponse { message: string }
 
 export interface MeResponse {
   id: number; phone: string | null; qqNumber: string | null;
-  qqOpenid: string | null; createdAt: string | null; aiDisabled: boolean;
+  qqOpenid: string | null; createdAt: string | null;
+  /** 管理员 = 身份在服务端 ADMIN_IDENTITIES 名单（活的判定），/admin 区守卫依据 */
+  isAdmin?: boolean; aiDisabled: boolean;
 }
 
 // ── 控制台扩展类型（原 web 全量 1:1）──

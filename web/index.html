@@ -3,7 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 浏览器地址栏/状态栏配色随系统亮暗（应用内显式主题由下方脚本同步 data-theme） -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F7F9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1A1A1E" />
     <title>RinklNote</title>
+    <script>
+      /* 防闪白：应用挂载前按本地存储预设主题（key 与 stores/theme.ts 的 rkl_theme 一致），
+       * 显式选过亮/暗的用户刷新时首帧即为目标配色，暗色下不再白闪；
+       * 「跟随系统」交给 CSS 的 prefers-color-scheme 媒体查询，首帧天然正确。
+       * 隐私模式等读不到 localStorage 时静默跳过，由应用内回退。 */
+      try {
+        var t = localStorage.getItem('rkl_theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      } catch (e) { /* 忽略 */ }
+    </script>
   </head>
   <body>
     <div id="app"></div>

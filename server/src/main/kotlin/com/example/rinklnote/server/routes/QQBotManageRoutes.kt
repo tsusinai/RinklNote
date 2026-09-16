@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.routes
 
+import com.example.rinklnote.server.plugins.requireAdmin
 import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.UserService
@@ -44,7 +45,9 @@ fun Route.qqBotManageRoutes(qqBotService: QQBotService, userService: UserService
                 ))
             }
 
+            // 收口：机器人凭据是全局配置，写操作仅限管理员（GET /config 仍可读，回显脱敏 AppID）。
             post("/config") {
+                call.requireAdmin() ?: return@post
                 val body = call.receive<BotConfigRequest>()
                 if (body.appId.isBlank() || body.clientSecret.isBlank()) {
                     return@post call.respond(HttpStatusCode.BadRequest, mapOf("message" to "AppID 和 ClientSecret 不能为空"))

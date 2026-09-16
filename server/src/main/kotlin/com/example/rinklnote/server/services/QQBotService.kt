@@ -66,6 +66,9 @@ class QQBotService {
     private val bindCodes = ConcurrentHashMap<String, BindEntry>()
     private val random = SecureRandom()
 
+    // 配置变更回调：由 WS 网关（QQBotWebSocketClient.start）注册，保存配置成功后触发热重连。
+    @Volatile var onConfigChanged: (() -> Unit)? = null
+
     data class BindEntry(val openid: String, val expiresAt: Long)
 
     // ── Configuration ──
@@ -134,6 +137,16 @@ class QQBotService {
         }
         configure(appId, clientSecret)
         logger.info("QQ Bot config saved to DB")
+        // WS 热重连：新凭据保存成功后让网关用新 token 重新拨号（失败只记日志，不影响保存结果）。
+        notifyConfigChanged()
+    }
+
+    private fun notifyConfigChanged() {
+        try {
+            onConfigChanged?.invoke()
+        } catch (e: Exception) {
+            logger.warn("QQ Bot config change notify failed: ${e.message}")
+        }
     }
 
     fun hasSavedConfig(): Boolean {
@@ -153,6 +166,11 @@ class QQBotService {
     }
 
     fun getAppId(): String? = appId
+
+    // ── 只读状态（管理端 /api/admin/bot/status）──
+
+    /** 当前缓存 access token 的过期时刻（epoch 秒）；0 = 尚未获取过 token。 */
+    fun getTokenExpiresAtEpochSec(): Long = tokenExpiresAt
 
     // ── Ed25519 ──
 
