@@ -23,7 +23,13 @@ data class UserInfo(
     val aiDisabled: Boolean = false,
     val dailyReportEnabled: Boolean = false,
     val dailyReportHour: Int = 9,
-    val dailyReportMinute: Int = 0
+    val dailyReportMinute: Int = 0,
+    // 个人资料（2026-09-17）：全量同步字段，均可空（未设置走客户端回落）。
+    val nickname: String? = null,
+    val signature: String? = null,
+    val birthday: String? = null,
+    val avatarUrl: String? = null,
+    val showcaseBadges: String? = null
 )
 
 class UserService(
@@ -241,8 +247,45 @@ class UserService(
         aiDisabled = this[UsersTable.aiDisabled],
         dailyReportEnabled = this[UsersTable.dailyReportEnabled],
         dailyReportHour = this[UsersTable.dailyReportHour],
-        dailyReportMinute = this[UsersTable.dailyReportMinute]
+        dailyReportMinute = this[UsersTable.dailyReportMinute],
+        nickname = this[UsersTable.nickname],
+        signature = this[UsersTable.signature],
+        birthday = this[UsersTable.birthday],
+        avatarUrl = this[UsersTable.avatarUrl],
+        showcaseBadges = this[UsersTable.showcaseBadges]
     )
+
+    /**
+     * 整体替换文字资料（PUT /api/auth/profile 的落库实现）。
+     * 语义是「整体替换」：每个字段传什么存什么（null 即清除），头像走独立上传接口不在此改。
+     * 展示徽章调用方需先校验数量 ≤ 3、key 合法（路由层负责），这里只透传。
+     */
+    fun updateProfile(
+        userId: Long,
+        nickname: String?,
+        signature: String?,
+        birthday: String?,
+        showcaseBadges: String?
+    ): UserInfo? {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.nickname] = nickname?.trim()?.takeIf { v -> v.isNotEmpty() }
+                it[UsersTable.signature] = signature?.trim()?.takeIf { v -> v.isNotEmpty() }
+                it[UsersTable.birthday] = birthday?.trim()?.takeIf { v -> v.isNotEmpty() }
+                it[UsersTable.showcaseBadges] = showcaseBadges?.trim()?.takeIf { v -> v.isNotEmpty() }
+            }
+        }
+        return findById(userId)
+    }
+
+    /** 头像上传成功后回写相对 URL；传 null 表示清除头像（上传接口目前只写非空路径）。 */
+    fun updateAvatarUrl(userId: Long, avatarUrl: String?) {
+        transaction {
+            UsersTable.update({ UsersTable.id eq userId }) {
+                it[UsersTable.avatarUrl] = avatarUrl
+            }
+        }
+    }
 
     fun bindByQqOpenid(userId: Long, openid: String): Boolean {
         return transaction {

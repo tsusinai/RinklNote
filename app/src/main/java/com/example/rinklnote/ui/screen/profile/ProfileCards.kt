@@ -13,19 +13,17 @@ import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.SettingsRow
-import com.example.rinklnote.ui.viewmodel.AuthState
-import com.example.rinklnote.ui.viewmodel.BotChannel
 
 /**
- * 「我的」页的五张设置分组卡。
+ * «我的»页的四张设置分组卡。
  *
  * 2026-09-11 重构：从 ProfileScreen.kt 拆出，页面主体只负责「收集状态 + 组装 + 分发弹窗」。
  * 每张卡都是纯展示组件——状态与回调全部由 ProfileScreen 传入，内部不含业务逻辑。
  * 卡片外壳统一走 [SettingsGroupCard]，行统一走 [SettingsRow]（行高 48dp）。
  *
- * 2026-09-15 分组细化（卡片在页面的先后顺序由 ProfileScreen 的 LazyColumn 决定）：
- * 数据与同步 → 通知 → 个性化（自「账户与安全」拆出）→ 账户与安全 → 通用；
- * 卡内行序同样按使用频率从高到低排列。
+ * 2026-09-17 再收敛：原「账户与安全」卡（AI 开关 / AI 接口 / 修改密码 / 三通道绑定）整体迁入
+ * 「个人资料」页（personal-profile 路由）；原「个性化」卡里的头像 / 昵称行也迁入资料页，
+ * 本卡只留外观与显示偏好。分组现为：数据与同步 → 通知 → 个性化 → 通用。
  */
 
 /** «数据与同步» 组：自动同步开关 + 立即同步行（附「上次同步」小字）+ 同步结果。 */
@@ -95,32 +93,23 @@ internal fun DailyReportCard(
 }
 
 /**
- * «个性化» 组：主题外观（主题模式 / 自定义主题 / 背景图）+ 个人形象（头像 / 昵称）+
+ * «个性化» 组（2026-09-17 收敛）：主题外观（主题模式 / 自定义主题 / 背景图）+
  * 卡片白色蒙版开关（开启后卡片玻璃层垫白色蒙版，增强照片背景下的可读性）。
- *
- * 2026-09-15 自「账户与安全」拆出——原组混装外观个性化与账号安全两类行，
- * 按使用逻辑分组后各自独立成卡。
+ * 个人形象（头像 / 昵称）已迁入「个人资料」页，此处不再重复。
  *
  * @param backgroundUri 同时也是「当前已设置的自选背景」——决定是否显示「移除背景」行；
  *   全 App 只有这一个背景来源（nav 层与 SettingsManager 同源），因此不再单列第二个参数。
- * @param avatarUri 当前自定义头像（DataStore 持久化）；非空时追加「恢复默认头像」行。
- * @param nickname 当前自定义昵称；显示在「昵称」行右侧值，未设置为「未设置」。
  * @param cardOverlay 卡片白色蒙版开关状态（默认关闭）。
  */
 @Composable
 internal fun PersonalizationCard(
     themeMode: ThemeMode,
     backgroundUri: String?,
-    avatarUri: String?,
-    nickname: String?,
     cardOverlay: Boolean,
     onThemeClick: () -> Unit,
     onCustomThemeClick: () -> Unit,
     onBackgroundClick: () -> Unit,
     onRemoveBackground: () -> Unit,
-    onAvatarClick: () -> Unit,
-    onRemoveAvatar: () -> Unit,
-    onNicknameClick: () -> Unit,
     onCardOverlayChange: (Boolean) -> Unit
 ) {
     SettingsGroupCard(title = "个性化") {
@@ -155,31 +144,6 @@ internal fun PersonalizationCard(
                 onClick = onRemoveBackground
             )
         }
-        // —— 个人形象 ——
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_image,
-            label = "头像",
-            value = "自定义",
-            onClick = onAvatarClick
-        )
-        if (avatarUri != null) {
-            RinklDivider()
-            SettingsRow(
-                icon = R.drawable.ic_image,
-                iconTint = MaterialTheme.colorScheme.error,
-                label = "恢复默认头像",
-                labelColor = MaterialTheme.colorScheme.error,
-                onClick = onRemoveAvatar
-            )
-        }
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_register,
-            label = "昵称",
-            value = nickname?.takeIf { it.isNotBlank() } ?: "未设置",
-            onClick = onNicknameClick
-        )
         // —— 可读性 ——
         RinklDivider()
         SettingsRow(
@@ -193,69 +157,6 @@ internal fun PersonalizationCard(
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 12.dp)
-        )
-    }
-}
-
-/**
- * «账户与安全» 组：AI 推送开关在前，接口配置、密码与机器人绑定类低频安全操作垫后。
- *
- * 2026-09-15 拆分：主题 / 自定义主题 / 背景图等个性化行迁入 [PersonalizationCard]，
- * 本卡只保留账号与安全语义的行。
- *
- * Phase D 三通道收敛：旧「绑定/解绑QQ号」（输 QQ 号）入口移除，改为 QQ / 飞书 / 企业微信
- * 三行通道状态——已绑定行点击走解绑确认，未绑定行点击进「机器人绑定」页输码绑定。
- */
-@Composable
-internal fun AccountCard(
-    state: AuthState,
-    onPasswordClick: () -> Unit,
-    onBindBotClick: () -> Unit,
-    onUnbindBot: (BotChannel) -> Unit,
-    onQqBotGuideClick: () -> Unit,
-    onSetAiDisabled: (Boolean) -> Unit,
-    onAiTokenClick: () -> Unit
-) {
-    SettingsGroupCard(title = "账户与安全") {
-        SettingsRow(
-            icon = R.drawable.ic_ai,
-            label = "AI 主动推送",
-            trailing = {
-                Switch(checked = !state.aiDisabled, onCheckedChange = { onSetAiDisabled(!it) })
-            }
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_ai,
-            label = "AI 助手接口",
-            onClick = onAiTokenClick
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_lock,
-            label = "修改密码",
-            onClick = onPasswordClick
-        )
-        // 三通道机器人绑定状态：值列展示「已绑定（尾号后 6 位）/ 未绑定」
-        BotChannel.entries.forEach { channel ->
-            RinklDivider()
-            val binding = state.bindingOf(channel)
-            SettingsRow(
-                icon = R.drawable.ic_link,
-                label = "${channel.label}机器人",
-                value = if (binding.bound) {
-                    if (binding.maskedId.isNotBlank()) "已绑定 …${binding.maskedId}" else "已绑定"
-                } else {
-                    "未绑定"
-                },
-                onClick = { if (binding.bound) onUnbindBot(channel) else onBindBotClick() }
-            )
-        }
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_link,
-            label = "QQ 机器人绑定引导",
-            onClick = onQqBotGuideClick
         )
     }
 }

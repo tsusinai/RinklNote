@@ -2,10 +2,10 @@ package com.example.rinklnote.ui.screen.challenge
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.toArgb
-import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChallengeStatus
 import com.example.rinklnote.data.db.entity.ChallengeType
 import com.example.rinklnote.domain.DayKind
+import com.example.rinklnote.ui.component.achievementBadgeName
 import com.example.rinklnote.ui.screen.profile.UnlockableThemePresets
 import com.example.rinklnote.util.Money
 
@@ -315,7 +315,7 @@ internal fun deriveAchievementBadges(state: ChallengeState): List<AchievementBad
     state.achievements.map { badge ->
         AchievementBadgeState(
             id = badge.id,
-            name = achievementName(badge.id),
+            name = achievementBadgeName(badge.id),
             condition = achievementCondition(badge.id),
             unlocked = badge.unlocked,
             progressCurrent = badge.progressCurrent,
@@ -374,47 +374,9 @@ private fun androidx.compose.ui.graphics.Color.toRgbHex(): String =
 // ---------------------------------------------------------------------------
 
 /**
- * 徽章图标资源映射（与 `resource/challenge/badge-*.svg` 逐字对应，id 连字符 → 下划线）。
- * 兜底图标防止遗漏 id 时崩溃。
+ * 徽章图标 / 中文名映射统一在 `ui/component/AchievementBadgeUi.kt`
+ * （2026-09-17 合并冲突去重：与「我的」徽章展示管理共用同一份，勿在本文件再写 when）。
  */
-internal fun badgeRes(id: String): Int = when (id) {
-    "record-first" -> R.drawable.badge_record_first
-    "record-7" -> R.drawable.badge_record_7
-    "record-30" -> R.drawable.badge_record_30
-    "record-100" -> R.drawable.badge_record_100
-    "record-365" -> R.drawable.badge_record_365
-    "nospend-month-3" -> R.drawable.badge_nospend_month_3
-    "nospend-month-8" -> R.drawable.badge_nospend_month_8
-    "nospend-month-15" -> R.drawable.badge_nospend_month_15
-    "nospend-total-30" -> R.drawable.badge_nospend_total_30
-    "nospend-total-100" -> R.drawable.badge_nospend_total_100
-    "budget-first" -> R.drawable.badge_budget_first
-    "budget-month" -> R.drawable.badge_budget_month
-    "budget-3months" -> R.drawable.badge_budget_3months
-    "challenge-3" -> R.drawable.badge_challenge_3
-    "challenge-10" -> R.drawable.badge_challenge_10
-    else -> R.drawable.ic_launcher_foreground
-}
-
-/** 成就中文名（展示顺序跟随引擎返回顺序）。 */
-internal fun achievementName(id: String): String = when (id) {
-    "record-first" -> "首笔账单"
-    "record-7" -> "记账 7 天"
-    "record-30" -> "记账 30 天"
-    "record-100" -> "记账 100 天"
-    "record-365" -> "记账 365 天"
-    "nospend-month-3" -> "月无消费 3 天"
-    "nospend-month-8" -> "月无消费 8 天"
-    "nospend-month-15" -> "月无消费 15 天"
-    "nospend-total-30" -> "无消费 30 天"
-    "nospend-total-100" -> "无消费 100 天"
-    "budget-first" -> "首设预算"
-    "budget-month" -> "月度不超支"
-    "budget-3months" -> "三月不超支"
-    "challenge-3" -> "完成 3 挑战"
-    "challenge-10" -> "完成 10 挑战"
-    else -> id
-}
 
 /** 成就达成条件（徽章详情弹层展示；口径与 Achievements.kt 引擎注释一致）。 */
 internal fun achievementCondition(id: String): String = when (id) {

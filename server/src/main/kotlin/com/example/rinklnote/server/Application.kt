@@ -5,6 +5,7 @@ import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.AdminService
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
+import com.example.rinklnote.server.services.AvatarStorage
 import com.example.rinklnote.server.services.BotCommands
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
@@ -34,8 +35,10 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.callloging.*
+import io.ktor.server.http.content.staticFiles
 import io.ktor.server.routing.*
 import kotlinx.coroutines.cancel
+import java.io.File
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
@@ -70,6 +73,10 @@ fun Application.module() {
     val billService = BillService()
     val budgetService = BudgetService()
     val challengeService = ChallengeService()
+    // 头像文件存储：uploads/avatars/{userId}.jpg（相对工作目录），测试可注入目录。
+    val avatarStorage = AvatarStorage()
+    // 预热头像目录：staticFiles 注册的目录不要求存在，但首次上传/访问前先建好更稳。
+    avatarStorage.ensureDirs()
 
     val deepseekApiKey = System.getenv("DEEPSEEK_API_KEY")
         ?: environment.config.propertyOrNull("deepseek.apiKey")?.getString()
@@ -282,7 +289,9 @@ fun Application.module() {
     }
 
     routing {
-        authRoutes(userService, qqBotService)
+        // 头像等静态资源：/uploads/* 对外只读（无需 JWT；文件名不含用户可控输入，越权面可控）。
+        staticFiles("/uploads", File("uploads"))
+        authRoutes(userService, qqBotService, avatarStorage)
         billRoutes(billService, nluService)
         accountRoutes(billService)
         transcribeRoutes(asrService)

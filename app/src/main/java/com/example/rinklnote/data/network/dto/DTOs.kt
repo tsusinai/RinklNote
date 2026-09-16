@@ -44,7 +44,36 @@ data class MeResponse(
     val aiDisabled: Boolean = false,
     val dailyReportEnabled: Boolean = false,
     val dailyReportHour: Int = 9,
-    val dailyReportMinute: Int = 0
+    val dailyReportMinute: Int = 0,
+    // ── 个人资料（2026-09-17）──
+    // 新增可空字段默认 null：旧服务端不下发这些键时解析仍成立（ignoreUnknownKeys + 默认值）。
+    // showcaseBadges 以服务端存储原样下发（逗号分隔徽章 key），展示端与成就解锁态取交集。
+    val nickname: String? = null,
+    val signature: String? = null,
+    val birthday: String? = null,
+    // 头像相对 URL（如 "uploads/avatars/3.jpg?v=123"）；拼 RetrofitClient.BASE_URL 即完整地址。
+    val avatarUrl: String? = null,
+    val showcaseBadges: String? = null
+)
+
+/**
+ * PUT /api/auth/profile 请求体：文字资料**整体替换**（null = 清除该字段）。
+ * 头像不走该接口，走 POST /api/auth/avatar multipart 上传。
+ */
+@Serializable
+data class ProfileUpdateRequest(
+    val nickname: String? = null,
+    val signature: String? = null,
+    val birthday: String? = null,
+    // 展示徽章 key 列表（上限 3）；空列表 = 清空展示。
+    val showcaseBadges: List<String> = emptyList()
+)
+
+/** POST /api/auth/avatar 响应：回传最新头像相对 URL（含 ?v= 版本参数）。 */
+@Serializable
+data class AvatarUploadResponse(
+    val avatarUrl: String? = null,
+    val message: String? = null
 )
 
 /** 日报推送设置（QQ 端），对应 /api/auth/daily-report-setting。 */

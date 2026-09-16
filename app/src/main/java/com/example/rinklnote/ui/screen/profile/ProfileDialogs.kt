@@ -40,14 +40,12 @@ import com.example.rinklnote.ui.viewmodel.BotChannel
  * 2026-09-11 重构：此前是 7 个互不相干的 `var showXxx by remember { mutableStateOf(false) }`
  * 加 7 个并列的 `if (showXxx) { ... }`，且「未同步条数」另用一个 `unsyncedCount` 变量跟着走。
  * 现在收敛成一个状态 + 一个 `when` 分发点，新增弹窗只需加一个分支（编译器会提醒穷尽性）。
+ *
+ * 2026-09-17：修改密码 / 解绑通道 / AI Token 三类弹窗随账号事务迁入「个人资料」页
+ * （PersonalProfileDialog），本状态机不再承载；PasswordDialog / UnbindBotDialog /
+ * AiTokenDialog 三个弹窗组件仍留在本文件供资料页复用（同包 internal）。
  */
 sealed interface ProfileDialog {
-    /** 修改密码 */
-    data object Password : ProfileDialog
-
-    /** 解绑机器人通道二次确认（QQ / 飞书 / 企业微信，按通道分发事件） */
-    data class UnbindBot(val channel: BotChannel) : ProfileDialog
-
     /** 主题模式选择（跟随系统 / 浅色 / 深色） */
     data object Theme : ProfileDialog
 
@@ -56,9 +54,6 @@ sealed interface ProfileDialog {
 
     /** 日报通知时间选择 */
     data object TimePicker : ProfileDialog
-
-    /** AI 助手接口 Token 管理（实现在 [AiTokenDialog]） */
-    data object AiToken : ProfileDialog
 
     /** 登出时仍有未同步数据；`count` 为未同步条数，收进状态避免额外变量 */
     data class Unsynced(val count: Int) : ProfileDialog

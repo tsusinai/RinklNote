@@ -47,6 +47,15 @@ interface ApiService {
     @GET("api/auth/me")
     suspend fun getMe(): MeResponse
 
+    // 个人资料（2026-09-17）：文字资料整体替换（昵称/签名/生日/展示徽章），回传最新 MeResponse。
+    @PUT("api/auth/profile")
+    suspend fun updateProfile(@Body request: ProfileUpdateRequest): MeResponse
+
+    // 头像上传：multipart 单文件（字段名 file），仅 JPEG/PNG/WebP、≤2MB。
+    @Multipart
+    @POST("api/auth/avatar")
+    suspend fun uploadAvatar(@Part file: MultipartBody.Part): AvatarUploadResponse
+
     @POST("api/auth/password")
     suspend fun changePassword(@Body request: ChangePasswordRequest): MessageResponse
 
