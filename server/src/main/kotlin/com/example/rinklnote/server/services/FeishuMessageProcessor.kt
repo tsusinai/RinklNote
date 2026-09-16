@@ -55,9 +55,10 @@ object FeishuMessageProcessor {
             val chatType = message["chat_type"]?.jsonPrimitive?.contentOrNull ?: "p2p"
             val messageType = message["message_type"]?.jsonPrimitive?.contentOrNull
 
-            // 去重：message_id 全局唯一（天然去重键）。复用 QQ 的 webhook_events + SHA-256 判重
-            // （QQMessageProcessor.isFirstEvent），同一张去重台账服务所有通道。
-            if (!isFirstEvent("$messageId")) {
+            // 去重：message_id 全局唯一（天然去重键），但补 "feishu_" 前缀再哈希（安全评审修复）——
+            // 去重台账 webhook_events 是全通道共用的，不同平台的裸 id 理论上可能撞串（且哈希前
+            // 无法区分来源），加前缀保证各通道键空间隔离。复用 QQ 的 isFirstEvent。
+            if (!isFirstEvent("feishu_$messageId")) {
                 logger.info("飞书重复事件忽略：$messageId")
                 return
             }

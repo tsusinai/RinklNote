@@ -173,6 +173,16 @@ class UserService(
         }.map { it.toUserInfo() }
     }
 
+    /**
+     * 全库已绑定企微（wecomUserid 非空）的用户数。
+     * 企微主动推送是「群 webhook 维度」（消息发到配置 webhook 的群会话，不按人单聊），
+     * 多用户绑企微时私有日报会进同一个群 —— PushScheduler 用此计数判定企微通道是否可用
+     * （仅全库唯一企微绑定用户时允许，安全评审修复）。
+     */
+    fun countWecomBoundUsers(): Int = transaction {
+        UsersTable.selectAll().where { UsersTable.wecomUserid.isNotNull() }.count().toInt()
+    }
+
     private fun findByChannelColumn(column: Column<String?>, value: String): UserInfo? = transaction {
         UsersTable.selectAll().where { column eq value }.singleOrNull()?.toUserInfo()
     }

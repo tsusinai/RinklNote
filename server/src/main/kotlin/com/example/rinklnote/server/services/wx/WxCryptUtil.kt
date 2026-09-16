@@ -42,14 +42,21 @@ object WxCryptUtil {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    /** 验签比对（大小写不敏感）。 */
+    /** 验签比对（大小写不敏感；恒时比较防时序侧信道，安全评审修复）。 */
     fun verifySignature(
         signature: String,
         token: String,
         timestamp: String,
         nonce: String,
         encryptMsg: String
-    ): Boolean = signature.equals(signature(token, timestamp, nonce, encryptMsg), ignoreCase = true)
+    ): Boolean {
+        val expected = signature(token, timestamp, nonce, encryptMsg)
+        // MessageDigest.isEqual 恒时比较（照 QQWebhookRoutes 写法）；两侧先统一小写保持既有语义
+        return MessageDigest.isEqual(
+            expected.lowercase().toByteArray(Charsets.UTF_8),
+            signature.lowercase().toByteArray(Charsets.UTF_8)
+        )
+    }
 
     /**
      * 公众号明文模式验签（C-W2 订阅号用）：`signature = SHA1(字典序排序(token, timestamp, nonce) 拼接)`。

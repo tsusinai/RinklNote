@@ -207,6 +207,9 @@ class WecomBotService(
 
     // ── 绑定码（照 FeishuBotService 同构）──
 
+    /** 绑定码日志掩码：只露前 3 位（如 123***），完整码不落日志（安全评审修复）。 */
+    private fun maskCode(code: String) = "${code.take(3)}***"
+
     /** 生成 6 位绑定码（5 分钟过期），映射到发送者的企业内 userid。 */
     fun createBindCode(userid: String): String {
         val now = nowSeconds()
@@ -214,7 +217,7 @@ class WecomBotService(
         bindCodes.entries.removeIf { it.value.expiresAt < now }
         val code = "%06d".format(random.nextInt(1_000_000))
         bindCodes[code] = BindEntry(userid, now + BIND_CODE_TTL_SECONDS)
-        logger.info("已生成企微绑定码 $code（userid=...${userid.takeLast(6)}，5 分钟内有效）")
+        logger.info("已生成企微绑定码 ${maskCode(code)}（userid=...${userid.takeLast(6)}，5 分钟内有效）")
         return code
     }
 
@@ -222,10 +225,10 @@ class WecomBotService(
     fun consumeBindCode(code: String): String? {
         val entry = bindCodes.remove(code) ?: return null
         if (nowSeconds() > entry.expiresAt) {
-            logger.info("企微绑定码 $code 已过期")
+            logger.info("企微绑定码 ${maskCode(code)} 已过期")
             return null
         }
-        logger.info("企微绑定码 $code 已消费（userid=...${entry.userid.takeLast(6)}）")
+        logger.info("企微绑定码 ${maskCode(code)} 已消费（userid=...${entry.userid.takeLast(6)}）")
         return entry.userid
     }
 

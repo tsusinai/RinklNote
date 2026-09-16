@@ -23,6 +23,9 @@ import java.security.MessageDigest
 object QQMessageProcessor {
     private val logger = LoggerFactory.getLogger("QQMessageProcessor")
 
+    /** 去重台账保留窗口：3 天（毫秒）。清理只删比它更老的行，与新事件的写入时刻无关。 */
+    private const val PRUNE_WINDOW_MS = 259_200_000L
+
     // 指令正则统一收口到 BotCommands（多通道共享，B1 通道底座）；
     // 以下 internal 别名保持既有引用点（含 QQMessageProcessorTest 回归测试）不变。
     private val LOGIN_CODE get() = BotCommands.LOGIN_CODE
@@ -182,7 +185,10 @@ object QQMessageProcessor {
             if (inserted) {
                 // Opportunistic prune (keep 3 days). Raw SQL avoids pulling the
                 // ISqlExpressionBuilder operator into scope for this lambda.
-                exec("DELETE FROM webhook_events WHERE processed_at < $now")
+                // 安全评审修复：cutoff 必须是 now - 3 天，不能是 now 本身 ——
+                // 旧写法 `processed_at < now` 会把此前所有去重行当场删光，平台 5s 重试直接穿透去重。
+                val cutoff = now - PRUNE_WINDOW_MS
+                exec("DELETE FROM webhook_events WHERE processed_at < $cutoff")
             }
             inserted
         }

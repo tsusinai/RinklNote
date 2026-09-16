@@ -197,9 +197,10 @@ class PushSchedulerTest {
 
     @Test
     fun `push channel priority is feishu over wecom over qq`() {
-        // 同时绑定三通道 → 只落飞书（优先级最高）
+        // 同时绑定飞书+企微 → 只落飞书（优先级最高，企微受限与否不影响）
         insertUser(1, "openid-1", dailyReportEnabled = true, feishuOpenId = "ou-feishu", wecomUserid = "wecom-1")
-        // 只绑企微+QQ → 落企微
+        // 只绑企微+QQ → 全库已有 2 个企微绑定用户，企微通道受限（群 webhook 维度会跨用户泄露），
+        // 跳过落下一优先级 QQ（安全评审修复后的新语义；旧实现此处会落企微）
         insertUser(2, "openid-2", dailyReportEnabled = true, wecomUserid = "wecom-2")
         val pushed = mutableListOf<Pair<String, String>>()
         val sched = PushScheduler(
@@ -215,7 +216,48 @@ class PushSchedulerTest {
         runBlocking { sched.tick() }
         assertEquals(2, pushed.size)
         assertEquals(BotCommands.SOURCE_FEISHU to "ou-feishu", pushed[0])
-        assertEquals(BotCommands.SOURCE_WECOM to "wecom-2", pushed[1])
+        assertEquals("双企微绑定时企微受限，应落 QQ", BotCommands.SOURCE_QQ to "openid-2", pushed[1])
+    }
+
+    @Test
+    fun `sole wecom-bound user still pushes over wecom channel`() {
+        // 全库唯一企微绑定用户：企微通道可用（安全评审修复保留的合法场景）
+        insertUser(1, openid = null, dailyReportEnabled = true, wecomUserid = "wecom-solo")
+        val pushed = mutableListOf<Pair<String, String>>()
+        val sched = PushScheduler(
+            userService,
+            send = { channel, targetId, _, _ -> pushed.add(channel to targetId); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals(1, pushed.size)
+        assertEquals(BotCommands.SOURCE_WECOM to "wecom-solo", pushed[0])
+    }
+
+    @Test
+    fun `双用户绑企微且无其他通道时整体跳过推送`() {
+        // 两个用户都只绑企微：企微推送是群 webhook 维度，私有日报发同一群会跨用户泄露 ——
+        // 企微通道对两者都禁用，又没有 QQ 可落，整体跳过（宁可不推也不泄露，安全评审修复）
+        insertUser(1, openid = null, dailyReportEnabled = true, wecomUserid = "wecom-a")
+        insertUser(2, openid = null, dailyReportEnabled = true, wecomUserid = "wecom-b")
+        val pushed = mutableListOf<Pair<String, String>>()
+        val sched = PushScheduler(
+            userService,
+            send = { channel, targetId, _, _ -> pushed.add(channel to targetId); true },
+            monthlyProvider = { _, _ -> null },
+            anomalyProvider = { _ -> null },
+            habitProvider = { _ -> null },
+            clock = { LocalDateTime.of(2026, 8, 15, 10, 0) },
+            dailyReportProvider = { _ -> "✅ 今日账单总结" },
+            intervalMs = 30_000, log = log
+        )
+        runBlocking { sched.tick() }
+        assertEquals("双企微绑定时不得经企微推送任何人", 0, pushed.size)
     }
 
     @Test

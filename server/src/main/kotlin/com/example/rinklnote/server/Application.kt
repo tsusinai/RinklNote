@@ -143,7 +143,7 @@ fun Application.module() {
     val wecomBotService = WecomBotService()
     wecomBotService.loadFromDb()
     if (wecomBotService.isConfigured()) {
-        log.info("企微 Bot 已加载配置（Token: ${wecomBotService.getToken()?.take(4)}...）")
+        log.info("企微 Bot 已加载配置（Token: ${wecomBotService.getToken()?.take(2)}**）") // 掩码：只露前 2 位（安全评审修复）
     } else {
         log.info("企微 Bot 未配置 —— 可在 Web 设置页维护")
     }
@@ -178,6 +178,8 @@ fun Application.module() {
         // **群 / 群机器人维度**（消息发到配置该 webhook 的群会话），不是按用户单聊——按人单聊主动
         // 触达需要企业微信「应用消息」接口 message/send（corpid + 应用 secret 换 access_token），
         // 本期不做（调研文档 3.4/3.6）。因此企微绑定用户的推送统一落到群机器人会话。
+        // ⚠️ 安全评审修复：正因群维度会跨用户，调度器（PushScheduler）仅在全库企微绑定用户数 == 1
+        // 时才选中 WECOM 通道，多用户绑定时会跳过企微落 QQ —— 此处的 pushText 只承接调度器放行的场景。
         // MP 分支（订阅号）：无任何主动推送能力（客服/模板/订阅通知均需认证服务号，调研文档 4.5），
         // 唯一出口是回调里的 5s 被动回复（MpWebhookRoutes）。调度器也不会选到该通道
         // （findAllPushUsers 只看飞书/企微/QQ，B1 已保证），此分支不可达，no-op 兜底返回 false。

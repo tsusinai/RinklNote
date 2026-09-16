@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
+import java.security.MessageDigest
 
 /**
  * 飞书事件订阅 webhook（B2）：`POST /api/feishu/bot/webhook`。
@@ -29,8 +30,12 @@ import org.slf4j.LoggerFactory
  *  3. `type=url_verification`：回显 challenge（配置 Encrypt Key 后响应体也须按同套加密返回）；
  *  4. 普通事件：立即 200，消息体丢进协程异步处理（去重在 FeishuMessageProcessor 内做）。
  *
- * Verification Token 属旧版轻校验：未配 Encrypt Key 时对明文载荷做软校验（有 token 字段且不匹配才拒），
- * 配了 Encrypt Key 时以验签为准、跳过 token 校验。
+ * Verification Token 强校验（安全评审修复）：未配 Encrypt Key 时请求**必须**携带与服务端一致的
+ * verification_token —— 完全不带同样 403（旧实现「不带即放行」可被伪造 im.message.receive_v1
+ * 任意 open_id 自动开户/注账）；Encrypt Key 与 verification_token 都未配时 webhook 直接拒绝服务
+ * （503 全中文错误）；配了 Encrypt Key 时以验签为准、跳过 token 校验。
+ *
+ * 校验决策抽成纯函数 [checkVerificationToken] 便于单测（测试无 Ktor test host 依赖）。
  */
 fun Route.feishuBotWebhookRoutes(
     feishuBotService: FeishuBotService,
@@ -64,7 +69,13 @@ fun Route.feishuBotWebhookRoutes(
                         )
                     }
                     val expected = FeishuCrypto.signature(ts, nonce, encryptKey, rawBody)
-                    if (!expected.equals(sig, ignoreCase = true)) {
+                    // 恒时比较（安全评审修复，照 QQWebhookRoutes 的 MessageDigest.isEqual 写法），
+                    // 防时序侧信道逐字节猜测签名；两侧先统一小写保持既有的大小写不敏感语义
+                    if (!MessageDigest.isEqual(
+                            expected.lowercase().toByteArray(Charsets.UTF_8),
+                            sig.lowercase().toByteArray(Charsets.UTF_8)
+                        )
+                    ) {
                         logger.warn("飞书 webhook 验签失败")
                         return@post call.respondText(
                             """{"message":"invalid signature"}""",
@@ -101,18 +112,14 @@ fun Route.feishuBotWebhookRoutes(
 
                 val payload = Json.parseToJsonElement(payloadText).jsonObject
 
-                // Verification Token 软校验：未配 Encrypt Key 时才做（配了以验签为准）
-                if (encryptKey.isNullOrBlank() && !verificationToken.isNullOrBlank()) {
-                    // url_verification 的 token 在顶层；v2 事件的 token 在 header.token
-                    val given = payload["token"]?.jsonPrimitive?.contentOrNull
-                        ?: payload["header"]?.jsonObject?.get("token")?.jsonPrimitive?.contentOrNull
-                    if (given != null && given != verificationToken) {
-                        logger.warn("飞书 webhook Verification Token 不匹配")
-                        return@post call.respondText(
-                            """{"message":"invalid verification token"}""",
-                            ContentType.Application.Json, HttpStatusCode.Forbidden
-                        )
-                    }
+                // Verification Token 强校验（安全评审修复，决策逻辑见 [checkVerificationToken]）：
+                // 未配 Encrypt Key 时请求必须带一致 token（缺失同样 403）；双未配直接拒绝服务。
+                checkVerificationToken(encryptKey, verificationToken, payload)?.let { (status, message) ->
+                    logger.warn("飞书 webhook 拒绝：$message")
+                    return@post call.respondText(
+                        """{"message":"$message"}""",
+                        ContentType.Application.Json, status
+                    )
                 }
 
                 // 3) URL 验证：回显 challenge。配 Encrypt Key 时响应体也按官方要求加密返回
@@ -129,7 +136,8 @@ fun Route.feishuBotWebhookRoutes(
                     } else {
                         challengeJson
                     }
-                    logger.info("飞书 URL 验证：challenge=$challenge")
+                    // challenge 只截前 16 字符进日志（安全评审修复：完整值虽为一次性回显串，仍避免全量落日志）
+                    logger.info("飞书 URL 验证：challenge=${challenge.take(16)}")
                     return@post call.respondText(responseBody, ContentType.Application.Json)
                 }
 
@@ -163,5 +171,34 @@ fun Route.feishuBotWebhookRoutes(
                 } catch (_: Exception) { }
             }
         }
+    }
+}
+
+/**
+ * 飞书 webhook 的 Verification Token 校验决策（纯函数，安全评审修复，便于单测）。
+ *
+ *  - 配了 Encrypt Key：路由已先行验签（X-Lark-Signature），以验签为准 → 放行；
+ *  - Encrypt Key 与 verification_token 都未配：bot 无法验证任何请求来源 → 拒绝服务
+ *    （503，全中文错误，引导先完成安全配置）；
+ *  - 仅配 verification_token：请求必须携带 token（url_verification 在顶层、v2 事件在
+ *    header.token）且与配置一致 —— 缺失与不一致一律 403（旧实现「不带即放行」是可被
+ *    伪造 im.message.receive_v1 任意开户/注账的绕过口）。
+ *
+ * 返回 null 表示放行，否则 (HTTP 状态码, 错误 JSON 的 message 字段值)。
+ */
+internal fun checkVerificationToken(
+    encryptKey: String?,
+    verificationToken: String?,
+    payload: JsonObject
+): Pair<HttpStatusCode, String>? = when {
+    !encryptKey.isNullOrBlank() -> null
+    verificationToken.isNullOrBlank() ->
+        HttpStatusCode.ServiceUnavailable to "机器人未完成安全配置：请先在 Web 设置页配置 Encrypt Key 或 Verification Token"
+    else -> {
+        // url_verification 的 token 在顶层；v2 事件的 token 在 header.token
+        val given = payload["token"]?.jsonPrimitive?.contentOrNull
+            ?: payload["header"]?.jsonObject?.get("token")?.jsonPrimitive?.contentOrNull
+        if (given != null && given == verificationToken) null
+        else HttpStatusCode.Forbidden to "invalid verification token"
     }
 }

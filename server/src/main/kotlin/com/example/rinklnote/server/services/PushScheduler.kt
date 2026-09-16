@@ -26,7 +26,8 @@ import java.util.UUID
  *  - DAILY_REPORT：用户开启 daily_report_enabled 且 ≥ 其设定时刻，当天未推（day_key="yyyy-MM-dd"）
  *
  * 目标通道按 飞书 > 企业微信 > QQ 取第一个已绑定通道（一个用户一次推送只落一个通道）；
- * 订阅号只收不推，不参与。user+type+day 单次推送语义不变。
+ * 企微受限：仅全库企微绑定用户数 == 1 时可用（webhook 推送是群维度，多绑定会跨用户泄露），
+ * 否则跳过落下一优先级。订阅号只收不推，不参与。user+type+day 单次推送语义不变。
  *
  * ai_disabled=true 的用户所有主动推送跳过（Q10=A：主动问账/AI 页注入仍走 LLM）。
  *
@@ -72,13 +73,18 @@ class PushScheduler(
         val isLastDayOfMonth = today.dayOfMonth == today.lengthOfMonth()
         val hour = now.hour
 
+        // 全库企微绑定数每个 tick 查一次（不进用户循环）：企微通道可用性的判定依据，见下方注释
+        val wecomBoundCount = userService.countWecomBoundUsers()
         for (u in userService.findAllPushUsers()) {
             if (u.aiDisabled) continue        // Q10=A：关所有主动推送（问账不受影响）
-            // 目标通道按 飞书 > 企业微信 > QQ 取第一个已绑定（一用户一次推送只落一个通道；
+            // 目标通道按 飞书 > 企业微信(受限) > QQ 取第一个可用通道（一用户一次推送只落一个通道；
             // 订阅号只收不推，findAllPushUsers 已排除）。QQ 单通道用户行为与改造前完全一致。
+            // 企微受限（安全评审修复）：webhook 推送是「群机器人维度」而非按人单聊，多用户绑企微时
+            // 私有日报会发进同一个群造成跨用户泄露 —— 仅当全库企微绑定用户数 == 1（即目标本人是
+            // 唯一绑定者）才允许走企微，否则跳过落下一优先级（飞书 > QQ；QQ 也没绑则整体跳过）。
             val (channel, targetId) = when {
                 u.feishuOpenId != null -> BotCommands.SOURCE_FEISHU to u.feishuOpenId
-                u.wecomUserid != null -> BotCommands.SOURCE_WECOM to u.wecomUserid
+                u.wecomUserid != null && wecomBoundCount == 1 -> BotCommands.SOURCE_WECOM to u.wecomUserid
                 u.qqOpenid != null -> BotCommands.SOURCE_QQ to u.qqOpenid
                 else -> continue
             }
