@@ -11,6 +11,7 @@ import com.example.rinklnote.data.network.dto.BotBindStatusResponse
 import com.example.rinklnote.data.network.dto.ChangePasswordRequest
 import com.example.rinklnote.data.network.dto.DailyReportSettingDto
 import com.example.rinklnote.data.network.dto.LoginRequest
+import com.example.rinklnote.domain.parseShowcaseBadges
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +45,14 @@ data class AuthState(
     val botBound: Boolean = false,
     /** 三通道绑定状态（/api/{channel}-bot/bind-status），key 缺省视为未绑定。 */
     val bindings: Map<BotChannel, BotBinding> = emptyMap(),
+    // ── 个人资料（2026-09-17）：/api/auth/me 回显，服务端为唯一可信源；旧服务端全为 null ──
+    val nickname: String? = null,
+    val signature: String? = null,
+    val birthday: String? = null,
+    /** 头像相对 URL（拼 RetrofitClient.BASE_URL 加载）；未上传为 null。 */
+    val avatarUrl: String? = null,
+    /** 展示徽章 key 列表（服务端选择 ∩ 实时解锁态后的展示在 UI 层做交集）。 */
+    val showcaseBadges: List<String> = emptyList(),
     val oldPassword: String = "",
     val newPassword: String = "",
     val aiDisabled: Boolean = false,
@@ -235,7 +244,13 @@ class AuthViewModel(
                         createdAt = me.createdAt ?: "",
                         botBound = !me.qqOpenid.isNullOrBlank(),
                         aiDisabled = me.aiDisabled,
-                        isLoggedIn = true
+                        isLoggedIn = true,
+                        // 个人资料回显：服务端为唯一可信源，旧服务端不下发时保持 null/空
+                        nickname = me.nickname,
+                        signature = me.signature,
+                        birthday = me.birthday,
+                        avatarUrl = me.avatarUrl,
+                        showcaseBadges = parseShowcaseBadges(me.showcaseBadges)
                     )
                 }
                 refreshBotBindings()
@@ -243,7 +258,11 @@ class AuthViewModel(
                 // Token invalid/expired → drop back to logged-out state.
                 tokenManager.clearAuth()
                 _state.update {
-                    it.copy(isLoggedIn = false, botBound = false, bindings = emptyMap(), error = null)
+                    it.copy(
+                        isLoggedIn = false, botBound = false, bindings = emptyMap(), error = null,
+                        nickname = null, signature = null, birthday = null, avatarUrl = null,
+                        showcaseBadges = emptyList()
+                    )
                 }
             }
         }

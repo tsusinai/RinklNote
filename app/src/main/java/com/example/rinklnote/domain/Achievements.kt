@@ -110,3 +110,31 @@ fun evaluateAchievements(input: AchievementInput): List<AchievementState> {
         state("challenge-10", challenges, 10L),
     )
 }
+
+/** 「我的」卡片徽章展示上限（与服务端 showcase_badges 写入校验一致）。 */
+const val MAX_SHOWCASE_BADGES = 3
+
+/**
+ * 解析服务端 showcase_badges 逗号分隔串（MeResponse 同形下发）：去空白、去重、封顶 3 枚。
+ * null / 空串 → 空列表；永不抛异常（脏数据按空处理）。
+ */
+fun parseShowcaseBadges(raw: String?): List<String> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return raw.split(',')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .take(MAX_SHOWCASE_BADGES)
+}
+
+/** 徽章列表 → 逗号分隔串（PUT profile 请求体用；调用方已保证 ≤ 3 枚）。 */
+fun joinShowcaseBadges(badges: List<String>): String = badges.joinToString(",")
+
+/** 徽章展示选择：勾选/取消一枚，返回新列表；已达上限再添加时原样返回（UI 层提示）。 */
+fun toggleShowcaseBadge(current: List<String>, badgeId: String): List<String> {
+    return if (badgeId in current) {
+        current - badgeId
+    } else {
+        if (current.size >= MAX_SHOWCASE_BADGES) current else current + badgeId
+    }
+}

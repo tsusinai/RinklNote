@@ -69,6 +69,8 @@ import com.example.rinklnote.domain.DayKind
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.RinklTopBar
+import com.example.rinklnote.ui.component.achievementBadgeName
+import com.example.rinklnote.ui.component.achievementBadgeRes
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.component.rinkShadow
@@ -879,8 +881,8 @@ private fun AchievementCell(badge: AchievementState) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            painter = painterResource(badgeRes(badge.id)),
-            contentDescription = achievementName(badge.id),
+            painter = painterResource(achievementBadgeRes(badge.id)),
+            contentDescription = achievementBadgeName(badge.id),
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .size(48.dp)
@@ -897,7 +899,7 @@ private fun AchievementCell(badge: AchievementState) {
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = achievementName(badge.id),
+            text = achievementBadgeName(badge.id),
             fontSize = 12.sp,
             color = if (badge.unlocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -915,48 +917,8 @@ private fun AchievementCell(badge: AchievementState) {
     }
 }
 
-/**
- * 徽章图标资源映射（与 `resource/challenge/badge-*.svg` 逐字对应，id 连字符 → 下划线）。
- * 资产由 E2 任务转成 `res/drawable/badge_*.xml`；兜底图标防止遗漏 id 时崩溃。
- */
-private fun badgeRes(id: String): Int = when (id) {
-    "record-first" -> R.drawable.badge_record_first
-    "record-7" -> R.drawable.badge_record_7
-    "record-30" -> R.drawable.badge_record_30
-    "record-100" -> R.drawable.badge_record_100
-    "record-365" -> R.drawable.badge_record_365
-    "nospend-month-3" -> R.drawable.badge_nospend_month_3
-    "nospend-month-8" -> R.drawable.badge_nospend_month_8
-    "nospend-month-15" -> R.drawable.badge_nospend_month_15
-    "nospend-total-30" -> R.drawable.badge_nospend_total_30
-    "nospend-total-100" -> R.drawable.badge_nospend_total_100
-    "budget-first" -> R.drawable.badge_budget_first
-    "budget-month" -> R.drawable.badge_budget_month
-    "budget-3months" -> R.drawable.badge_budget_3months
-    "challenge-3" -> R.drawable.badge_challenge_3
-    "challenge-10" -> R.drawable.badge_challenge_10
-    else -> R.drawable.ic_launcher_foreground
-}
+// 徽章图标 / 中文名映射已抽到 ui/component/AchievementBadgeUi.kt（成就墙与「我的」徽章展示管理共用）。
 
-/** 成就中文名（成就墙展示用；顺序跟随引擎返回顺序）。 */
-private fun achievementName(id: String): String = when (id) {
-    "record-first" -> "首笔账单"
-    "record-7" -> "记账 7 天"
-    "record-30" -> "记账 30 天"
-    "record-100" -> "记账 100 天"
-    "record-365" -> "记账 365 天"
-    "nospend-month-3" -> "月无消费 3 天"
-    "nospend-month-8" -> "月无消费 8 天"
-    "nospend-month-15" -> "月无消费 15 天"
-    "nospend-total-30" -> "无消费 30 天"
-    "nospend-total-100" -> "无消费 100 天"
-    "budget-first" -> "首设预算"
-    "budget-month" -> "月度不超支"
-    "budget-3months" -> "三月不超支"
-    "challenge-3" -> "完成 3 挑战"
-    "challenge-10" -> "完成 10 挑战"
-    else -> id
-}
 
 /** 主题解锁行（晨曦/薄荷/琥珀）：锁图标 + 条件文案；解锁高亮。应用动作在自定义主题页（E2 接线）。 */
 @Composable
