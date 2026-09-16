@@ -214,6 +214,47 @@ class BudgetViewModelTest {
         assertEquals(1, result.categoryBudgets.size)
     }
 
+    @Test
+    fun `duplicate category budget rows collapse into one row per category`() {
+        // 回归：同月同分类出现两行预算（不同来源重复写入的数据异常）时，计划页 LazyColumn
+        // 以 categoryId 作 key，重复 key 会直接抛 IllegalArgumentException → 进入计划页即崩溃。
+        // 修复口径与 ChallengeEngine 一致：「同月多行预算（数据异常）按合计计入」。
+        val budgets = listOf(
+            budgetRow(amount = 300.0, categoryId = 1),
+            budgetRow(amount = 200.0, categoryId = 1)
+        )
+        val bills = listOf(bill(1, 20.0, 1, "三餐", "午餐"))
+
+        val result = deriveMonthBudget(budgets, bills, expenseCategories(), subCategories(), monthStart)
+
+        // key 唯一性：每个分类恰好一行
+        val ids = result.categoryBudgets.map { it.categoryId }
+        assertEquals(ids.size, ids.toSet().size)
+        // 金额按合计归并
+        val cat1 = result.categoryBudgets.first { it.categoryId == 1L }
+        assertEquals(50000L, cat1.amountMinor)
+        assertEquals(2000L, cat1.expenseMinor)
+    }
+
+    @Test
+    fun `duplicate sub category budget rows collapse into one row per sub category`() {
+        // 同理：同分类下重复的子分类预算行也要合并，子分类行金额按合计。
+        val budgets = listOf(
+            budgetRow(amount = 300.0, categoryId = 1),
+            budgetRow(amount = 80.0, categoryId = 1, subCategoryId = 11),
+            budgetRow(amount = 20.0, categoryId = 1, subCategoryId = 11)
+        )
+        val bills = listOf(bill(1, 20.0, 1, "三餐", "午餐"))
+
+        val result = deriveMonthBudget(budgets, bills, expenseCategories(), subCategories(), monthStart)
+
+        val cat1 = result.categoryBudgets.first { it.categoryId == 1L }
+        val subs = cat1.subBudgets.filter { it.subCategoryId == 11L }
+        assertEquals(1, subs.size)
+        assertEquals(10000L, subs[0].amountMinor)
+        assertEquals(2000L, subs[0].expenseMinor)
+    }
+
     // ---------- ViewModel：合流 + SetBudget ----------
 
     @Test

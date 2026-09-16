@@ -196,8 +196,9 @@ internal data class MonthBudgetDerivation(
  *
  * 归集口径：
  * - 总行：periodType == "MONTHLY" && monthStart == 本月 && categoryId == null && subCategoryId == null
- * - 分类行：categoryId != null && subCategoryId == null
- * - 子分类行：subCategoryId != null
+ * - 分类行：categoryId != null && subCategoryId == null（同分类多行数据异常按合计归并为一行，
+ *   防止计划页 LazyColumn 以 categoryId 作 key 时重复 key 崩溃）
+ * - 子分类行：subCategoryId != null（同分类下重复子分类行同理按合计归并）
  * - 支出只计 BillType.EXPENSE：按 bill.categoryId 求和 → 分类行 expenseMinor；
  *   按 (categoryId, subCategoryName) 求和 → 子分类行 expenseMinor
  * - 子分类预算按 parentCategoryId == categoryId && name == subCategoryName 名称匹配
@@ -233,28 +234,34 @@ internal fun deriveMonthBudget(
     val subStatesByParent: Map<Long, List<SubCategoryBudgetState>> = subRows
         .groupBy { it.categoryId ?: 0L }
         .mapValues { (parentId, rows) ->
-            rows.map { row ->
-                val name = subCategoryNameById[row.subCategoryId!!]?.name ?: ""
-                SubCategoryBudgetState(
-                    subCategoryId = row.subCategoryId!!,
-                    name = name,
-                    parentCategoryId = parentId,
-                    amountMinor = row.amountMinor,
-                    expenseMinor = subCategoryExpense[parentId to name] ?: 0L
-                )
-            }
+            // 同分类下重复的子分类预算行（数据异常）按合计归并为一行，子分类 id 保持唯一。
+            rows.groupBy { it.subCategoryId!! }
+                .map { (subCategoryId, duplicated) ->
+                    val name = subCategoryNameById[subCategoryId]?.name ?: ""
+                    SubCategoryBudgetState(
+                        subCategoryId = subCategoryId,
+                        name = name,
+                        parentCategoryId = parentId,
+                        amountMinor = duplicated.sumOf { it.amountMinor },
+                        expenseMinor = subCategoryExpense[parentId to name] ?: 0L
+                    )
+                }
         }
 
-    val budgetedCategories = categoryRows.map { row ->
-        val categoryId = row.categoryId!!
-        CategoryBudgetState(
-            categoryId = categoryId,
-            categoryName = categoryNameById[categoryId]?.name ?: "",
-            amountMinor = row.amountMinor,
-            expenseMinor = categoryExpense[categoryId] ?: 0L,
-            subBudgets = subStatesByParent[categoryId] ?: emptyList()
-        )
-    }
+    // 同分类多行预算（数据异常，如双端并发写入）按合计归并为一行——计划页 LazyColumn 以
+    // categoryId 作 key，重复 key 会抛 IllegalArgumentException（进入计划页即崩溃）。
+    // 口径与 ChallengeEngine 的「同月多行预算按合计计入」一致。
+    val budgetedCategories = categoryRows
+        .groupBy { it.categoryId!! }
+        .map { (categoryId, rows) ->
+            CategoryBudgetState(
+                categoryId = categoryId,
+                categoryName = categoryNameById[categoryId]?.name ?: "",
+                amountMinor = rows.sumOf { it.amountMinor },
+                expenseMinor = categoryExpense[categoryId] ?: 0L,
+                subBudgets = subStatesByParent[categoryId] ?: emptyList()
+            )
+        }
 
     // 补全：未设分类预算但本月有支出（或该分类下有子分类预算）的分类也展示为分类行。
     val covered = budgetedCategories.map { it.categoryId }.toSet()
