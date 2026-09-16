@@ -88,7 +88,12 @@ import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
+import com.example.rinklnote.ui.screen.challenge.AchievementsScreen
+import com.example.rinklnote.ui.screen.challenge.ChallengeArenaScreen
+import com.example.rinklnote.ui.screen.challenge.ChallengeDetailScreen
 import com.example.rinklnote.ui.screen.challenge.ChallengeScreen
+import com.example.rinklnote.ui.screen.challenge.SavingsPredictorScreen
+import com.example.rinklnote.ui.screen.challenge.ThemeGalleryScreen
 import com.example.rinklnote.ui.screen.currency.MultiCurrencyScreen
 import com.example.rinklnote.ui.screen.importbills.BillImportViewModel
 import com.example.rinklnote.ui.screen.importbills.ImportBillsScreen
@@ -494,9 +499,59 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenCategoryBudgets = { navController.navigate("budget-categories") }
                     )
                 }
-                // Rk省钱计划：记账页「更多」抽屉下属的二级页（非 tab 路由 → 底栏自动隐藏，默认缩放淡入转场）。
+                // Rk省钱计划（大字报乐园 hub）：记账页「更多」抽屉下属的二级页（非 tab 路由 →
+                // 底栏自动隐藏，默认缩放淡入转场）。hub 只做导航，五个区域各自独立 flat route。
                 composable("challenges") {
-                    ChallengeScreen(onBack = { navController.popBackStack() })
+                    ChallengeScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenArena = { navController.navigate("challenge-arena") },
+                        onOpenAchievements = { navController.navigate("challenge-achievements") },
+                        onOpenPredictor = { navController.navigate("challenge-predictor") },
+                        onOpenEnvelope = { navController.navigate("budget-categories") },
+                        onOpenThemes = { navController.navigate("challenge-themes") }
+                    )
+                }
+                // 挑战竞技场：三张挑战大字报卡（hub 内 push 语义，非 tab 路由 → 缩放淡入转场）。
+                composable("challenge-arena") {
+                    ChallengeArenaScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { type -> navController.navigate("challenge-detail/$type") }
+                    )
+                }
+                // 单挑战详情：进度日历 / 打卡墙 + 该挑战周期内的相关真实账单（行点击跳账单编辑）。
+                composable(
+                    route = "challenge-detail/{type}",
+                    arguments = listOf(navArgument("type") { type = NavType.StringType })
+                ) { entry ->
+                    val detailScope = rememberCoroutineScope()
+                    ChallengeDetailScreen(
+                        type = entry.arguments?.getString("type").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                        onEditBill = { billId ->
+                            // 与账单地图 / 当天账单页同款联动：查到账单 → 填充共享编辑态 → 跳 bill-edit。
+                            detailScope.launch {
+                                app.database.billDao().getById(billId)?.let { bill ->
+                                    bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
+                                    navController.navigate("bill-edit")
+                                }
+                            }
+                        }
+                    )
+                }
+                // 成就徽章馆：徽章墙按已解锁/未解锁陈列，零存储实时派生。
+                composable("challenge-achievements") {
+                    AchievementsScreen(onBack = { navController.popBackStack() })
+                }
+                // 结余预测器：月末结余预测大字报 + 情景提示 + 少买一点试算。
+                composable("challenge-predictor") {
+                    SavingsPredictorScreen(onBack = { navController.popBackStack() })
+                }
+                // 主题换装间：已解锁主题陈列与预览切换，微调跳自定义主题页。
+                composable("challenge-themes") {
+                    ThemeGalleryScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenCustomTheme = { navController.navigate("custom-theme") }
+                    )
                 }
                 composable("budget-categories") {
                     // 分类预算设置独立页：从计划页入口进入，点分类跳预算编辑（共享 VM 编辑态）。
