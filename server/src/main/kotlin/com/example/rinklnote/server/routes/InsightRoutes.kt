@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.routes
 
+import com.example.rinklnote.server.plugins.requireAdmin
 import com.example.rinklnote.server.services.insight.InsightService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -110,11 +111,14 @@ fun Route.insightRoutes(insightService: InsightService) {
                 else call.respond(mapOf("empty" to "true"))
             }
 
+            // GET 保持所有登录用户可读：设置页要展示当前建议条行为并标注「由管理员配置」。
             get("/suggest-config") {
                 call.respond(insightService.loadSuggestConfig())
             }
 
+            // 收口：建议条配置是全局配置，写操作仅限管理员（requireAdmin 未命中直接 403）。
             put("/suggest-config") {
+                call.requireAdmin() ?: return@put
                 val body = call.receive<InsightService.SuggestConfig>()
                 insightService.saveSuggestConfig(body)
                 call.respond(mapOf("message" to "配置已保存"))

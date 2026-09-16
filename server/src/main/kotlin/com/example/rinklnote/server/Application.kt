@@ -2,6 +2,7 @@ package com.example.rinklnote.server
 
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
+import com.example.rinklnote.server.services.AdminService
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
 import com.example.rinklnote.server.services.BillService
@@ -206,6 +207,13 @@ fun Application.module() {
         else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
     )
 
+    // 管理端只读服务：LLM/ASR 只回「是否已配置」布尔，绝不回显 key 值（隐私红线见 AdminService 注释头）。
+    val adminService = AdminService(
+        dbTypeName = { DbRuntimeInfo.typeName },
+        llmConfigured = { deepseekApiKey.isNotBlank() },
+        asrConfigured = { !asrApiKey.isNullOrBlank() }
+    )
+
     // Release HTTP clients and cancel the app coroutine scope (LearningService loop,
     // async webhook processing) on graceful shutdown.
     environment.monitor.subscribe(ApplicationStopped) {
@@ -231,5 +239,6 @@ fun Application.module() {
         qqBotManageRoutes(qqBotService, userService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
+        adminRoutes(adminService, qqBotService, qqWsClient)
     }
 }

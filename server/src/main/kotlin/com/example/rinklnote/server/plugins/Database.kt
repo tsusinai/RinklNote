@@ -10,6 +10,14 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.transaction
 
+/**
+ * 运行时数据库类型（Database.kt 感知），供管理端 /api/admin/overview 展示。
+ * 只暴露类型名（"H2" / "PostgreSQL"），绝不暴露连接 URL / 凭据。
+ */
+object DbRuntimeInfo {
+    @Volatile var typeName: String = "unknown"
+}
+
 fun Application.configureDatabase() {
     val url = System.getenv("DATABASE_URL")
         ?: environment.config.propertyOrNull("database.url")?.getString()
@@ -39,7 +47,8 @@ fun Application.configureDatabase() {
 
     val billService = BillService()
     billService.seedIfNeeded()
-    log.info("Database initialized (${if (isH2) "H2" else "PostgreSQL"}) and seeded")
+    DbRuntimeInfo.typeName = if (isH2) "H2" else "PostgreSQL"
+    log.info("Database initialized (${DbRuntimeInfo.typeName}) and seeded")
 }
 
 /**

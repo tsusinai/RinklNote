@@ -72,7 +72,16 @@ class QQBotWebSocketClient(
     /** Sequence number of the last dispatched event; carried in heartbeats. */
     @Volatile private var lastSeq: Long? = null
 
+    /** WS 网关在线状态：已完成 Identify 且 socket 仍在收帧。 */
+    @Volatile private var wsConnected: Boolean = false
+
+    /** start() 保存的协程作用域，restart() 热重连时复用。 */
+    private var scope: CoroutineScope? = null
+
     fun start(scope: CoroutineScope) {
+        this.scope = scope
+        // 注册配置热重连：机器人凭据保存成功后由 QQBotService.saveToDb 触发 restart()。
+        qqBotService.onConfigChanged = { restart() }
         if (!qqBotService.isConfigured()) {
             logger.info("QQ Bot not configured — WebSocket gateway connection skipped")
             return
@@ -83,6 +92,31 @@ class QQBotWebSocketClient(
         logger.info("QQ Bot WebSocket gateway client started: $gatewayUrl")
     }
 
+    /**
+     * 配置热重连：取消旧连接协程，按新配置重新拨号；未配置则仅断开。
+     * 由 QQBotService.saveToDb 触发，任何异常只记日志、不影响保存结果。
+     */
+    fun restart() {
+        val s = scope ?: run {
+            logger.warn("QQ Bot WebSocket restart skipped: scope not initialized")
+            return
+        }
+        try {
+            job?.cancel()
+            job = if (qqBotService.isConfigured()) s.launch { connectWithRetry() } else null
+            wsConnected = false
+            logger.info("QQ Bot WebSocket gateway restart requested (configured=${qqBotService.isConfigured()})")
+        } catch (e: Exception) {
+            logger.warn("QQ Bot WebSocket restart failed: ${e.message}")
+        }
+    }
+
+    /** 网关是否在线（已完成 Identify 且 socket 仍在收帧）。 */
+    fun isGatewayOnline(): Boolean = wsConnected
+
+    /** 后台重连协程是否在跑（含退避重试中，未必然在线）。 */
+    fun isGatewayStarted(): Boolean = job?.isActive == true
+
     private suspend fun CoroutineScope.connectWithRetry() {
         var backoffMs = 1_000L
         while (isActive) {
@@ -92,6 +126,7 @@ class QQBotWebSocketClient(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                wsConnected = false
                 logger.warn("QQ Bot WebSocket disconnected (${e.message ?: e.javaClass.simpleName}); retry in ${backoffMs}ms")
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
@@ -102,6 +137,7 @@ class QQBotWebSocketClient(
     private suspend fun connectOnce() {
         val token = qqBotService.getAccessToken()
         lastSeq = null
+        wsConnected = false
 
         client.webSocket(
             urlString = gatewayUrl,
@@ -123,6 +159,7 @@ class QQBotWebSocketClient(
 
             outgoing.send(Frame.Text(json.encodeToString<JsonObject>(identifyPayload(token))))
             logger.info("QQ Bot WebSocket Identify sent (intents=$intents)")
+            wsConnected = true
 
             launch { heartbeatLoop(heartbeatIntervalMs) }
 
@@ -133,6 +170,7 @@ class QQBotWebSocketClient(
                     else -> {}
                 }
             }
+            wsConnected = false
             logger.info("QQ Bot WebSocket closed")
         }
     }
@@ -194,6 +232,7 @@ class QQBotWebSocketClient(
 
     fun shutdown() {
         job?.cancel()
+        wsConnected = false
         client.close()
         logger.info("QQ Bot WebSocket client stopped")
     }
