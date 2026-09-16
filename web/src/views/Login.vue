@@ -22,20 +22,25 @@ const theme = useThemeStore()
 const toast = useToast()
 
 const mode = ref<'login' | 'register'>('login')
+/* 登录身份（2026-09-17 优化登录方式）：手机号 | 邮箱 同位切换，与 App 登录页同构。
+ * 邮箱模式下第一个输入行变为邮箱，提交时 phone 传空串、email 非空（服务端据此选身份）。 */
+const identity = ref<'phone' | 'email'>('phone')
 const phone = ref('')
+const email = ref('')
 const pwd = ref('')
 const pwdVisible = ref(false) // 密码可见性切换（eye / eye-off）
-const qqCode = ref('')
 const busy = ref(false)
 /* 表单内红字：本地校验错误就地展示；接口错误仍走全局 toast */
 const formErr = ref('')
 
 /* 401/掉登录后的回跳地址（guards.ts / http.ts 写入；仅接受站内路径）。
- * 注意：UI 重构后请保留该回跳逻辑（登录与 QQ 登录成功后都要用 redirect ?? '/console'）。 */
+ * 注意：UI 重构后请保留该回跳逻辑（登录成功后都要用 redirect ?? '/console'）。 */
 const redirect = sanitizeRedirect(route.query.redirect)
 
 /* 大陆手机号：1 开头、第二位 3-9、共 11 位（与 App 登录页 LoginScreen.kt 同一规则） */
 const PHONE_RE = /^1[3-9]\d{9}$/
+/* 标准邮箱（仅客户端提示用，服务端有兜底校验；与 App LoginScreen.kt 同一规则） */
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
 
 /* 标题/副标题随登录↔注册切换，给足上下文 */
 const title = computed(() => (mode.value === 'login' ? '欢迎回来' : '开一本新账'))
@@ -58,31 +63,46 @@ function switchMode(m: 'login' | 'register') {
   pwdVisible.value = false
 }
 
+function switchIdentity(v: 'phone' | 'email') {
+  identity.value = v
+  formErr.value = ''
+}
+
 async function submit() {
   formErr.value = ''
-  if (!phone.value.trim() || !pwd.value) { formErr.value = '手机号或密码不能为空'; return }
-  if (!PHONE_RE.test(phone.value.trim())) { formErr.value = '请输入正确的 11 位手机号'; return }
-  if (mode.value === 'register' && pwd.value.length < 6) { formErr.value = '密码长度至少 6 位'; return }
+  /* 邮箱模式校验邮箱、手机号模式校验手机号（文案与 App 登录页一致） */
+  if (identity.value === 'email') {
+    if (!email.value.trim() || !pwd.value) { formErr.value = '邮箱或密码不能为空'; return }
+    if (!EMAIL_RE.test(email.value.trim())) { formErr.value = '请输入正确的邮箱地址'; return }
+  } else {
+    if (!phone.value.trim() || !pwd.value) { formErr.value = '手机号或密码不能为空'; return }
+    if (!PHONE_RE.test(phone.value.trim())) { formErr.value = '请输入正确的 11 位手机号'; return }
+  }
+  /* 密码规则（2026-09-17）：新设定须 ≥6 位且同时含大小写字母，与服务端 PasswordPolicy 同构；
+   * 仅注册约束，登录只要求非空（存量老密码不受影响）。 */
+  if (mode.value === 'register' && !/^(?=.*[a-z])(?=.*[A-Z]).{6,}$/.test(pwd.value)) {
+    formErr.value = '密码需至少6位且包含大小写字母'
+    return
+  }
   busy.value = true
   try {
-    if (mode.value === 'login') await store.login(phone.value.trim(), pwd.value)
-    /* 修硬伤：注册分支此前复制了登录逻辑（调 store.login），register API 从未被调用。
-     * 现改为真正调 register —— 服务端 201 返回同结构 token，注册成功即自动登录进控制台。 */
-    else await store.register(phone.value.trim(), pwd.value)
+    if (identity.value === 'email') {
+      /* 邮箱身份：phone 传空串、email 非空（api/auth.ts 组装请求体，服务端 AuthRoutes.kt 约定） */
+      const mail = email.value.trim()
+      if (mode.value === 'login') await store.login('', pwd.value, mail)
+      else await store.register('', pwd.value, mail)
+    } else if (mode.value === 'login') {
+      await store.login(phone.value.trim(), pwd.value)
+    } else {
+      /* 修硬伤：注册分支此前复制了登录逻辑（调 store.login），register API 从未被调用。
+       * 现改为真正调 register —— 服务端 201 返回同结构 token，注册成功即自动登录进控制台。 */
+      await store.register(phone.value.trim(), pwd.value)
+    }
     toast.push(mode.value === 'login' ? '登录成功' : '注册成功')
     router.replace(redirect ?? '/console')
   } catch (e: any) {
     // 服务端业务文案（如「该手机号已注册」）优先于泛化的 HTTP 错误描述
     toast.push(e?.data?.message || e?.message || (mode.value === 'login' ? '登录失败' : '注册失败'), 'err')
-  } finally { busy.value = false }
-}
-
-async function qqLogin() {
-  if (!qqCode.value) { toast.push('请输入 QQ 登录码', 'err'); return }
-  busy.value = true
-  try { await store.loginByQq(qqCode.value); toast.push('QQ登录成功'); router.replace(redirect ?? '/console') }
-  catch (e: any) {
-    toast.push(e?.data?.message || e?.message || 'QQ 登录失败', 'err')
   } finally { busy.value = false }
 }
 </script>
@@ -140,13 +160,25 @@ async function qqLogin() {
           <button type="button" role="tab" :aria-selected="mode === 'register'" :class="{ on: mode === 'register' }" @click="switchMode('register')">注册</button>
         </div>
 
+        <!-- 身份同位切换：手机号 | 邮箱（2026-09-17 优化登录方式，与 App 登录页同构） -->
+        <div class="id-toggle" role="tablist" aria-label="登录身份">
+          <button type="button" role="tab" :aria-selected="identity === 'phone'" :class="{ on: identity === 'phone' }" @click="switchIdentity('phone')">手机号</button>
+          <button type="button" role="tab" :aria-selected="identity === 'email'" :class="{ on: identity === 'email' }" @click="switchIdentity('email')">邮箱</button>
+        </div>
+
         <form @submit.prevent="submit">
-          <label class="field-label" for="login-phone">手机号</label>
-          <input id="login-phone" v-model="phone" type="text" inputmode="numeric" placeholder="13 位手机号" autocomplete="username" />
+          <template v-if="identity === 'phone'">
+            <label class="field-label" for="login-phone">手机号</label>
+            <input id="login-phone" v-model="phone" type="text" inputmode="numeric" placeholder="11 位手机号" autocomplete="username" />
+          </template>
+          <template v-else>
+            <label class="field-label" for="login-email">邮箱</label>
+            <input id="login-email" v-model="email" type="email" inputmode="email" placeholder="name@example.com" autocomplete="username" />
+          </template>
 
           <label class="field-label" for="login-pwd">密码</label>
           <div class="pwd-field">
-            <input id="login-pwd" v-model="pwd" :type="pwdVisible ? 'text' : 'password'" placeholder="至少 6 位" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
+            <input id="login-pwd" v-model="pwd" :type="pwdVisible ? 'text' : 'password'" :placeholder="identity === 'email' ? '至少 6 位，含大小写字母' : '至少 6 位'" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
             <button type="button" class="eye" :aria-label="pwdVisible ? '隐藏密码' : '显示密码'" @click="pwdVisible = !pwdVisible">
               <Icon :name="pwdVisible ? 'eye-off' : 'eye'" :size="16" />
             </button>
@@ -156,13 +188,7 @@ async function qqLogin() {
           <Btn type="submit" block class="submit" :loading="busy">{{ mode === 'login' ? '登录' : '注册' }}</Btn>
         </form>
 
-        <div class="divider" aria-hidden="true"><span>或</span></div>
-
-        <div class="qq-area">
-          <label class="field-label" for="login-qq">QQ 登录码</label>
-          <input id="login-qq" v-model="qqCode" type="text" placeholder="向机器人发「登录」获取" @keyup.enter="qqLogin" />
-          <Btn variant="ghost" block :disabled="busy" @click="qqLogin">QQ 登录</Btn>
-        </div>
+        <p class="form-hint">忘记密码？暂未开放自助找回，请联系管理员重置。</p>
       </section>
     </div>
   </div>
@@ -264,6 +290,23 @@ async function qqLogin() {
 }
 .toggle button.on { color: var(--on-primary); font-weight: 600; }
 
+/* 身份同位切换（手机号 | 邮箱）：比登录/注册 tab 更轻的次级样式，选中项主蓝描底 */
+.id-toggle {
+  display: flex; gap: 6px; margin-bottom: 16px;
+}
+.id-toggle button {
+  flex: 1; padding: 7px 0; border-radius: 10px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit;
+  transition: color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease),
+    background var(--dur-expand) var(--ease);
+}
+.id-toggle button.on {
+  color: var(--primary); border-color: var(--primary); background: var(--primary-soft);
+  font-weight: 600;
+}
+.id-toggle button + button { margin-left: 0; }
+
 form { display: flex; flex-direction: column; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
 input {
@@ -293,17 +336,13 @@ input::placeholder { color: var(--muted); opacity: .7; }
 
 .submit { margin-top: 4px; padding: 13px 16px; font-size: 15px; }
 
-/* 分隔线 + 居中「或」：编辑排版式的细规则线 */
-.divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; color: var(--muted); font-size: 12px; }
-.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border-light); }
-
-.qq-area { display: flex; flex-direction: column; }
-.qq-area .field-label { margin-top: 0; }
+/* 忘记密码占位提示（QQ 登录区移除后的底部收尾文案，弱化呈现） */
+.form-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); opacity: .8; }
 
 /* ── 进场 stagger：账本元素依次错落揭示（theme.css 全局 reduced-motion 规则会冻结） ── */
 @media (prefers-reduced-motion: no-preference) {
   .display, .lede, .ledger, .panel-foot,
-  .form-title, .toggle, form, .divider, .qq-area {
+  .form-title, .toggle, .id-toggle, form, .form-hint {
     animation: rise .55s cubic-bezier(.22, 1, .36, 1) both;
   }
   .lede { animation-delay: .06s; }
@@ -311,9 +350,9 @@ input::placeholder { color: var(--muted); opacity: .7; }
   .panel-foot { animation-delay: .18s; }
   .form-title { animation-delay: .05s; }
   .toggle { animation-delay: .1s; }
+  .id-toggle { animation-delay: .13s; }
   form { animation-delay: .15s; }
-  .divider { animation-delay: .2s; }
-  .qq-area { animation-delay: .25s; }
+  .form-hint { animation-delay: .2s; }
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 }
 

@@ -6,7 +6,9 @@ import { useToast, type Toast } from '../../composables/useToast'
 import Login from '../Login.vue'
 
 /* W3c 硬伤回归：注册表单必须真正调用 /api/auth/register（此前注册分支复制了登录逻辑），
- * 且失败路径不得发生跳转。 */
+ * 且失败路径不得发生跳转。
+ * 2026-09-17 优化登录方式：新增手机号 | 邮箱 同位切换 —— 邮箱注册须发 { phone:'', email, password }；
+ * 注册密码须满足新规则（≥6 位且含大小写），夹具密码同步收紧。 */
 
 function resp(status: number, ok: boolean, body: unknown) {
   return { status, ok, json: async () => body } as unknown as Response
@@ -28,11 +30,14 @@ async function mountLogin(router: ReturnType<typeof makeRouter>) {
   return mount(Login, { global: { plugins: [createPinia(), router] } })
 }
 
+// 满足新密码规则的夹具密码（≥6 位 + 大小写字母）
+const PWD = 'Pwd123456'
+
 // 进入注册态并填入合法手机号/密码后提交
 async function submitRegister(wrapper: Awaited<ReturnType<typeof mountLogin>>) {
   await wrapper.findAll('.toggle button')[1].trigger('click')
   await wrapper.find('form input[type="text"]').setValue('13800001234')
-  await wrapper.find('form input[type="password"]').setValue('pwd123')
+  await wrapper.find('form input[type="password"]').setValue(PWD)
   await wrapper.find('form').trigger('submit')
   await flushPromises()
 }
@@ -57,7 +62,7 @@ describe('Login 注册硬伤修复', () => {
     const regCall = fetchSpy.mock.calls.find(([u]) => String(u).includes('/api/auth/register'))
     expect(regCall).toBeTruthy()
     expect(regCall![1]?.method).toBe('POST')
-    expect(JSON.parse(String(regCall![1]?.body))).toEqual({ phone: '13800001234', password: 'pwd123' })
+    expect(JSON.parse(String(regCall![1]?.body))).toEqual({ phone: '13800001234', password: PWD })
     // 服务端 201 返回 token → 自动登录（token 落地 + 跳转控制台）
     expect(localStorage.getItem('rkl_token')).toBe('reg-token')
     expect(router.currentRoute.value.path).toBe('/console')
@@ -79,5 +84,52 @@ describe('Login 注册硬伤修复', () => {
     expect(localStorage.getItem('rkl_token')).toBeNull()
     // 错误提示优先展示服务端业务文案（HttpError.data.message）
     expect(toast.toasts.some((t: Toast) => t.kind === 'err' && t.msg.includes('该手机号已注册'))).toBe(true)
+  })
+})
+
+describe('Login 邮箱身份（2026-09-17 优化登录方式）', () => {
+  it('切换到邮箱后注册：请求体走 { phone:"", email, password } 并自动登录', async () => {
+    const router = makeRouter()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url
+      if (url.includes('/api/auth/register')) return resp(201, true, { userId: 10, token: 'email-token' })
+      if (url.includes('/api/auth/me')) {
+        return resp(200, true, { id: 10, phone: null, email: 'user@example.com', qqNumber: null, qqOpenid: null, createdAt: null, aiDisabled: false })
+      }
+      return resp(404, false, { message: 'not found' })
+    })
+    const wrapper = await mountLogin(router)
+
+    // 进注册态 → 切邮箱身份 → 填邮箱/密码 → 提交
+    await wrapper.findAll('.toggle button')[1].trigger('click')
+    await wrapper.find('.id-toggle button:nth-child(2)').trigger('click')
+    await wrapper.find('form input[type="email"]').setValue('user@example.com')
+    await wrapper.find('form input[type="password"]').setValue(PWD)
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const regCall = fetchSpy.mock.calls.find(([u]) => String(u).includes('/api/auth/register'))
+    expect(regCall).toBeTruthy()
+    expect(JSON.parse(String(regCall![1]?.body))).toEqual({ phone: '', email: 'user@example.com', password: PWD })
+    expect(localStorage.getItem('rkl_token')).toBe('email-token')
+    expect(router.currentRoute.value.path).toBe('/console')
+  })
+
+  it('注册密码缺大写字母：本地拦截不发请求，表单内红字提示', async () => {
+    const router = makeRouter()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('不应发起请求')
+    })
+    const wrapper = await mountLogin(router)
+    await wrapper.findAll('.toggle button')[1].trigger('click')
+    await wrapper.find('form input[type="text"]').setValue('13800001234')
+    await wrapper.find('form input[type="password"]').setValue('alllower123')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    // 未发生任何网络请求；错误就地展示且不跳转
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('.form-err').text()).toContain('大小写')
+    expect(router.currentRoute.value.path).toBe('/login')
   })
 })

@@ -40,6 +40,8 @@ export interface MessageResponse { message: string }
 export interface MeResponse {
   id: number; phone: string | null; qqNumber: string | null;
   qqOpenid: string | null; createdAt: string | null;
+  /** 邮箱身份（2026-09-17 优化登录方式）：可空，未设置 / 旧服务端不下发时缺省 */
+  email?: string | null;
   /** 管理员 = 身份在服务端 ADMIN_IDENTITIES 名单（活的判定），/admin 区守卫依据 */
   isAdmin?: boolean; aiDisabled: boolean;
 }
