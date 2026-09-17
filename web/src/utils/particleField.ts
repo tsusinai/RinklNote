@@ -3,9 +3,9 @@
  * 职责边界：本文件只负责「粒子的数值状态推进」，不碰任何渲染 API；
  * 绘制与生命周期在 components/ParticleBackground.vue。
  *
- * 物理模型（克制优先：低密度、低 alpha、慢速）：
- * - 密度：clamp(面积/18000, 40, 110) 个粒子，半径 0.8~2.2px
- * - 漂移：每粒子恒定基础速度 6~18 px/s（随机方向），出界环绕
+ * 物理模型（2026-09-18 用户反馈「不明显」后加浓：密度/速度/半径上提，仍不做连线）：
+ * - 密度：clamp(面积/9000, 70, 220) 个粒子，半径 1.0~2.8px
+ * - 漂移：每粒子恒定基础速度 12~30 px/s（随机方向），出界环绕
  * - 闪烁：每粒子 2~6s 周期的相位推进，渲染层据此调制 alpha（星点呼吸感）
  * - 斥力：指针半径 ~110px 内、力度随距离线性衰减，冲量记入 pv*，
  *   并按 0.92（60fps 基准）逐帧阻尼衰减 —— 粒子被轻推后回落漂移；
@@ -54,16 +54,16 @@ export interface ParticleField {
   damping: number
 }
 
-const MIN_COUNT = 40
-const MAX_COUNT = 110
-/** 密度分母：每 18000px² 一个粒子 */
-const AREA_PER_PARTICLE = 18000
+const MIN_COUNT = 70
+const MAX_COUNT = 220
+/** 密度分母：每 9000px² 一个粒子 */
+const AREA_PER_PARTICLE = 9000
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v))
 }
 
-/** 密度公式：clamp(round(面积/18000), 40, 110) —— 渲染层 resize 与测试共用 */
+/** 密度公式：clamp(round(面积/9000), 70, 220) —— 渲染层 resize 与测试共用 */
 export function densityCount(w: number, h: number): number {
   return clamp(Math.round((w * h) / AREA_PER_PARTICLE), MIN_COUNT, MAX_COUNT)
 }
@@ -74,12 +74,12 @@ function rand(min: number, max: number): number {
 
 /** 造一个粒子：随机位置/半径/漂移方向/闪烁相位；约 15% 为点缀色 */
 function makeParticle(w: number, h: number): Particle {
-  const speed = rand(6, 18) // 漂移速率 6~18 px/s
+  const speed = rand(12, 30) // 漂移速率 12~30 px/s
   const angle = rand(0, Math.PI * 2)
   return {
     x: rand(0, w),
     y: rand(0, h),
-    r: rand(0.8, 2.2),
+    r: rand(1.0, 2.8),
     dvx: Math.cos(angle) * speed,
     dvy: Math.sin(angle) * speed,
     pvx: 0,
@@ -163,8 +163,8 @@ export function stepField(f: ParticleField, dt: number, pointer?: Pointer): void
   }
 }
 
-/** 闪烁系数 0.55~1（呼吸感）：渲染层用「区间内取 alpha」时乘到 glow 上 */
+/** 闪烁系数 0.4~1（呼吸感加深）：渲染层用「区间内取 alpha」时乘到 glow 上 */
 export function twinkleOf(p: Particle): number {
   const s = Math.sin(p.phase) // -1..1
-  return 0.55 + 0.45 * ((s + 1) / 2)
+  return 0.4 + 0.6 * ((s + 1) / 2)
 }

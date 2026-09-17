@@ -88,9 +88,9 @@ const onPointerMove = (e: PointerEvent) => { pointer.x = e.clientX; pointer.y = 
 function drawFrame(): void {
   if (!ctx || !field) return
   ctx.clearRect(0, 0, w, h)
-  // alpha 区间按主题：亮色 0.25~0.5（主蓝淡点 + 灰蓝点缀），暗色 0.3~0.7（星空感）
-  const minA = dark ? 0.3 : 0.25
-  const maxA = dark ? 0.7 : 0.5
+  // alpha 区间按主题（加浓后）：亮色 0.45~0.8，暗色 0.5~0.9（星空感）
+  const minA = dark ? 0.5 : 0.45
+  const maxA = dark ? 0.9 : 0.8
   for (const p of field.particles) {
     const rgb = p.tone === 1 ? accentRgb : primaryRgb
     const a = minA + (maxA - minA) * p.glow * twinkleOf(p)

@@ -5,14 +5,14 @@ import { createField, resizeField, stepField, densityCount, twinkleOf } from '..
  * 粒子状态可直接改写（纯 TS 引擎与 DOM 解耦），测试不需要随机数种子。 */
 
 describe('densityCount 密度 clamp', () => {
-  it('小面积取下限 40', () => {
-    expect(densityCount(400, 300)).toBe(40) // 120000/18000 ≈ 6.7 → clamp 40
+  it('小面积取下限 70', () => {
+    expect(densityCount(400, 300)).toBe(70) // 120000/9000 ≈ 13.3 → clamp 70
   })
-  it('大面积取上限 110', () => {
-    expect(densityCount(1920, 1080)).toBe(110) // 2073600/18000 ≈ 115 → clamp 110
+  it('大面积取上限 220', () => {
+    expect(densityCount(1920, 1080)).toBe(220) // 2073600/9000 ≈ 230 → clamp 220
   })
-  it('中间面积按 面积/18000 四舍五入', () => {
-    expect(densityCount(1800, 800)).toBe(80)
+  it('中间面积按 面积/9000 四舍五入', () => {
+    expect(densityCount(1800, 800)).toBe(160)
   })
   it('createField 粒子数与密度公式一致', () => {
     expect(createField(1000, 700).particles.length).toBe(densityCount(1000, 700))
@@ -105,12 +105,12 @@ describe('指针斥力', () => {
 
 describe('resizeField 按面积增删', () => {
   it('粒子数随新面积回到界限内', () => {
-    const f = createField(1920, 1080) // → 110
-    expect(f.particles.length).toBe(110)
-    resizeField(f, 400, 300) // → 40
-    expect(f.particles.length).toBe(40)
-    resizeField(f, 1920, 1080) // → 110
-    expect(f.particles.length).toBe(110)
+    const f = createField(1920, 1080) // → 220
+    expect(f.particles.length).toBe(220)
+    resizeField(f, 400, 300) // → 70
+    expect(f.particles.length).toBe(70)
+    resizeField(f, 1920, 1080) // → 220
+    expect(f.particles.length).toBe(220)
   })
   it('尽量保留现存粒子（增删而非整体重建）', () => {
     const f = createField(1920, 1080)
@@ -133,7 +133,7 @@ describe('resizeField 按面积增删', () => {
 })
 
 describe('闪烁相位', () => {
-  it('相位随时间推进，twinkleOf 恒在呼吸区间 [0.55, 1]', () => {
+  it('相位随时间推进，twinkleOf 恒在呼吸区间 [0.4, 1]', () => {
     const f = createField(300, 300)
     const p = f.particles[0]
     const before = p.phase
@@ -142,7 +142,7 @@ describe('闪烁相位', () => {
     for (let i = 0; i < 48; i++) {
       stepField(f, 0.125) // 覆盖若干完整 2~6s 周期
       const t = twinkleOf(p)
-      expect(t).toBeGreaterThanOrEqual(0.55)
+      expect(t).toBeGreaterThanOrEqual(0.4)
       expect(t).toBeLessThanOrEqual(1)
     }
   })
