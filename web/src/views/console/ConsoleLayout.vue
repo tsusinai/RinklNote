@@ -37,14 +37,19 @@ const groups: { title: string; items: NavItem[] }[] = [
     { name: 'bills', label: '账单', icon: 'receipt' },
     { name: 'charts', label: '图表', icon: 'chart' },
   ] },
-  { title: '资产', items: [{ name: 'assets', label: '资产', icon: 'wallet' }] },
+  { title: '资产', items: [
+    { name: 'assets', label: '资产', icon: 'wallet' },
+    { name: 'currency', label: '多币种', icon: 'wallet' },
+  ] },
   { title: '我的', items: [
     { name: 'me', label: '我的', icon: 'user' },
     { name: 'settings', label: '设置', icon: 'settings' },
   ] },
 ]
-/* 移动端底栏固定 5 tab（不再把设置 slice 塞进底栏） */
-const mobileTabs: NavItem[] = groups.flatMap((g) => g.items).filter((it) => it.name !== 'settings')
+/* 移动端底栏固定 5 tab（多币种为二级页，与设置一样不占底栏） */
+const mobileTabs: NavItem[] = groups
+  .flatMap((g) => g.items)
+  .filter((it) => it.name !== 'settings' && it.name !== 'currency')
 
 const pageTitle = computed(() => route.meta.title ?? '')
 /* 用户卡：手机号打掩码，QQ 账号显示 QQ 号 */
