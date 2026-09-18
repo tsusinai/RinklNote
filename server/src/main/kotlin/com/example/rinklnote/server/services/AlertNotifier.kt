@@ -60,16 +60,27 @@ class AlertNotifier(
      * 发一条异常告警（fire-and-forget）：只带方法/路径与异常摘要，不含任何请求体。
      * 任何内部失败只落日志，绝不影响调用方（异常处理路径本身不能再抛）。
      */
+    /** 原子限流闸门：同 key 在间隔内返回 false（保留原时间戳），否则记录当前时间并放行。 */
+    private fun tryAcquire(key: String, now: Long): Boolean {
+        var allowed = false
+        lastSentByKey.compute(key) { _, last ->
+            if (last != null && now - last < minIntervalMs) last else { allowed = true; now }
+        }
+        return allowed
+    }
+
     fun alertAsync(method: String?, path: String?, cause: Throwable) {
-        val key = "${method ?: "-"} ${path ?: "-"} ${cause.javaClass.name}"
-        val now = nowMillis()
-        val last = lastSentByKey[key]
-        if (last != null && now - last < minIntervalMs) return
-        lastSentByKey[key] = now
+        if (!tryAcquire("${method ?: "-"} ${path ?: "-"} ${cause.javaClass.name}", nowMillis())) return
         val text = buildAlertText(method, path, cause, LocalDateTime.now(ZoneId.of("Asia/Shanghai")))
         CoroutineScope(Dispatchers.Default).launch {
             try { deliver(text) } catch (e: Exception) { log.warn("异常告警发送失败: ${e.message}") }
         }
+    }
+
+    /** 同步告警（限流语义与 alertAsync 一致）：返回是否真正发出（被限流/无通道为 false）。 */
+    suspend fun alert(method: String?, path: String?, cause: Throwable): Boolean {
+        if (!tryAcquire("${method ?: "-"} ${path ?: "-"} ${cause.javaClass.name}", nowMillis())) return false
+        return deliver(buildAlertText(method, path, cause, LocalDateTime.now(ZoneId.of("Asia/Shanghai"))))
     }
 
     /** 供测试直接同步调用：返回是否送达（无主账号/通道时为 false）。 */

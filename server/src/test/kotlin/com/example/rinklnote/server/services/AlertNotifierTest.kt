@@ -118,32 +118,25 @@ class AlertNotifierTest {
     // ── 限流与送达 ──
 
     @Test
-    fun `同路径同异常一分钟内只告警一次`() {
+    fun `同路径同异常一分钟内只告警一次`() = kotlinx.coroutines.runBlocking {
         insertPushUser(5, phone = "13800000005", qqOpenid = "qq-5")
         val sent = mutableListOf<String>()
         val n = notifier({ "13800000005" }, sent)
-        n.alertAsync("GET", "/api/boom", RuntimeException("a"))
-        n.alertAsync("GET", "/api/boom", RuntimeException("b")) // 同 key 限流
+        assertTrue(n.alert("GET", "/api/boom", RuntimeException("a")))
+        assertFalse(n.alert("GET", "/api/boom", RuntimeException("b"))) // 同 key 限流
         now += 61_000
-        n.alertAsync("GET", "/api/boom", RuntimeException("c")) // 过了窗口 → 放行
-        // alertAsync 是异步 launch，直接检查 deliver 同步语义更稳；这里用轮询等待协程完成
-        awaitSize(sent, 2)
+        assertTrue(n.alert("GET", "/api/boom", RuntimeException("c"))) // 过了窗口 → 放行
         assertEquals(2, sent.size)
     }
 
     @Test
-    fun `不同异常类型各自限流`() {
+    fun `不同异常类型各自限流`() = kotlinx.coroutines.runBlocking {
         insertPushUser(6, phone = "13800000006", qqOpenid = "qq-6")
         val sent = mutableListOf<String>()
         val n = notifier({ "13800000006" }, sent)
-        n.alertAsync("GET", "/api/boom", RuntimeException("a"))
-        n.alertAsync("GET", "/api/boom", IllegalStateException("b")) // 不同异常类 → 各自一条
-        awaitSize(sent, 2)
-    }
-
-    private fun awaitSize(sent: MutableList<String>, size: Int) {
-        val deadline = System.currentTimeMillis() + 5_000
-        while (sent.size < size && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertTrue(n.alert("GET", "/api/boom", RuntimeException("a")))
+        assertTrue(n.alert("GET", "/api/boom", IllegalStateException("b"))) // 不同异常类 → 各自一条
+        assertEquals(2, sent.size)
     }
 
     /** runBlocking 的轻量替身（避免整文件引协程依赖别名混乱）。 */
