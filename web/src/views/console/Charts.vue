@@ -4,7 +4,9 @@ import VChart from '../../utils/echarts' // ECharts 按需注册统一出口（u
 import { useDataStore } from '../../stores/data'
 import { useThemeStore } from '../../stores/theme'
 import { insights } from '../../api/insights'
-import { toMonthStr, fmtDate } from '../../utils/date'
+import { budgets } from '../../api/budgets'
+import { toMonthStr, fmtDate, monthStart } from '../../utils/date'
+import { assessBudgetRisk, monthExpenseSoFar, type BudgetRiskAssessment } from '../../utils/budgetRisk'
 import { dailyExpense, monthlyTrend, expenseByCategory, inPeriod, type ChartPeriod } from '../../utils/chartData'
 import { CHART_ANIMATION, readChartPalette, readChartAxisColor, readExpenseIncomeColors, readChartLineColor } from '../../utils/echartsTheme'
 import { formatMoney } from '../../utils/money'
@@ -13,7 +15,7 @@ import { categoryEmoji } from '../../utils/categoryIcon'
 import { useToast } from '../../composables/useToast'
 import EmptyState from '../../components/ui/EmptyState.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
-import type { MonthlyReview } from '../../types'
+import type { MonthlyReview, Budget } from '../../types'
 
 const data = useDataStore()
 const theme = useThemeStore()
@@ -173,12 +175,29 @@ async function exportShare() {
   } finally { shareBusy.value = false }
 }
 
+/* 预算烧穿风险预警（Task 4.1 Web 侧）：本地实时派生、零存储。
+ * 口径与 App 钉死对齐：pct = 预测周期末累计消耗 ÷ 月预算 × 100；<85 低 / 85~100 中 / >100 高。 */
+const monthBudget = ref<Budget | null>(null)
+async function loadMonthBudget() {
+  try {
+    const list = await budgets.list()
+    monthBudget.value = list.find((b) => !b.deleted && b.monthStart === monthStart(Date.now())) ?? null
+  } catch { monthBudget.value = null }
+}
+const risk = computed<BudgetRiskAssessment | null>(() => {
+  const b = monthBudget.value
+  if (!b || b.amountMinor <= 0) return null
+  void data.bills.length // 依赖账单变化触发重算
+  return assessBudgetRisk(b.amountMinor, monthExpenseSoFar(data.bills), Date.now())
+})
+
 async function init() {
   if (!data.bills.length) {
     loading.value = true
     try { await data.loadData() } finally { loading.value = false }
   }
   await loadReview()
+  await loadMonthBudget()
 }
 onMounted(init)
 watch(revMonth, loadReview)
@@ -217,6 +236,15 @@ watch(revMonth, loadReview)
       <button v-for="p in (['week','month','year'] as ChartPeriod[])" :key="p" :class="['toggle-btn', { on: period === p }]" @click="period = p">
         {{ p === 'week' ? '本周' : p === 'month' ? '本月' : '本年' }}
       </button>
+    </div>
+
+    <!-- 预算烧穿风险预警（Task 4.1）：仅本月有预算且预测 ≥85% 时展示 -->
+    <div v-if="risk && risk.level !== 'low'" :class="['risk-banner', risk.level]" role="status">
+      <span class="risk-badge">{{ risk.level === 'high' ? '高风险' : '中风险' }}</span>
+      <span class="risk-text">
+        按当前节奏，本月预算预计烧到 <b>{{ risk.pct.toFixed(0) }}%</b>（预测支出 {{ formatMoney(risk.predictedMinor) }} / 预算 {{ formatMoney(risk.budgetMinor) }}）——
+        {{ risk.level === 'high' ? '小盘先替你捂住钱包，控制一下呀！' : '小盘帮你盯着呢，稳住！' }}
+      </span>
     </div>
 
     <div v-reveal="60" class="chart-card">
@@ -301,6 +329,20 @@ watch(revMonth, loadReview)
 
 /* 周期切换：220ms 过渡（背景/文字/描边随选中态平滑变化） */
 .period-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+
+/* 预算烧穿风险预警条：中风险橙 / 高风险红，色彩全部走既有令牌（--chart-2 / --expense） */
+.risk-banner {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  border-radius: var(--radius); margin-bottom: 16px; font-size: 14px; color: var(--text);
+  background: var(--card); box-shadow: var(--shadow-sm);
+}
+.risk-banner.mid { border: 1px solid color-mix(in srgb, var(--chart-2) 45%, transparent); background: color-mix(in srgb, var(--chart-2) 10%, var(--card)); }
+.risk-banner.high { border: 1px solid color-mix(in srgb, var(--expense) 45%, transparent); background: color-mix(in srgb, var(--expense) 8%, var(--card)); }
+.risk-badge { flex: none; font-weight: 700; font-size: 12px; padding: 3px 10px; border-radius: 999px; color: #fff; }
+.risk-banner.mid .risk-badge { background: var(--chart-2); }
+.risk-banner.high .risk-badge { background: var(--expense); }
+.risk-text { line-height: 1.6; }
+.risk-text b { font-weight: 700; }
 .toggle-btn {
   padding: 8px 18px; border-radius: 12px; border: 1px solid var(--border); background: none;
   color: var(--muted); font-size: 14px; cursor: pointer; font-family: inherit;
