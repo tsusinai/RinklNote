@@ -16,6 +16,8 @@ import com.example.rinklnote.data.repository.ChatRepository
 import com.example.rinklnote.data.repository.ChatRepositoryImpl
 import com.example.rinklnote.data.repository.ChallengeRepository
 import com.example.rinklnote.data.repository.ChallengeRepositoryImpl
+import com.example.rinklnote.data.repository.PlaceRepository
+import com.example.rinklnote.data.repository.PlaceRepositoryImpl
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.notification.DailyReportReceiver
@@ -34,14 +36,16 @@ import kotlinx.coroutines.launch
 
 /**
  * 打开快速记账抽屉时的预填参数。`categoryId` 来自主屏小组件；其余字段来自
- * `rinklnote://add` 深链。全部字段可空：全空表示「打开抽屉并落到默认分类」。
+ * `rinklnote://add` 深链（长按快捷方式「语音记账」带 `voice=1`）。全部字段可空：
+ * 全空表示「打开抽屉并落到默认分类」；`voice=true` 表示直接进语音记账而非抽屉。
  */
 data class PendingQuickAdd(
     val amount: String? = null,
     val categoryId: Long? = null,
     val categoryName: String? = null,
     val remark: String? = null,
-    val billType: String? = null
+    val billType: String? = null,
+    val voice: Boolean = false
 )
 
 /** 应用入口即服务定位器：无 DI 框架，所有单例（数据库/仓库/令牌/设置/网络/同步）在此按需 lazy 创建，
@@ -64,6 +68,7 @@ class RinklNoteApp : Application() {
     val budgetRepository: BudgetRepository by lazy { BudgetRepositoryImpl(database) }
     val challengeRepository: ChallengeRepository by lazy { ChallengeRepositoryImpl(database) }
     val chatRepository: ChatRepository by lazy { ChatRepositoryImpl(database) }
+    val placeRepository: PlaceRepository by lazy { PlaceRepositoryImpl(database.placeDao()) }
 
     // 主屏小组件点分类 / 深链 rinklnote://add → 欲预填快速记账抽屉的参数；
     // MainActivity 从 Intent extra / deep-link URI 装入，AppNavigation 消费后清空。

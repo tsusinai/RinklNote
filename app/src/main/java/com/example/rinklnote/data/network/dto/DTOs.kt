@@ -369,3 +369,17 @@ data class AiTokenItem(
     val revoked: Boolean,
     val revokedAt: Long? = null
 )
+
+// ── 多币种真汇率（Task 4.2）──
+
+/**
+ * GET /api/rates 响应。**契约（三端钉死）**：
+ * `{"base":"CNY","rates":{"USD":<每 1 单位该币种兑 CNY 的数>,...},"updatedAt":"ISO-8601"}`，
+ * `rates` 语义与 App `DEMO_RATES_VS_CNY` 一致（对 CNY 的直接牌价）。
+ */
+@Serializable
+data class RatesResponse(
+    val base: String = "CNY",
+    val rates: Map<String, Double> = emptyMap(),
+    val updatedAt: String? = null
+)

@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.profile
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -28,10 +29,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -59,6 +62,7 @@ import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.notification.DailyReportReceiver
+import com.example.rinklnote.notification.PayNotifyListenerService
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
@@ -72,10 +76,16 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.util.BillImageExporter
+import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.aggregateAnnualStats
 import com.example.rinklnote.util.exportBillsToCsv
+import com.example.rinklnote.util.today
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 我的页（Profile）—— 个人形象入口 + 数据、通知、个性化等设置。
@@ -131,10 +141,19 @@ fun ProfileScreen(
     val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
     val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
     val dailyReportQqBot by settingsManager.dailyReportQqBot.collectAsStateWithLifecycle(initialValue = false)
+    // 支付通知一键记账：默认关闭；开启需再授予系统「通知使用权」（双闸门，见 PayNotifyListenerService）。
+    val payNotifyEnabled by settingsManager.payNotifyEnabled.collectAsStateWithLifecycle(initialValue = false)
+    var showPayNotifyGuide by remember { mutableStateOf(false) }
     // 个性化：本地头像缓存 / 昵称缓存（登录后卡片优先服务端值，离线时回落这里）/ 卡片白色蒙版。
     val avatarUri by settingsManager.avatarUri.collectAsStateWithLifecycle(initialValue = null)
     val nickname by settingsManager.nickname.collectAsStateWithLifecycle(initialValue = null)
     val cardOverlay by settingsManager.cardOverlay.collectAsStateWithLifecycle(initialValue = false)
+    // 小组件预设金额快捷 chip（整数分，默认 ¥10/¥50）。
+    val quickAmounts by settingsManager.quickAmounts
+        .collectAsStateWithLifecycle(initialValue = SettingsManager.DEFAULT_QUICK_AMOUNTS)
+    var showQuickAmountsEditor by remember { mutableStateOf(false) }
+    // 年度账单分享图：年份选择 → 聚合 → Canvas 绘图 → 系统分享面板。
+    var showAnnualYearPicker by remember { mutableStateOf(false) }
     // 展示徽章：服务端勾选 ∩ 实时解锁态（删账单回退后自动隐藏，零存储特性的展示端兜底）。
     val achievements by rememberAchievementStates()
     val displayBadges = displayableShowcaseBadges(state.showcaseBadges, achievements)
@@ -191,6 +210,20 @@ fun ProfileScreen(
         }
     }
 
+    // 支付通知一键记账：打开时若尚未授予「通知使用权」，弹权限说明卡引导去系统设置。
+    // 开关先落 true（意图明确），服务侧仍要求使用权实际授予后才会被系统绑定生效。
+    val onPayNotifyChange: (Boolean) -> Unit = { on ->
+        coroutineScope.launch { settingsManager.setPayNotifyEnabled(on) }
+        if (on) {
+            val granted = PayNotifyListenerService.listenerGranted(context)
+            if (granted) {
+                Toast.makeText(context, "已开启，检测到支付通知会提醒记一笔", Toast.LENGTH_SHORT).show()
+            } else {
+                showPayNotifyGuide = true
+            }
+        }
+    }
+
     // 图库选背景：选完先进入取景框裁剪路由，确认后才落盘写回设置。
     val pickBackgroundLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -226,6 +259,31 @@ fun ProfileScreen(
             @Suppress("DEPRECATION")
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "1.0"
+    }
+
+    // 年度账单分享图导出（Task 2.7）：全量账单聚合 → Canvas 年度版式 → ACTION_SEND 分享面板。
+    val exportAnnualShare: (Int) -> Unit = { year ->
+        coroutineScope.launch {
+            val bills = repository.observeAllBills().first()
+            val stats = aggregateAnnualStats(bills, year)
+            val uri = withContext(Dispatchers.IO) {
+                BillImageExporter.exportAnnual(context, year, stats)
+            }
+            if (uri == null) {
+                Toast.makeText(context, "生成年度账单失败，请重试", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                context.startActivity(Intent.createChooser(send, "分享年度账单"))
+            } catch (_: Exception) {
+                Toast.makeText(context, "未找到可分享的应用", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // 登录态变化时刷新 profile。
@@ -295,9 +353,11 @@ fun ProfileScreen(
                     hour = dailyReportHour,
                     minute = dailyReportMinute,
                     qqBot = dailyReportQqBot,
+                    payNotify = payNotifyEnabled,
                     onEnabledChange = onDailyReportEnabledChange,
                     onTimeClick = { dialog = ProfileDialog.TimePicker },
-                    onQqBotChange = onDailyReportQqBotChange
+                    onQqBotChange = onDailyReportQqBotChange,
+                    onPayNotifyChange = onPayNotifyChange
                 )
             }
             item(key = "personalization") {
@@ -305,6 +365,7 @@ fun ProfileScreen(
                     themeMode = themeMode,
                     backgroundUri = backgroundUri,
                     cardOverlay = cardOverlay,
+                    quickAmountsMinor = quickAmounts,
                     onThemeClick = { dialog = ProfileDialog.Theme },
                     onCustomThemeClick = onCustomThemeClick,
                     onBackgroundClick = {
@@ -313,7 +374,8 @@ fun ProfileScreen(
                         )
                     },
                     onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
-                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } }
+                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } },
+                    onQuickAmountsClick = { showQuickAmountsEditor = true }
                 )
             }
             item(key = "about") {
@@ -326,6 +388,7 @@ fun ProfileScreen(
                             exportBillsToCsv(context, bills)
                         }
                     },
+                    onAnnualReportClick = { showAnnualYearPicker = true },
                     onLogoutClick = { dialog = ProfileDialog.Logout }
                 )
             }
@@ -393,6 +456,131 @@ fun ProfileScreen(
                 onDismiss = dismissDialog
             )
     }
+
+    // 支付通知监听权限说明（独立于上面的 ProfileDialog 状态机，仅此一处使用）：
+    // 明示用途 + 数据边界（纯本地解析、不上传），引导去系统设置授予「通知使用权」。
+    if (showPayNotifyGuide) {
+        AlertDialog(
+            onDismissRequest = { showPayNotifyGuide = false },
+            title = { Text("开启支付通知记账") },
+            text = {
+                Text(
+                    text = "开启后，检测到微信 / 支付宝 / 银行 App 的支付或收款通知时，" +
+                        "会发一条「记一笔」提醒，点按即可带金额快速记账。\n\n" +
+                        "· 需要授予本应用系统「通知使用权」，仅用于读取上述白名单应用的支付通知；\n" +
+                        "· 通知内容只在本机解析，不上传、不保存；\n" +
+                        "· 随时可以在这里关闭。",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showPayNotifyGuide = false
+                    PayNotifyListenerService.openListenerSettings(context)
+                }) { Text("去开启使用权") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPayNotifyGuide = false }) { Text("知道了") }
+            }
+        )
+    }
+
+    // 年度账单年份选择：当年与之前 4 年（无账单的年份导出为「空年贺词」版式，不拦截）。
+    if (showAnnualYearPicker) {
+        val currentYear = remember { today().year }
+        AlertDialog(
+            onDismissRequest = { showAnnualYearPicker = false },
+            title = { Text("选择年份") },
+            text = {
+                Column {
+                    (currentYear downTo currentYear - 4).forEach { year ->
+                        TextButton(onClick = {
+                            showAnnualYearPicker = false
+                            exportAnnualShare(year)
+                        }) { Text("${year} 年") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAnnualYearPicker = false }) { Text("取消") }
+            }
+        )
+    }
+
+    // 小组件快捷金额编辑：两个「元」输入框，合法才落库（整数分存储）。
+    if (showQuickAmountsEditor) {
+        QuickAmountsEditorDialog(
+            current = quickAmounts,
+            onConfirm = { minors ->
+                showQuickAmountsEditor = false
+                coroutineScope.launch { settingsManager.setQuickAmounts(minors) }
+                Toast.makeText(context, "小组件快捷金额已更新", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showQuickAmountsEditor = false }
+        )
+    }
+}
+
+/**
+ * 小组件快捷金额编辑弹窗：两组「元」输入（最多 2 个 chip），格式非法时提示且不关闭。
+ * 金额入参「元字符串」→ [Money.parseMinor] 转整数分落库，与全 App 金额口径一致。
+ */
+@Composable
+private fun QuickAmountsEditorDialog(
+    current: List<Long>,
+    onConfirm: (List<Long>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val first = remember(current) {
+        mutableStateOf(current.getOrNull(0)?.let { Money.toYuanInputString(it) } ?: "")
+    }
+    val second = remember(current) {
+        mutableStateOf(current.getOrNull(1)?.let { Money.toYuanInputString(it) } ?: "")
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("小组件快捷金额") },
+        text = {
+            Column {
+                Text(
+                    text = "桌面小组件上会显示两个金额 chip，点按直接预填记账（最多 2 个）。",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = first.value,
+                    onValueChange = { first.value = it },
+                    label = { Text("金额一（元）") },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = second.value,
+                    onValueChange = { second.value = it },
+                    label = { Text("金额二（元，可留空）") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val minors = listOf(first.value, second.value)
+                    .filter { it.isNotBlank() }
+                    .map { Money.parseMinor(it) }
+                if (minors.any { it == null }) {
+                    Toast.makeText(context, "金额格式不正确，请输入如 12.50", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                onConfirm(minors.filterNotNull())
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 /** 我的页悬浮顶栏：极简，仅居中「我的」标题 + scrim 渐隐（滚动后渐显）。 */

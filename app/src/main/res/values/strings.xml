@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">RinklNote</string>
     <string name="app_widget_description">今日/本月收支概览，点击分类即可快速记账</string>
+    <!-- 长按快捷方式 -->
+    <string name="shortcut_voice_short">语音记账</string>
+    <string name="shortcut_voice_long">语音说一句，自动记账</string>
+    <string name="shortcut_quick_short">快速记账</string>
+    <string name="shortcut_quick_long">打开快速记账抽屉</string>
+    <string name="shortcut_search_short">搜账单</string>
+    <string name="shortcut_search_long">搜索历史账单</string>
 </resources>

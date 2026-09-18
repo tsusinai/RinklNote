@@ -143,6 +143,10 @@ interface ApiService {
     @DELETE("api/templates/{id}")
     suspend fun deleteTemplate(@Path("id") id: Long): MessageResponse
 
+    // 多币种真汇率（Task 4.2）：rates 语义 = 每 1 单位该币种兑 CNY；失败/离线由调用方回落演示表
+    @GET("api/rates")
+    suspend fun getRates(): RatesResponse
+
     // Suggestion
     @GET("api/insights/suggest")
     suspend fun getSuggestion(): Map<String, String>

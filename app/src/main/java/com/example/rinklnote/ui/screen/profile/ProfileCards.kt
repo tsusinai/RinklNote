@@ -13,6 +13,7 @@ import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.SettingsRow
+import com.example.rinklnote.util.Money
 
 /**
  * «我的»页的四张设置分组卡。
@@ -59,16 +60,18 @@ internal fun SyncCard(
     }
 }
 
-/** «通知» 组：本地通知开关 + 通知时间 + QQ 日报推送。 */
+/** «通知» 组：本地通知开关 + 通知时间 + QQ 日报推送 + 支付通知一键记账（默认关）。 */
 @Composable
 internal fun DailyReportCard(
     enabled: Boolean,
     hour: Int,
     minute: Int,
     qqBot: Boolean,
+    payNotify: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onTimeClick: () -> Unit,
-    onQqBotChange: (Boolean) -> Unit
+    onQqBotChange: (Boolean) -> Unit,
+    onPayNotifyChange: (Boolean) -> Unit
 ) {
     SettingsGroupCard(title = "通知") {
         SettingsRow(
@@ -89,6 +92,13 @@ internal fun DailyReportCard(
             label = "QQ 日报推送",
             trailing = { Switch(checked = qqBot, onCheckedChange = onQqBotChange) }
         )
+        RinklDivider()
+        // 支付通知监听：默认关；开启时由 ProfileScreen 弹权限说明并引导授予「通知使用权」
+        SettingsRow(
+            icon = R.drawable.ic_notification,
+            label = "支付通知一键记账",
+            trailing = { Switch(checked = payNotify, onCheckedChange = onPayNotifyChange) }
+        )
     }
 }
 
@@ -106,11 +116,13 @@ internal fun PersonalizationCard(
     themeMode: ThemeMode,
     backgroundUri: String?,
     cardOverlay: Boolean,
+    quickAmountsMinor: List<Long>,
     onThemeClick: () -> Unit,
     onCustomThemeClick: () -> Unit,
     onBackgroundClick: () -> Unit,
     onRemoveBackground: () -> Unit,
-    onCardOverlayChange: (Boolean) -> Unit
+    onCardOverlayChange: (Boolean) -> Unit,
+    onQuickAmountsClick: () -> Unit
 ) {
     SettingsGroupCard(title = "个性化") {
         // —— 主题外观 ——
@@ -144,6 +156,14 @@ internal fun PersonalizationCard(
                 onClick = onRemoveBackground
             )
         }
+        // —— 小组件 ——
+        RinklDivider()
+        SettingsRow(
+            icon = R.drawable.ic_wallet,
+            label = "小组件快捷金额",
+            value = quickAmountsMinor.joinToString(" / ") { "¥${Money.toYuanInputString(it)}" },
+            onClick = onQuickAmountsClick
+        )
         // —— 可读性 ——
         RinklDivider()
         SettingsRow(
@@ -161,12 +181,13 @@ internal fun PersonalizationCard(
     }
 }
 
-/** «通用» 组：导出账单、版本信息、退出登录（红字置底）。 */
+/** «通用» 组：导出账单、年度账单分享图、版本信息、退出登录（红字置底）。 */
 @Composable
 internal fun AboutCard(
     isLoggedIn: Boolean,
     versionName: String,
     onExportClick: () -> Unit,
+    onAnnualReportClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     SettingsGroupCard(title = "通用") {
@@ -174,6 +195,14 @@ internal fun AboutCard(
             icon = R.drawable.ic_export,
             label = "导出账单 (CSV)",
             onClick = onExportClick
+        )
+        RinklDivider()
+        // 年度账单分享图：12 月热力格 + 年总收支 + Top5 分类 + 小盘贺词（Task 2.7）
+        SettingsRow(
+            icon = R.drawable.ic_chart,
+            label = "年度账单",
+            value = "分享图",
+            onClick = onAnnualReportClick
         )
         RinklDivider()
         SettingsRow(

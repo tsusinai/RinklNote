@@ -43,6 +43,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -250,7 +251,7 @@ fun AppNavigation(app: RinklNoteApp) {
         factory = BookkeepingViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService)
     )
     val quickAddVM: QuickAddViewModel = viewModel(
-        factory = QuickAddViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService)
+        factory = QuickAddViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService, app.placeRepository)
     )
     val assetsVM: AssetsViewModel = viewModel(
         factory = AssetsViewModel.Factory(app.accountRepository, app.syncManager)
@@ -317,18 +318,56 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
+    // Voice input: bottom floating mini bar (device real-time recognition, server
+    // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
+    // （声明须先于 pendingQuickAdd 消费：长按快捷方式「语音记账」的深链在该效应里调用 startVoice。）
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            quickAddSurface = QuickAddSurface.Closed
+            voiceActive = true
+        } else {
+            Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val startVoice: (VoiceTarget) -> Unit = { target ->
+        voiceTarget = target
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            quickAddSurface = QuickAddSurface.Closed
+            voiceActive = true
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // 语音会话结束（✕/完成或返回键）：关语音条 + 抽屉，清空多笔计数并重置抽屉状态。
+    val endVoiceSession: () -> Unit = {
+        voiceActive = false
+        voiceTarget = VoiceTarget.QUICK_ADD
+        quickAddSurface = QuickAddSurface.Closed
+        voiceBookedCount = 0
+        voiceConfirm = null
+        quickAddVM.reset()
+    }
+
     // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并打开 QuickAdd 抽屉应用预填。
     // 起点即 "bookkeeping"，导航到同 start 路由不会触发上面「离开记账页才关抽屉」的效果，故时序安全。
+    // 长按快捷方式「语音记账」深链带 voice=1：落记账页后直接进语音条（不开预填抽屉）。
     LaunchedEffect(pendingQuickAdd) {
         val pending = pendingQuickAdd ?: return@LaunchedEffect
         navController.navigate("bookkeeping") { launchSingleTop = true }
-        quickAddSurface = QuickAddSurface.Drawer
-        if (pending.categoryId != null) {
-            // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
-            quickAddVM.preselectCategory(pending.categoryId)
-        } else {
-            // 深链：金额/分类名/备注/类型 → 应用完整预填。
-            quickAddVM.applyQuickAddPrefill(pending)
+        when {
+            pending.voice -> startVoice(VoiceTarget.QUICK_ADD)
+            pending.categoryId != null ->
+                // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
+                quickAddVM.preselectCategory(pending.categoryId)
+            else ->
+                // 深链：金额/分类名/备注/类型 → 应用完整预填。
+                quickAddVM.applyQuickAddPrefill(pending)
         }
         app.setPendingQuickAdd(null)
     }
@@ -421,41 +460,6 @@ fun AppNavigation(app: RinklNoteApp) {
     // 返回交给 NavHost 的返回栈处理：在 AI 或非首页 tab 按返回会 pop 回记账(start)，
     // 在记账页按返回交给系统默认。页面内的弹窗（预算键盘/月明细/余额弹窗等）
     // 有自己的 BackHandler，组合优先级更高，会先于导航返回被消费。
-
-    // Voice input: bottom floating mini bar (device real-time recognition, server
-    // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            quickAddSurface = QuickAddSurface.Closed
-            voiceActive = true
-        } else {
-            Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    val startVoice: (VoiceTarget) -> Unit = { target ->
-        voiceTarget = target
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
-            quickAddSurface = QuickAddSurface.Closed
-            voiceActive = true
-        } else {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    // 语音会话结束（✕/完成或返回键）：关语音条 + 抽屉，清空多笔计数并重置抽屉状态。
-    val endVoiceSession: () -> Unit = {
-        voiceActive = false
-        voiceTarget = VoiceTarget.QUICK_ADD
-        quickAddSurface = QuickAddSurface.Closed
-        voiceBookedCount = 0
-        voiceConfirm = null
-        quickAddVM.reset()
-    }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 自定义背景铺满整窗：底部 tab 栏、状态栏、导航栏都在同一张图上，避免底部露出纯色条。
@@ -628,15 +632,20 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
                 }
                 composable("multi-currency") {
-                    // 多币种预实现：本位币选择存 DataStore，汇率演示表。
+                    // 多币种：本位币存 DataStore，汇率接服务端 /api/rates（离线回落演示表）
                     MultiCurrencyScreen(
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         settingsManager = app.settingsManager,
+                        api = app.apiService,
                         onBack = { navController.popBackStack() }
                     )
                 }
-                composable("bill-search") {
+                composable(
+                    route = "bill-search",
+                    // 长按快捷方式「搜账单」深链：rinklnote://bill-search（NavHost 自动消费）
+                    deepLinks = listOf(navDeepLink { uriPattern = "rinklnote://bill-search" })
+                ) {
                     // 搜索账单：全量 Flow 内存过滤，结果行点击跳账单编辑。
                     val searchVM: BillSearchViewModel = viewModel(
                         factory = BillSearchViewModel.Factory(app.repository)

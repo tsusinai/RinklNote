@@ -246,6 +246,17 @@ private fun DrawerContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // 常去地点建议：打点位置接近已知地点时出现（「用」= 选中该地点的常用分类）。
+            state.placeSuggestion?.let { place ->
+                SuggestionSection(
+                    label = "上次在「${place.placeName}」附近记过" +
+                        (place.categoryName?.let { " · 常用「$it」" } ?: ""),
+                    onUse = { viewModel.onEvent(QuickAddEvent.PlaceSuggestionClick) },
+                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissPlaceSuggestion) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             if (state.templates.isNotEmpty()) {
                 TemplatesSection(
                     templates = state.templates,
@@ -270,6 +281,20 @@ private fun DrawerContent(
                 },
                 onCleared = { viewModel.onEvent(QuickAddEvent.ClearLocation) }
             )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 小票 OCR：拍照 / 相册选图 → 端上识别 → 金额/日期/商家候选 chips 点选预填
+            var showOcrFlow by remember { mutableStateOf(false) }
+            OcrChipRow(onClick = { showOcrFlow = true })
+            if (showOcrFlow) {
+                ReceiptOcrDialog(
+                    onDismiss = { showOcrFlow = false },
+                    onPickAmount = { viewModel.onEvent(QuickAddEvent.OcrAmountPicked(it)) },
+                    onPickDate = { viewModel.onEvent(QuickAddEvent.OcrDatePicked(it)) },
+                    onPickMerchant = { viewModel.onEvent(QuickAddEvent.OcrMerchantPicked(it)) }
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -723,6 +748,37 @@ private fun CountBefore(
             fontSize = 12.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+        )
+    }
+}
+
+/**
+ * 小票 OCR chip（快捷记账）：点开拍照 / 相册选图的二级识别流（见 [ReceiptOcrDialog]）。
+ * 识别全程端上（ML Kit 中文模型），图片不上传；候选点选经事件回填抽屉状态。
+ */
+@Composable
+private fun OcrChipRow(onClick: () -> Unit) {
+    val rinkl = LocalRinklColors.current
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .then(applyCardGlass(RoundedCornerShape(14.dp)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_camera),
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = rinkl.iconButtonColor ?: MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = "拍小票记一笔",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

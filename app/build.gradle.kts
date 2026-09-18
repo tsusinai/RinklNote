@@ -83,6 +83,9 @@ dependencies {
     // ExifInterface - 背景取景框解码回正
     implementation(libs.androidx.exifinterface)
 
+    // ML Kit - 端上中文文本识别（小票 OCR 记账，bundled 模型离线可用）
+    implementation(libs.mlkit.text.recognition.chinese)
+
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

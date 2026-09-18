@@ -63,7 +63,8 @@ class RinklNoteAppWidget : GlanceAppWidget() {
         val app = context.applicationContext as RinklNoteApp
         val repo = app.repository
         val budgetRepo = app.budgetRepository
-        val data = withContext(Dispatchers.IO) { loadWidgetData(repo, budgetRepo) }
+        val quickAmounts = app.settingsManager.quickAmounts.first()
+        val data = withContext(Dispatchers.IO) { loadWidgetData(repo, budgetRepo, quickAmounts) }
 
         provideContent {
             GlanceTheme {
@@ -93,12 +94,21 @@ class RinklNoteAppWidgetReceiver : GlanceAppWidgetReceiver() {
     companion object {
         const val EXTRA_OPEN_QUICK_ADD = "extra_open_quick_add"
         const val EXTRA_CATEGORY_ID = "extra_category_id"
+        const val EXTRA_AMOUNT_MINOR = "extra_amount_minor"
 
         fun categoryAddIntent(context: Context, categoryId: Long): Intent =
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(EXTRA_OPEN_QUICK_ADD, true)
                 putExtra(EXTRA_CATEGORY_ID, categoryId)
+            }
+
+        /** 预设金额快捷 chip：带金额 extra 拉起主界面并预填快速记账（支出）。 */
+        fun amountAddIntent(context: Context, amountMinor: Long): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_OPEN_QUICK_ADD, true)
+                putExtra(EXTRA_AMOUNT_MINOR, amountMinor)
             }
     }
 }
@@ -111,13 +121,19 @@ private data class WidgetData(
     val monthExpense: Long,
     val budget: Long?,
     val ranking: List<Pair<com.example.rinklnote.data.db.entity.Category, Long>>,
-    val masked: Boolean
+    val masked: Boolean,
+    /** 预设金额快捷 chip（整数分，SettingsManager 可配置，默认 ¥10/¥50）。 */
+    val quickAmounts: List<Long>
 )
 
 private var lastRefLoadTime = 0L
 
 @OptIn(androidx.glance.ExperimentalGlanceApi::class)
-private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.BillRepository, budgetRepo: com.example.rinklnote.data.repository.BudgetRepository): WidgetData {
+private suspend fun loadWidgetData(
+    repo: com.example.rinklnote.data.repository.BillRepository,
+    budgetRepo: com.example.rinklnote.data.repository.BudgetRepository,
+    quickAmounts: List<Long>
+): WidgetData {
     val zone = bookkeepingZone()
     val today = LocalDate.now(zone)
     val todayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
@@ -156,7 +172,8 @@ private suspend fun loadWidgetData(repo: com.example.rinklnote.data.repository.B
         monthExpense = monthExpense,
         budget = budget,
         ranking = ranking,
-        masked = BalancePrivacy.hidden.value
+        masked = BalancePrivacy.hidden.value,
+        quickAmounts = quickAmounts
     )
 }
 
@@ -305,16 +322,22 @@ private fun Widget2x2(d: WidgetData, size: DpSize) {
 
         Spacer(GlanceModifier.height(6.dp))
 
-        // Zone 3: 本月支出 Top 4 分类快捷记账芯片
-        val chips = d.ranking.map { it.first }
-        if (chips.isNotEmpty()) {
+        // Zone 3: 预设金额快捷 chip（可配置，默认 ¥10/¥50）+ 本月支出 Top 分类快捷记账芯片。
+        // 有金额 chip 时分类让位（最多 3 个），保证 2×2 宽度下每个 chip 仍有可用点击面积。
+        val amountChips = d.quickAmounts
+        val categoryChips = d.ranking.map { it.first }.take(if (amountChips.isNotEmpty()) 3 else 4)
+        val totalChips = amountChips.size + categoryChips.size
+        if (totalChips > 0) {
             Row(modifier = GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-                val cellW = (usable - 4.dp) / chips.size
-                chips.forEach { cat ->
+                val cellW = (usable - 4.dp) / totalChips
+                amountChips.forEach { amountMinor ->
+                    AmountChip(amountMinor, GlanceModifier.width(cellW))
+                }
+                categoryChips.forEach { cat ->
                     CategoryChip(cat, GlanceModifier.width(cellW))
                 }
             }
-    }
+        }
     }
 }
 
@@ -355,7 +378,7 @@ private fun CategoryChip(cat: com.example.rinklnote.data.db.entity.Category, mod
         modifier = modifier
             .padding(2.dp)
             .cornerRadius(8.dp)
-            
+
             .background(c.surfaceVariant)
             .clickable(actionStartActivity(RinklNoteAppWidgetReceiver.categoryAddIntent(LocalContext.current, cat.id)))
             .padding(vertical = 4.dp),
@@ -369,6 +392,35 @@ private fun CategoryChip(cat: com.example.rinklnote.data.db.entity.Category, mod
         Text(
             text = cat.name,
             style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium, color = c.onSurface),
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * 预设金额快捷 chip：「＋¥10」样式，点按直接拉起快速记账并预填该金额（支出）。
+ * 金额走 [Money.formatPlain]（widget 内不读应用展示偏好，保持恒定带 ¥ 的观感）。
+ */
+@Composable
+private fun AmountChip(amountMinor: Long, modifier: GlanceModifier) {
+    val c = GlanceTheme.colors
+    Column(
+        modifier = modifier
+            .padding(2.dp)
+            .cornerRadius(8.dp)
+            .background(c.primaryContainer)
+            .clickable(actionStartActivity(RinklNoteAppWidgetReceiver.amountAddIntent(LocalContext.current, amountMinor)))
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+    ) {
+        Text(
+            text = "＋¥${fmtAmount(amountMinor)}",
+            style = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Bold, color = c.primary),
+            maxLines = 1
+        )
+        Text(
+            text = "记一笔",
+            style = TextStyle(fontSize = 9.sp, color = c.onSurface),
             maxLines = 1
         )
     }

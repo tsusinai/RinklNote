@@ -10,6 +10,8 @@ import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.BudgetRepository
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.domain.BudgetBurnRisk
+import com.example.rinklnote.domain.budgetBurnRisk
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.getMonthStart
@@ -114,6 +116,17 @@ data class BudgetState(
         get() {
             val today = LocalDate.now(bookkeepingZone())
             return today.lengthOfMonth() - today.dayOfMonth + 1
+        }
+
+    /**
+     * 月总额预算燃烧风险（Task 4.1 预算-挑战联动，实时派生零存储）：
+     * 按当前燃烧速度预测到月末 ÷ 预算定档（口径与 Web 端钉死一致）；未设预算 → null。
+     */
+    val totalBurnRisk: BudgetBurnRisk?
+        get() {
+            val budget = totalBudget ?: return null
+            val today = LocalDate.now(bookkeepingZone())
+            return budgetBurnRisk(monthExpenseMinor, budget.amountMinor, today.dayOfMonth, today.lengthOfMonth())
         }
 }
 

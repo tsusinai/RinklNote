@@ -46,6 +46,7 @@ import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.network.dto.ParseResponse
 import com.example.rinklnote.data.network.dto.QueryRequest
 import com.example.rinklnote.data.network.dto.QueryResponse
+import com.example.rinklnote.data.network.dto.RatesResponse
 import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.TranscribeResponse
@@ -412,6 +413,7 @@ class AiViewModelTest {
         override suspend fun createTemplate(template: TemplateDTO): TemplateDTO =
             TemplateDTO(id = 0, label = "", amountMinor = 0L, categoryId = 0, categoryName = "", accountId = 0)
         override suspend fun deleteTemplate(id: Long): MessageResponse = MessageResponse("")
+        override suspend fun getRates(): RatesResponse = RatesResponse()
         override suspend fun getSuggestion(): Map<String, String> = emptyMap()
         override suspend fun getSuggestConfig(): Map<String, String> = emptyMap()
         override suspend fun updateSuggestConfig(config: Map<String, String>): MessageResponse = MessageResponse("")

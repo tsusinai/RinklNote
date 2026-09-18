@@ -16,6 +16,7 @@ import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
+import com.example.rinklnote.data.repository.PlaceRepository
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
@@ -52,12 +53,26 @@ data class QuickAddState(
     val suggestion: SuggestionData? = null,
     val suggestionDismissed: Boolean = false,
     /** 已打点的位置：仅用户主动点「位置」chip 采集一次才有值；null = 不带位置。 */
-    val location: LocationTag? = null
+    val location: LocationTag? = null,
+
+    /** 本笔记账日覆盖：小票 OCR 识别到票面日期后可点选；null = 今天（业务时区）。 */
+    val dateOverride: LocalDate? = null,
+
+    /** 常去地点建议：打点位置接近已知地点时出现（零存储实时派生）。 */
+    val placeSuggestion: PlaceSuggestionData? = null
 ) {
     data class SuggestionData(val label: String, val categoryName: String, val amount: Long)
 
     /** 打点到账单上的经纬度（度）。 */
     data class LocationTag(val latitude: Double, val longitude: Double)
+
+    /** 常去地点建议：已知地点 + 它关联的常用分类（按 id 在点选时解析，避免陈旧快照）。 */
+    data class PlaceSuggestionData(
+        val placeId: Long,
+        val placeName: String,
+        val categoryId: Long?,
+        val categoryName: String?
+    )
 
     val categories: List<Category>
         get() = if (billType == BillType.EXPENSE) expenseCategories else incomeCategories
@@ -89,6 +104,23 @@ sealed interface QuickAddEvent {
 
     /** 语音连续多笔：一整句口语转写（可能含多笔金额），逐笔入库但不动抽屉。 */
     data class VoiceUtterance(val text: String) : QuickAddEvent
+
+    // ── 小票 OCR 候选点选（可多次点选、跨类连选）──
+
+    /** 金额候选点选：回填金额框（「元」输入串，与键盘输入同格式）。 */
+    data class OcrAmountPicked(val yuanText: String) : QuickAddEvent
+
+    /** 日期候选点选：覆盖本笔记账日（默认今天）。 */
+    data class OcrDatePicked(val date: LocalDate) : QuickAddEvent
+
+    /** 商家候选点选：回填备注。 */
+    data class OcrMerchantPicked(val merchant: String) : QuickAddEvent
+
+    /** 常去地点建议点「使用」：选中该地点的常用分类。 */
+    data object PlaceSuggestionClick : QuickAddEvent
+
+    /** 关闭常去地点建议（本次打点内不再打扰）。 */
+    data object DismissPlaceSuggestion : QuickAddEvent
 }
 
 sealed interface QuickAddEffect {
@@ -106,7 +138,8 @@ class QuickAddViewModel(
     private val repository: BillRepository,
     private val accountRepository: AccountRepository,
     private val syncManager: SyncManager? = null,
-    private val api: ApiService? = null
+    private val api: ApiService? = null,
+    private val placeRepository: PlaceRepository? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(QuickAddState())
@@ -184,10 +217,59 @@ class QuickAddViewModel(
                 it.copy(suggestion = null, suggestionDismissed = true)
             }
             is QuickAddEvent.Confirm -> confirm()
-            is QuickAddEvent.LocationResolved -> _state.update {
-                it.copy(location = QuickAddState.LocationTag(event.latitude, event.longitude))
+            is QuickAddEvent.LocationResolved -> {
+                _state.update {
+                    it.copy(
+                        location = QuickAddState.LocationTag(event.latitude, event.longitude),
+                        // 重新打点即换位置，旧建议作废后按新坐标异步重查
+                        placeSuggestion = null
+                    )
+                }
+                resolvePlaceSuggestion(event.latitude, event.longitude)
             }
-            is QuickAddEvent.ClearLocation -> _state.update { it.copy(location = null) }
+            is QuickAddEvent.ClearLocation -> _state.update {
+                it.copy(location = null, placeSuggestion = null)
+            }
+            is QuickAddEvent.OcrAmountPicked -> _state.update { it.copy(amount = event.yuanText) }
+            is QuickAddEvent.OcrDatePicked -> _state.update { it.copy(dateOverride = event.date) }
+            is QuickAddEvent.OcrMerchantPicked -> _state.update { it.copy(remark = event.merchant) }
+            is QuickAddEvent.PlaceSuggestionClick -> onPlaceSuggestionClick()
+            is QuickAddEvent.DismissPlaceSuggestion -> _state.update { it.copy(placeSuggestion = null) }
+        }
+    }
+
+    /**
+     * 常去地点建议点「使用」：按建议携带的分类 id 在**当前**分类快照里解析并选中
+     * （避免存旧快照），解析不到（分类被删）则静默关闭建议。
+     */
+    private fun onPlaceSuggestionClick() {
+        val suggestion = _state.value.placeSuggestion ?: return
+        val categoryId = suggestion.categoryId ?: return
+        val category = _state.value.categories.firstOrNull { it.id == categoryId } ?: run {
+            _state.update { it.copy(placeSuggestion = null) }
+            return
+        }
+        selectCategory(category)
+        _state.update { it.copy(placeSuggestion = null) }
+    }
+
+    /** 打点成功后的异步匹配：接近已知地点 → 弹「上次在这里记过」建议（fire-and-forget）。 */
+    private fun resolvePlaceSuggestion(lat: Double, lng: Double) {
+        val repo = placeRepository ?: return
+        viewModelScope.launch {
+            val nearby = runCatching { repo.findNearby(lat, lng) }.getOrNull() ?: return@launch
+            val categoryId = nearby.categoryId
+            val categoryName = _state.value.categories.firstOrNull { it.id == categoryId }?.name
+            _state.update {
+                it.copy(
+                    placeSuggestion = QuickAddState.PlaceSuggestionData(
+                        placeId = nearby.id,
+                        placeName = nearby.name,
+                        categoryId = categoryId,
+                        categoryName = categoryName
+                    )
+                )
+            }
         }
     }
 
@@ -577,7 +659,9 @@ class QuickAddViewModel(
                     subCategoryName = s.selectedSubCategory?.name,
                     accountId = account.id,
                     remark = s.remark.ifBlank { null },
-                    date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli(),
+                    // 记账日：小票 OCR 点选了票面日期则用它，否则今天（业务时区）
+                    date = (s.dateOverride ?: LocalDate.now(bookkeepingZone()))
+                        .atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli(),
                     // 位置：仅用户点过「位置」chip 的账单带经纬度
                     latitude = s.location?.latitude,
                     longitude = s.location?.longitude
@@ -590,6 +674,17 @@ class QuickAddViewModel(
                 // unsynced and every full sync re-POSTs a duplicate.
                 val saved = bill.copy(id = savedId)
                 syncManager?.let { launch { it.pushBill(saved) } }
+                // 常去地点异步累计：带位置落账后合并/新建 places（失败不影响记账）。
+                val location = s.location
+                if (location != null && placeRepository != null) {
+                    launch {
+                        runCatching {
+                            placeRepository.recordPlace(
+                                location.latitude, location.longitude, category.id, category.name
+                            )
+                        }
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -625,7 +720,11 @@ class QuickAddViewModel(
                 suggestion = null,
                 suggestionDismissed = false,
                 // 位置不跨笔继承：本笔记完，下一笔默认重新开始（要不要打点由用户再决定）
-                location = null
+                location = null,
+                // 记账日覆盖同样不跨笔继承
+                dateOverride = null,
+                // 常去地点建议随位置一起清空
+                placeSuggestion = null
             )
         }
     }
@@ -634,11 +733,12 @@ class QuickAddViewModel(
         private val repository: BillRepository,
         private val accountRepository: AccountRepository,
         private val syncManager: SyncManager? = null,
-        private val api: ApiService? = null
+        private val api: ApiService? = null,
+        private val placeRepository: PlaceRepository? = null
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return QuickAddViewModel(repository, accountRepository, syncManager, api) as T
+            return QuickAddViewModel(repository, accountRepository, syncManager, api, placeRepository) as T
         }
     }
 }

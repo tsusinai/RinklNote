@@ -159,6 +159,60 @@ fun lessBuySaving(categoryTotalMinor: Long, percent: Int): Long {
     return (categoryTotalMinor * p + 50) / 100
 }
 
+// ---------- 预算燃烧风险（Task 4.1 预算-挑战联动，App/Web 口径钉死） ----------
+
+/** 风险档位：<85 低、85~100 中、>100 高（边界值 85/100 归中风险，见 [budgetRiskLevel]）。 */
+enum class BudgetRiskLevel { LOW, MEDIUM, HIGH }
+
+/** 档位阈值（百分比）：与 Web 端图表页预警标记同源常量，改动须三端同步。 */
+const val BUDGET_RISK_MEDIUM_PCT = 85.0
+const val BUDGET_RISK_HIGH_PCT = 100.0
+
+/**
+ * 预算燃烧风险派生结果（全部实时推导，零存储）。
+ * @param pct 预测到周期末的累计消耗 ÷ 周期预算 × 100（预测值按燃烧速度外推，HALF_UP 到分）
+ * @param level 档位（<85 低 / 85~100 中 / >100 高）
+ * @param forecastMinor 预测到周期末的累计消耗（整数分）
+ */
+data class BudgetBurnRisk(
+    val pct: Double,
+    val level: BudgetRiskLevel,
+    val forecastMinor: Long
+)
+
+/**
+ * 档位判定（钉死口径）：pct < 85 → LOW；85 ≤ pct ≤ 100 → MEDIUM；pct > 100 → HIGH。
+ * 边界值 85 与 100 都归**中风险**（预警提前、达成缓冲的最后一线）。
+ */
+fun budgetRiskLevel(pct: Double): BudgetRiskLevel = when {
+    pct < BUDGET_RISK_MEDIUM_PCT -> BudgetRiskLevel.LOW
+    pct <= BUDGET_RISK_HIGH_PCT -> BudgetRiskLevel.MEDIUM
+    else -> BudgetRiskLevel.HIGH
+}
+
+/**
+ * 预算燃烧风险：按当前燃烧速度（spent ÷ elapsedDays）外推到周期末的累计消耗，
+ * 与周期预算的比值定档。口径与 [forecastMonth] 一致（HALF_UP 整数运算），纯整数求预测、
+ * 仅百分比一步转 Double（与预算页 progress 同哲学）。
+ *
+ * @param spentMinor 周期已消耗（整数分）
+ * @param budgetMinor 周期预算（整数分；≤0 = 未设预算，返回 null 不预警）
+ * @param elapsedDays 已过天数（含今天；≤0 无法外推 → null）
+ * @param totalDays 周期总天数（≤0 无法外推 → null）
+ */
+fun budgetBurnRisk(
+    spentMinor: Long,
+    budgetMinor: Long,
+    elapsedDays: Int,
+    totalDays: Int,
+): BudgetBurnRisk? {
+    if (budgetMinor <= 0 || elapsedDays <= 0 || totalDays <= 0) return null
+    // 预测累计 = spent × total ÷ elapsed（HALF_UP，与 forecastMonth 同式）
+    val forecast = (spentMinor * totalDays + elapsedDays / 2) / elapsedDays
+    val pct = forecast * 100.0 / budgetMinor
+    return BudgetBurnRisk(pct = pct, level = budgetRiskLevel(pct), forecastMinor = forecast)
+}
+
 // ---------- 逐月预算结算（成就评估输入） ----------
 
 /**

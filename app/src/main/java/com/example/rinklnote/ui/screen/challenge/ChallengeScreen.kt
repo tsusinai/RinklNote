@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rinklnote.RinklNoteApp
+import com.example.rinklnote.domain.BudgetRiskLevel
+import com.example.rinklnote.ui.component.BurnRiskBar
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
@@ -112,6 +114,15 @@ fun ChallengeScreen(
             ) {
                 // 顶栏是浮层：首项垫到它下面。
                 item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
+
+                // 预算-挑战联动预警（Task 4.1）：月/周预算烧穿过快 → 橙色提示 + 小盘安慰文案。
+                // LOW 档 takeIf 过滤，不占位不展示。
+                state.monthBurnRisk?.takeIf { it.level != BudgetRiskLevel.LOW }?.let { risk ->
+                    item(key = "month-risk") { BurnRiskBar(risk = risk, periodLabel = "本月") }
+                }
+                state.weeklyBurnRisk?.takeIf { it.level != BudgetRiskLevel.LOW }?.let { risk ->
+                    item(key = "week-risk") { BurnRiskBar(risk = risk, periodLabel = "本周") }
+                }
 
                 item(key = "hero") {
                     HeroPoster(
