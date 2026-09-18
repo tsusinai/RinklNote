@@ -52,7 +52,10 @@ data class QuickAddState(
     val suggestion: SuggestionData? = null,
     val suggestionDismissed: Boolean = false,
     /** 已打点的位置：仅用户主动点「位置」chip 采集一次才有值；null = 不带位置。 */
-    val location: LocationTag? = null
+    val location: LocationTag? = null,
+
+    /** 本笔记账日覆盖：小票 OCR 识别到票面日期后可点选；null = 今天（业务时区）。 */
+    val dateOverride: LocalDate? = null
 ) {
     data class SuggestionData(val label: String, val categoryName: String, val amount: Long)
 
@@ -89,6 +92,17 @@ sealed interface QuickAddEvent {
 
     /** 语音连续多笔：一整句口语转写（可能含多笔金额），逐笔入库但不动抽屉。 */
     data class VoiceUtterance(val text: String) : QuickAddEvent
+
+    // ── 小票 OCR 候选点选（可多次点选、跨类连选）──
+
+    /** 金额候选点选：回填金额框（「元」输入串，与键盘输入同格式）。 */
+    data class OcrAmountPicked(val yuanText: String) : QuickAddEvent
+
+    /** 日期候选点选：覆盖本笔记账日（默认今天）。 */
+    data class OcrDatePicked(val date: LocalDate) : QuickAddEvent
+
+    /** 商家候选点选：回填备注。 */
+    data class OcrMerchantPicked(val merchant: String) : QuickAddEvent
 }
 
 sealed interface QuickAddEffect {
@@ -188,6 +202,9 @@ class QuickAddViewModel(
                 it.copy(location = QuickAddState.LocationTag(event.latitude, event.longitude))
             }
             is QuickAddEvent.ClearLocation -> _state.update { it.copy(location = null) }
+            is QuickAddEvent.OcrAmountPicked -> _state.update { it.copy(amount = event.yuanText) }
+            is QuickAddEvent.OcrDatePicked -> _state.update { it.copy(dateOverride = event.date) }
+            is QuickAddEvent.OcrMerchantPicked -> _state.update { it.copy(remark = event.merchant) }
         }
     }
 
@@ -577,7 +594,9 @@ class QuickAddViewModel(
                     subCategoryName = s.selectedSubCategory?.name,
                     accountId = account.id,
                     remark = s.remark.ifBlank { null },
-                    date = LocalDate.now(bookkeepingZone()).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli(),
+                    // 记账日：小票 OCR 点选了票面日期则用它，否则今天（业务时区）
+                    date = (s.dateOverride ?: LocalDate.now(bookkeepingZone()))
+                        .atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli(),
                     // 位置：仅用户点过「位置」chip 的账单带经纬度
                     latitude = s.location?.latitude,
                     longitude = s.location?.longitude
@@ -625,7 +644,9 @@ class QuickAddViewModel(
                 suggestion = null,
                 suggestionDismissed = false,
                 // 位置不跨笔继承：本笔记完，下一笔默认重新开始（要不要打点由用户再决定）
-                location = null
+                location = null,
+                // 记账日覆盖同样不跨笔继承
+                dateOverride = null
             )
         }
     }

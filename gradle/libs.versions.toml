@@ -31,6 +31,8 @@ kotlinxCoroutinesTest = "1.8.1"
 mockitoCore = "5.14.2"
 mockitoKotlin = "5.4.0"
 glance = "1.1.1"
+# ML Kit 文本识别（中文，bundled 端上模型，离线可用）——小票 OCR 记账
+mlkitTextRecognitionChinese = "16.0.1"
 
 [libraries]
 # AndroidX
@@ -114,6 +116,9 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 # ExifInterface - 图片 EXIF 方向读取（背景取景框解码回正）
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
+
+# ML Kit - 端上中文文本识别（小票 OCR，bundled 模型离线可用、图片不上传）
+mlkit-text-recognition-chinese = { group = "com.google.mlkit", name = "text-recognition-chinese", version.ref = "mlkitTextRecognitionChinese" }
 
 # Server - Ktor Client (for LLM API calls)
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
