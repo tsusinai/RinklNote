@@ -151,13 +151,13 @@ class CoachService(
 
     /**
      * 周报推送文案（PushScheduler WEEKLY_REPORT 周一挂接）：无建议返回 null（不推）。
-     * 文案仅含聚合数字与分类名。
+     * 文案仅含聚合数字与分类名；标题走小盘人格化（Task 1.5）。
      */
     fun weeklyPushCopy(userId: Long, today: LocalDate = TimeUtil.today()): String? {
         val advices = weeklyAdvice(userId, today)
         if (advices.isEmpty()) return null
         return buildString {
-            appendLine("🧾 账单教练·本周提醒")
+            appendLine(MascotVoice.WEEKLY_REPORT_TITLE)
             advices.forEach { appendLine("· ${it.text}") }
         }.trimEnd()
     }

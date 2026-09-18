@@ -130,9 +130,9 @@ class CoachServiceTest {
         assertTrue(over.text.contains("远超"))
         // 隐私红线：文案绝不包含账单备注
         assertFalse(over.text.contains("绝密备注"))
-        // 周报文案可由建议拼出
+        // 周报文案可由建议拼出（标题走小盘人格化）
         val push = coach.weeklyPushCopy(1L, today)!!
-        assertTrue(push.contains("账单教练"))
+        assertTrue(push.contains("小盘周报"))
         assertTrue(push.contains("预计"))
     }
 

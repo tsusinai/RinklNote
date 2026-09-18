@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.coach.MascotVoice
 import io.ktor.util.logging.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,13 +38,13 @@ class AlertNotifier(
         /** 告警消息里异常消息的清洗上限（与摘要同长）。 */
         private val WHITESPACE = Regex("\\s+")
 
-        /** 纯函数：拼装告警文案（可单测）。 */
+        /** 纯函数：拼装告警文案（可单测）。标题走小盘人格化（Task 1.5）。 */
         fun buildAlertText(method: String?, path: String?, cause: Throwable, at: LocalDateTime): String {
             val summary = (cause.message ?: "").replace(WHITESPACE, " ").trim()
                 .take(MAX_SUMMARY_LEN)
             val time = at.format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss"))
             return buildString {
-                appendLine("🚨 服务异常告警")
+                appendLine(MascotVoice.ALERT_TITLE)
                 if (!method.isNullOrBlank() || !path.isNullOrBlank()) {
                     appendLine("路径: ${method ?: "?"} ${path ?: "?"}")
                 }

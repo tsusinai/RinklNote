@@ -226,7 +226,7 @@ fun Application.module() {
             else {
                 val r = insightService.monthlyReview(userId, month)
                 buildString {
-                    append("📊 本月总结\n")
+                    appendLine("📊 小盘月报")
                     append(r.summary)
                     r.highlights.forEach { append("\n• ").append(it) }
                     if (r.spikeDays.isNotEmpty()) {

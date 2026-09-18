@@ -1,5 +1,7 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.coach.MascotVoice
+
 /**
  * Bot 多轮修正 —— 「最近一单」的 改金额 / 改分类 / 删上一笔 / 撤销（2026-09-18 Task 1.1）。
  *
@@ -73,7 +75,10 @@ object BotCorrectService {
         val target = billService.latestBill(userId)
             ?: return "还没有账单可以撤销，先记一笔吧～"
         return if (billService.deleteBill(target.id, userId)) {
-            "已撤销最近一单：${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）"
+            // 小盘人格化（Task 1.5）：撤销回执统一走 MascotVoice（锚点「已撤销最近一单」由指南锁定）
+            MascotVoice.undoReceipt(
+                target.categoryName, target.amountMinor, formatDate(target.date)
+            )
         } else {
             "撤销失败，最近一单可能刚被其他设备删掉，稍后再试～"
         }

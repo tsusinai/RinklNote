@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.coach.MascotVoice
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.insight.MonthlyAnomalyResponse
 import com.example.rinklnote.server.services.nlu.NLUService
@@ -85,11 +86,8 @@ class PhoneIntentRouter(
             // 个人记忆层（2026-09-18 Task 1.2）：落账后异步累计聚合画像（商家词+次数+首选分类），
             // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
             UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
-            val base = listOf(
-                "已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
-                "已记录成功～ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
-                "好嘞，已记录 ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"
-            ).random()
+            // 小盘人格化（Task 1.5）：回执统一走 MascotVoice（锚点「已记录」由指南锁定）
+            val base = MascotVoice.bookkeepingReceipt(bill.categoryName, bill.amountMinor)
             // 模糊金额区间（Task 1.3）：回执标注「区间30~40元，按中值35元记」。
             return result.amountNote?.let { "$base（$it）" } ?: base
         }
@@ -239,10 +237,7 @@ class PhoneIntentRouter(
             }
         }
         billService.deleteBill(target.id, userId)
-        return listOf(
-            "已删除：${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）",
-            "已删除成功～ ${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）"
-        ).random()
+        return MascotVoice.deleteReceipt(target.categoryName, target.amountMinor, formatDate(target.date))
     }
 
     // ── Help ──
@@ -302,11 +297,7 @@ class PhoneIntentRouter(
         return BOOKKEEPING_VERB.containsMatchIn(content)
     }
 
-    private fun greetingText(): String = listOf(
-        "你好呀，我是你的记账小帮手～ 直接说「午餐20元」就帮你记，问「这个月花了多少」我帮你查",
-        "嗨！记账、查账、删账、总结都在行，说「午餐20元」试试～",
-        "在呢～ 需要记账就说金额，比如「打车25元」；想知道我能做什么，回复【帮助】"
-    ).random()
+    private fun greetingText(): String = MascotVoice.greeting()
 
     private companion object {
         val HELP = Regex("帮助|怎么用|你能做什么|会什么|指令|功能|help|干什么|干嘛|做什么|你是谁|用途|能干嘛", RegexOption.IGNORE_CASE)
