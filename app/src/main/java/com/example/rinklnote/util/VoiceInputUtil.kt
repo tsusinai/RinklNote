@@ -73,7 +73,8 @@ object VoiceParser {
     }
 
     // 中文数字字符集（小写 + 大写财务数字 + 零/两/廿），用于正则匹配与数值归一。
-    private const val CN_NUM_CHARS = "零〇一二两廿三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟"
+    // 公开给同模块的分享文本解析（ShareTextParser）复用同一字符集做「中文数字 + 元/块」匹配。
+    const val CN_NUM_CHARS = "零〇一二两廿三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟"
 
     // 中文金额 token：用于分句与数值归一（"二十元" → "20元"，"贰拾圆" → "20圆"）。
     private val cnAmountRegex = Regex("""([${CN_NUM_CHARS}]+)\s*([元圆块])""")
