@@ -6,6 +6,9 @@
     <!-- 浏览器地址栏/状态栏配色随系统亮暗（应用内显式主题由下方脚本同步 data-theme） -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F7F9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1A1A1E" />
+    <!-- PWA（Task 3.1）：favicon 与 iOS 桌面图标；manifest.webmanifest 由 vite-plugin-pwa 构建时自动注入 -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>RinklNote</title>
     <script>
       /* 防闪白：应用挂载前按本地存储预设主题（key 与 stores/theme.ts 的 rkl_theme 一致），
