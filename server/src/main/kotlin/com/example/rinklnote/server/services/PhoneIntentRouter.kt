@@ -80,6 +80,9 @@ class PhoneIntentRouter(
         val result = nluService.parse(content, userId)
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, Money.toMinor(result.amount), result.categoryName, result.remark, source)
+            // 个人记忆层（2026-09-18 Task 1.2）：落账后异步累计聚合画像（商家词+次数+首选分类），
+            // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
+            UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
             return listOf(
                 "已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
                 "已记录成功～ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}",

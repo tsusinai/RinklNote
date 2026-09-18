@@ -3,6 +3,7 @@ package com.example.rinklnote.server.services.insight
 import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.UserMemoryService
 import com.example.rinklnote.server.services.nlu.LLMParser
 import com.example.rinklnote.server.tables.BotConfigTable
 import com.example.rinklnote.server.tables.BudgetsTable
@@ -568,7 +569,8 @@ data class MonthlyFacts(
             totalExpense = totalExpense,
             totalIncome = totalIncome,
             topCategories = topCategories,
-            recentBills = recentBills
+            recentBills = recentBills,
+            memorySummary = UserMemoryService.memorySummary(userId)
         )
 
         try {
@@ -788,7 +790,8 @@ data class MonthlyFacts(
 
         /**
          * 构造自然问账上下文。只送「分类 + 金额 + 日期」聚合，绝不包含备注或未聚合明细（NFR1）。
-         * 纯函数，测试零依赖。year/month 指出上下文对应的数据区间（即用户所问的月份）。
+         * [memorySummary] 为个人记忆层的聚合画像摘要（2026-09-18 Task 1.2，≤200 字，仅商家名+
+         * 次数+首选分类，无明细无金额；空串时整段省略）。纯函数，测试零依赖。
          */
         fun naturalQueryContext(
             query: String,
@@ -798,16 +801,20 @@ data class MonthlyFacts(
             totalExpense: Long,
             totalIncome: Long,
             topCategories: List<Pair<String, Long>>,
-            recentBills: List<BillDTO>
+            recentBills: List<BillDTO>,
+            memorySummary: String = ""
         ): String {
             val recentLines = recentBills.sortedByDescending { it.date }.take(10)
                 .joinToString("\n") { "- ${formatDate(it.date)} ${it.categoryName} ¥${Money.format(it.amountMinor)}" }
+            // 记忆段自带结尾空行；无摘要时整段省略
+            val memoryBlock = if (memorySummary.isBlank()) ""
+            else "用户记忆（聚合画像，无任何单笔明细/金额）:\n$memorySummary\n\n"
             return """
 用户问题: "$query"
 
 可用分类: ${categories.joinToString("、")}
 
-数据 ($year-$month):
+${memoryBlock}数据 ($year-$month):
 - 月份: ${year}-${month}
 - 总支出: ¥${Money.format(totalExpense)}
 - 总收入: ¥${Money.format(totalIncome)}
