@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import {
-  createField, resizeField, stepField, twinkleOf,
+  createField, resizeField, stepField, twinkleOf, applyPerfTier,
   type ParticleField, type Pointer,
 } from '../utils/particleField'
+import { FrameQualityMonitor, createVisibilityController } from '../utils/perfTier'
 
 /* 记账页粒子星空背景（零依赖手写 Canvas，数值引擎见 utils/particleField.ts）。
  * - fixed 全视口 + pointer-events:none + z-index:0：不拦截任何点击，
@@ -11,7 +12,10 @@ import {
  * - 颜色运行时读主题令牌（--primary/--muted/--text），data-theme 属性变化
  *   或系统深浅变化时实时重取色（MutationObserver + matchMedia 双通道）
  * - prefers-reduced-motion: reduce → 只画一帧静态星空，不起循环、不响应指针
- * - document.hidden 暂停推进；组件卸载（切 tab）即销毁全部监听与 rAF 循环 */
+ * - 帧率自适应（Task 3.3）：FrameQualityMonitor 监测帧时间，连续 <45fps 降档
+ *   （密度/漂移速度缩减，档位只降不升）；默认档视觉与用户确认的浓密度完全一致
+ * - 页面隐藏（visibilitychange）暂停 rAF 循环，回前台恢复（复用 perfTier 控制器）
+ * - 组件卸载（切 tab）即销毁全部监听与 rAF 循环 */
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
 let ctx: CanvasRenderingContext2D | null = null
@@ -24,6 +28,12 @@ let resizeTimer: ReturnType<typeof setTimeout> | undefined
 let lastTs = 0
 // 指针默认远在屏外（无斥力），首次 pointermove 后进入微互动
 const pointer: Pointer = { x: -1e4, y: -1e4 }
+
+/* 帧率降档监测：60 帧窗口慢帧占比 ≥50% → 降一档（utils/perfTier.ts 可复用模块） */
+const perfMonitor = new FrameQualityMonitor()
+
+/* 页面隐藏暂停 / 恢复：挂 onMounted，卸载时 stop 解除监听 */
+let visibility: { stop: () => void } | null = null
 
 /* reduced-motion 只判定一次（组件随 tab 切换重建，回到页面时会重新判定） */
 function prefersReduced(): boolean {
@@ -107,9 +117,23 @@ function tick(ts: number): void {
   // dt 钳制 ≤50ms：切后台回来不出现大步长跳变
   const dt = lastTs ? Math.min((ts - lastTs) / 1000, 0.05) : 0.016
   lastTs = ts
-  if (document.hidden) return // 页面隐藏暂停推进（rAF 本就不触发，双保险）
   stepField(field, dt, pointer)
+  // 帧率监测：窗口内慢帧占比超阈值 → 降档（密度/速度缩减，只降不升防振荡）
+  const decision = perfMonitor.push(dt * 1000)
+  if (decision.changed) applyPerfTier(field, decision.tier)
   drawFrame()
+}
+
+/** 恢复推进：重置 lastTs 防止隐藏期间累积大步长 */
+function resumeLoop(): void {
+  if (reduced || rafId) return
+  lastTs = 0
+  rafId = requestAnimationFrame(tick)
+}
+
+function pauseLoop(): void {
+  cancelAnimationFrame(rafId)
+  rafId = 0
 }
 
 onMounted(() => {
@@ -129,16 +153,20 @@ onMounted(() => {
   themeMo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   darkMq = window.matchMedia('(prefers-color-scheme: dark)')
   darkMq.addEventListener?.('change', onSystemSchemeChange)
+  // 页面隐藏暂停 / 回前台恢复（visibilitychange 驱动，perfTier 可复用控制器）
+  visibility = createVisibilityController(pauseLoop, resumeLoop)
 })
 
 onUnmounted(() => {
-  cancelAnimationFrame(rafId)
+  pauseLoop()
   clearTimeout(resizeTimer)
   window.removeEventListener('resize', onResize)
   window.removeEventListener('pointermove', onPointerMove)
   darkMq?.removeEventListener?.('change', onSystemSchemeChange)
   themeMo?.disconnect()
   themeMo = undefined
+  visibility?.stop()
+  visibility = null
   field = null
   ctx = null
 })
