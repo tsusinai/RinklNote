@@ -78,16 +78,20 @@ class PhoneIntentRouter(
 
         // F. Bookkeeping
         val result = nluService.parse(content, userId)
+        // NLU 升级（Task 1.3）：上下文指代的追问文案直接回给用户（跳过记账/LLM）。
+        result.askReply?.let { return it }
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, Money.toMinor(result.amount), result.categoryName, result.remark, source)
             // 个人记忆层（2026-09-18 Task 1.2）：落账后异步累计聚合画像（商家词+次数+首选分类），
             // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
             UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
-            return listOf(
+            val base = listOf(
                 "已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
                 "已记录成功～ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
                 "好嘞，已记录 ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"
             ).random()
+            // 模糊金额区间（Task 1.3）：回执标注「区间30~40元，按中值35元记」。
+            return result.amountNote?.let { "$base（$it）" } ?: base
         }
 
         // G. A category was recognised but no amount — keep the bookkeeping UX alive.
