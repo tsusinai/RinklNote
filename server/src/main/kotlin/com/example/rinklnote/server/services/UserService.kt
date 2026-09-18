@@ -347,11 +347,16 @@ class UserService(
 
     fun updatePassword(userId: Long, oldPassword: String, newPassword: String): Boolean {
         return transaction {
-            val hash = UsersTable.selectAll()
+            val row = UsersTable.selectAll()
                 .where { UsersTable.id eq userId }
-                .singleOrNull()?.get(UsersTable.passwordHash)
-                ?: return@transaction false
-            if (!BCrypt.checkpw(oldPassword, hash)) return@transaction false
+                .singleOrNull() ?: return@transaction false
+            val hash = row[UsersTable.passwordHash]
+            if (hash != null) {
+                // 已有密码：正常改密，校验旧密码
+                if (!BCrypt.checkpw(oldPassword, hash)) return@transaction false
+            }
+            // 无密码（QQ 等通道注册）视为首次设密：跳过旧密码校验，直接设置新密码。
+            // 新密码规则仍由路由层 PasswordPolicy 把关。
             UsersTable.update({ UsersTable.id eq userId }) {
                 it[passwordHash] = BCrypt.hashpw(newPassword, BCrypt.gensalt())
             }
