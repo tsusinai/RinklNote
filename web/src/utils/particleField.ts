@@ -10,7 +10,13 @@
  * - 斥力：指针半径 ~110px 内、力度随距离线性衰减，冲量记入 pv*，
  *   并按 0.92（60fps 基准）逐帧阻尼衰减 —— 粒子被轻推后回落漂移；
  *   只斥不吸、不做连线
+ *
+ * 帧率自适应（Task 3.3）：档位判定在 utils/perfTier.ts（可复用模块），
+ * 本文件只做「档位 → 密度/漂移速度」的映射：默认档（0）视觉与加浓后完全一致，
+ * 仅在低端设备降档（降密度/降速），档位只降不升由 perfTier 模块保证。
  * ============================================================ */
+
+import type { PerfTier } from './perfTier'
 
 /** 单个粒子：位置/半径 + 漂移速度 + 斥力冲量速度 + 闪烁相位 + 渲染因子 */
 export interface Particle {
@@ -52,6 +58,8 @@ export interface ParticleField {
   repelForce: number
   /** 冲量阻尼系数（以 60fps 单帧为基准） */
   damping: number
+  /** 当前性能档位（0 = 全速默认档）；applyPerfTier 切换 */
+  tier: PerfTier
 }
 
 const MIN_COUNT = 70
@@ -59,13 +67,23 @@ const MAX_COUNT = 220
 /** 密度分母：每 9000px² 一个粒子 */
 const AREA_PER_PARTICLE = 9000
 
+/** 档位 → 密度系数：0 默认档保持加浓后浓密度（视觉不变），降档逐级缩减 */
+export const TIER_DENSITY_FACTOR: readonly [1, number, number] = [1, 0.6, 0.35]
+/** 档位 → 漂移速度系数（降档同时放缓漂移，省一半以上绘制路径） */
+export const TIER_SPEED_FACTOR: readonly [1, number, number] = [1, 0.75, 0.5]
+
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v))
 }
 
-/** 密度公式：clamp(round(面积/9000), 70, 220) —— 渲染层 resize 与测试共用 */
-export function densityCount(w: number, h: number): number {
-  return clamp(Math.round((w * h) / AREA_PER_PARTICLE), MIN_COUNT, MAX_COUNT)
+/**
+ * 密度公式：clamp(round(面积/9000 × 档位系数), 下限×系数, 上限×系数)。
+ * 上下限随档位同缩：否则小屏已在 70 下限时降档不生效。
+ * tier 缺省 0 = 默认档，公式与加浓后完全一致（历史用例不受影响）。
+ */
+export function densityCount(w: number, h: number, tier: PerfTier = 0): number {
+  const df = TIER_DENSITY_FACTOR[tier]
+  return clamp(Math.round(((w * h) / AREA_PER_PARTICLE) * df), Math.floor(MIN_COUNT * df), Math.round(MAX_COUNT * df))
 }
 
 function rand(min: number, max: number): number {
@@ -73,8 +91,8 @@ function rand(min: number, max: number): number {
 }
 
 /** 造一个粒子：随机位置/半径/漂移方向/闪烁相位；约 15% 为点缀色 */
-function makeParticle(w: number, h: number): Particle {
-  const speed = rand(12, 30) // 漂移速率 12~30 px/s
+function makeParticle(w: number, h: number, speedFactor = 1): Particle {
+  const speed = rand(12, 30) * speedFactor // 漂移速率 12~30 px/s × 档位系数
   const angle = rand(0, Math.PI * 2)
   return {
     x: rand(0, w),
@@ -91,11 +109,12 @@ function makeParticle(w: number, h: number): Particle {
   }
 }
 
-/** 建场：按密度公式铺满 w×h */
-export function createField(w: number, h: number): ParticleField {
+/** 建场：按密度公式铺满 w×h（tier 缺省 0 = 默认视觉档） */
+export function createField(w: number, h: number, tier: PerfTier = 0): ParticleField {
   const particles: Particle[] = []
-  const count = densityCount(w, h)
-  for (let i = 0; i < count; i++) particles.push(makeParticle(w, h))
+  const count = densityCount(w, h, tier)
+  const sf = TIER_SPEED_FACTOR[tier]
+  for (let i = 0; i < count; i++) particles.push(makeParticle(w, h, sf))
   return {
     w,
     h,
@@ -104,21 +123,39 @@ export function createField(w: number, h: number): ParticleField {
     repelRadius: 110,
     repelForce: 220,
     damping: 0.92,
+    tier,
   }
 }
 
-/** 尺寸变化：按新面积增删粒子（尽量保留现存粒子），越界粒子收回新边界 */
+/** 尺寸变化：按新面积与当前档位增删粒子（尽量保留现存粒子），越界粒子收回新边界 */
 export function resizeField(f: ParticleField, w: number, h: number): void {
   f.w = w
   f.h = h
-  const target = densityCount(w, h)
+  const target = densityCount(w, h, f.tier)
   while (f.particles.length > target) f.particles.pop()
-  while (f.particles.length < target) f.particles.push(makeParticle(w, h))
+  while (f.particles.length < target) f.particles.push(makeParticle(w, h, TIER_SPEED_FACTOR[f.tier]))
   for (const p of f.particles) {
     // 取模环绕回新边界，避免 resize 后粒子长时间滞留在可视区外
     p.x = ((p.x % w) + w) % w
     p.y = ((p.y % h) + h) % h
   }
+}
+
+/**
+ * 切换性能档位（帧率监测降档时由渲染层调用）：同步缩放密度与漂移速度。
+ * 幂等：目标档与当前一致时 no-op 返回 false；切换返回 true。
+ * 现存粒子的基础漂移按新旧速度系数比例整体缩放，不重摇随机数（画面不跳变）。
+ */
+export function applyPerfTier(f: ParticleField, tier: PerfTier): boolean {
+  if (f.tier === tier) return false
+  const ratio = TIER_SPEED_FACTOR[tier] / TIER_SPEED_FACTOR[f.tier]
+  for (const p of f.particles) {
+    p.dvx *= ratio
+    p.dvy *= ratio
+  }
+  f.tier = tier
+  resizeField(f, f.w, f.h) // 按新档位密度增删粒子（复用现有保留逻辑）
+  return true
 }
 
 /**

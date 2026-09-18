@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDataStore } from '../../stores/data'
 import { bills } from '../../api/bills'
 import { useToast } from '../../composables/useToast'
 import { parseMoneyToMinor } from '../../utils/money'
 import { categoryEmoji } from '../../utils/categoryIcon'
+import { isEditableTarget, appendAmountKey } from '../../utils/keyboard'
 import Card from '../../components/ui/Card.vue'
 import Btn from '../../components/ui/Btn.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
@@ -68,6 +69,43 @@ async function submit() {
 function msgClass(m: string): string {
   return /失败|错误|不能为空|已注册|不存在/.test(m) ? 'err' : 'ok'
 }
+
+/* ── 键盘流（Task 3.4）：数字键直输金额 / Enter 确认 / Esc 取消本次输入 ──
+ * 确认流程完全复用现有 submit()（一步制校验+落库），本段只负责「按键 → 既有流程」的翻译。
+ * 守卫：焦点在输入框/下拉时不拦截（原生输入优先）；修饰键组合（Ctrl+K 等）不碰。 */
+const amountInputRef = ref<HTMLInputElement | null>(null)
+
+/** 取消本次输入：Web 无记账抽屉，Esc 语义 = 清空金额/备注与错误提示（App 抽屉的对应操作） */
+function clearEntry() {
+  amount.value = ''
+  remark.value = ''
+  msg.value = ''
+}
+
+function onGlobalKey(e: KeyboardEvent) {
+  if (loading.value || e.ctrlKey || e.metaKey || e.altKey) return
+  if (isEditableTarget(e.target)) {
+    // 焦点在金额输入框内：Enter 确认、Esc 清空；其余输入框/下拉走原生行为
+    if (e.target === amountInputRef.value) {
+      if (e.key === 'Enter') { e.preventDefault(); submit() }
+      else if (e.key === 'Escape') { e.preventDefault(); clearEntry() }
+    }
+    return
+  }
+  // 数字 / 小数点 / 退格：直输金额并聚焦输入框（preventDefault 防止聚焦后按键二次落入输入框）
+  const patched = appendAmountKey(amount.value, e.key)
+  if (patched !== null) {
+    e.preventDefault()
+    amount.value = patched
+    amountInputRef.value?.focus()
+    return
+  }
+  if (e.key === 'Enter') { e.preventDefault(); submit() }
+  else if (e.key === 'Escape') clearEntry()
+}
+
+onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 </script>
 
 <template>
@@ -94,7 +132,9 @@ function msgClass(m: string): string {
           <button :class="['toggle-btn pressable', { on: billType === 'INCOME', inc: billType === 'INCOME' }]" @click="switchType('INCOME')">收入</button>
         </div>
 
-        <input class="amount-input amount" type="number" step="0.01" placeholder="0.00" v-model="amount" @input="msg=''" />
+        <!-- 键盘流（Task 3.4）：页面任意处按数字键直输金额；Enter 确认、Esc 清空。
+             type=text + inputmode=decimal：中间态「0.」等可正常回显（number 输入会被浏览器清空），合法性由 parseMoneyToMinor 把关 -->
+        <input ref="amountInputRef" class="amount-input amount" type="text" inputmode="decimal" placeholder="0.00" v-model="amount" @input="msg=''" />
 
         <div class="section-label">分类</div>
         <!-- 响应式网格：auto-fill 自适应列数，窄屏不再被写死的 4 列压垮 -->

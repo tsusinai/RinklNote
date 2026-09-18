@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import InkFieldBackground from '../components/InkFieldBackground.vue'
 import LandingHero from './landing/LandingHero.vue'
 import LandingFooter from './landing/LandingFooter.vue'
 import BookkeepingDemo from './landing/BookkeepingDemo.vue'
@@ -9,17 +10,17 @@ import AiDemo from './landing/AiDemo.vue'
 
 /* 修硬伤（Landing CTA）：顶栏按钮此前写死「进入控制台」且链到 /login，
  * 已登录用户也被带去登录页。现按 auth store 是否有 token 切换：
- * 已登录 →「进入控制台」（/console）；未登录 →「登录 / 注册」（/login）。 */
+ * 已登录 →「进入控制台」（/console）；未登录 →「登录 / 注册」（/login）。
+ * 背景（Task 3.6）：静态 .aurora 晨雾光斑已替换为墨晕热力场（InkFieldBackground，
+ * fixed z-index:-1 铺底，无指针交互）；登录页仍用 .aurora，全局样式保留。 */
 const auth = useAuthStore()
 const loggedIn = computed(() => !!auth.token)
 </script>
 
 <template>
   <div class="landing">
-    <!-- 晨雾光斑：固定层（z-index:-1）铺满视口。Landing 不铺不透明底色，
-         滚动过程中 hero 顶部 / 能力区中部 / 页脚底部依次透出三个 blob；
-         规格落点「Landing hero、能力区」同页共用这一层（fixed 全局唯一，不重复挂） -->
-    <div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+    <!-- 墨晕热力场：热流驱动墨在宣纸底上缓慢晕开（组件内部 Teleport 到 body） -->
+    <InkFieldBackground />
 
     <header class="landing-header">
       <span class="brand">RinklNote</span>

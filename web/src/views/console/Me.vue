@@ -110,6 +110,7 @@ function doLogout() {
     <!-- 结构入口：设置 / 退出行（移动端无侧栏，统一从这里进；样式从简，视觉精修在 W3。
          注意：W3b 改造身份卡/视觉时请保留本块结构，勿并回上方 v-else） -->
     <div class="card">
+      <router-link class="row link" to="/console/currency"><span class="k">多币种</span><span class="v arrow">进入 ›</span></router-link>
       <router-link class="row link" to="/console/settings"><span class="k">设置</span><span class="v arrow">进入 ›</span></router-link>
       <button class="row link row-btn" @click="logout"><span class="k text-expense">退出登录</span><span class="v arrow">退出 ›</span></button>
     </div>

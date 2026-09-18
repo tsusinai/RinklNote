@@ -10,15 +10,17 @@ declare module 'vue-router' {
   }
 }
 
-/* 控制台子路由：meta.tab 按底栏顺序编号（记账0/账单1/图表2/资产3/我的4），
- * 设置不占底栏（入口在我的页与桌面侧栏），序号顺延为 5，与侧栏分组顺序一致 */
+/* 控制台子路由：meta.tab 按导航顺序编号（记账0/账单1/图表2/资产3/多币种4/我的5），settings=6。
+ * 多币种 currency 为二级页（桌面侧栏资产组 + 我的页入口，不占移动端底栏），
+ * tab 序号仅用于转场方向判定，保持与导航顺序一致即可。 */
 const consoleChildren = [
   { path: '', name: 'bookkeeping', component: () => import('../views/console/Bookkeeping.vue'), meta: { title: '记账', tab: 0 } },
   { path: 'bills', name: 'bills', component: () => import('../views/console/Bills.vue'), meta: { title: '账单', tab: 1 } },
   { path: 'charts', name: 'charts', component: () => import('../views/console/Charts.vue'), meta: { title: '图表', tab: 2 } },
   { path: 'assets', name: 'assets', component: () => import('../views/console/Assets.vue'), meta: { title: '资产', tab: 3 } },
-  { path: 'me', name: 'me', component: () => import('../views/console/Me.vue'), meta: { title: '我的', tab: 4 } },
-  { path: 'settings', name: 'settings', component: () => import('../views/console/Settings.vue'), meta: { title: '设置', tab: 5 } },
+  { path: 'currency', name: 'currency', component: () => import('../views/console/Currency.vue'), meta: { title: '多币种', tab: 4 } },
+  { path: 'me', name: 'me', component: () => import('../views/console/Me.vue'), meta: { title: '我的', tab: 5 } },
+  { path: 'settings', name: 'settings', component: () => import('../views/console/Settings.vue'), meta: { title: '设置', tab: 6 } },
 ]
 
 /* 管理端子路由（/admin，守卫把非管理员 404 化——见 guards.ts）。
