@@ -36,6 +36,15 @@ data class BillDTO(
     val longitude: Double? = null
 )
 
+/** 条件 PUT（乐观锁）的三种结果：
+ *  Updated 成功；VersionConflict 版本不匹配（附服务端当前最新 DTO，客户端据此重取 base 重放）；
+ *  NotFound 账单不存在或非本人账单。 */
+sealed interface BillUpdateResult {
+    data class Updated(val bill: BillDTO) : BillUpdateResult
+    data class VersionConflict(val current: BillDTO) : BillUpdateResult
+    data object NotFound : BillUpdateResult
+}
+
 @Serializable
 data class SyncResponse(
     val bills: List<BillDTO>,
@@ -239,6 +248,60 @@ class BillService {
                 it[updatedAt] = now
             }
             updated > 0
+        }
+    }
+
+    /**
+     * 条件 PUT（乐观锁，2026-09-18 Task 0.1）：单条 UPDATE 把版本条件写进 WHERE，
+     * 消灭旧「先读后写」实现在两步之间被并发写入穿插导致的丢更新窗口。
+     * baseUpdatedAt 为 null 时不带版本条件（无条件覆盖，旧客户端兼容）。
+     * 0 行命中时二次区分：记录不存在 → NotFound；存在但版本不匹配 → VersionConflict（附当前最新 DTO）。
+     */
+    fun updateBill(
+        id: Long,
+        userId: Long,
+        baseUpdatedAt: Long?,
+        amountMinor: Long,
+        billType: String,
+        categoryId: Long,
+        categoryName: String,
+        subCategoryName: String?,
+        accountId: Long,
+        remark: String?,
+        sortOrder: Long?,
+        latitude: Double?,
+        longitude: Double?
+    ): BillUpdateResult = transaction {
+        val now = System.currentTimeMillis()
+        val affected = BillsTable.update({
+            if (baseUpdatedAt == null) {
+                (BillsTable.id eq id) and (BillsTable.userId eq userId)
+            } else {
+                (BillsTable.id eq id) and (BillsTable.userId eq userId) and
+                    (BillsTable.updatedAt eq baseUpdatedAt)
+            }
+        }) {
+            it[BillsTable.amountMinor] = amountMinor
+            it[BillsTable.amount] = Money.fromMinor(amountMinor)
+            it[BillsTable.billType] = billType
+            it[BillsTable.categoryId] = categoryId
+            it[BillsTable.categoryName] = categoryName
+            it[BillsTable.subCategoryName] = subCategoryName
+            it[BillsTable.accountId] = accountId
+            it[BillsTable.remark] = remark
+            it[BillsTable.sortOrder] = sortOrder
+            // PUT 是全量替换语义（与 remark 等字段一致）：传 null 即清除打点。
+            it[BillsTable.latitude] = latitude
+            it[BillsTable.longitude] = longitude
+            it[BillsTable.updatedAt] = now
+        }
+        val row = BillsTable.selectAll()
+            .where { (BillsTable.id eq id) and (BillsTable.userId eq userId) }
+            .singleOrNull()
+        when {
+            affected > 0 && row != null -> BillUpdateResult.Updated(row.toBillDto())
+            row != null -> BillUpdateResult.VersionConflict(row.toBillDto())
+            else -> BillUpdateResult.NotFound
         }
     }
 

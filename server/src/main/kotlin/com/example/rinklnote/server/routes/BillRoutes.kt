@@ -2,12 +2,10 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.BillUpdateResult
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.nlu.NLUService
-import com.example.rinklnote.server.tables.BillsTable
 import io.ktor.http.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -144,56 +142,26 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 require(amountMinor > 0) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
 
-                // 条件 PUT：带 baseUpdatedAt 且和服务端最新 updatedAt 不符 → 409 + 当前最新 DTO，
-                // 客户端据此重取 base 重放，避免离线/陈旧端覆盖新端改动。
-                if (body.baseUpdatedAt != null) {
-                    val current = billService.getBill(billId, userId)
-                    if (current == null) {
-                        return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
-                    }
-                    if (current.updatedAt != body.baseUpdatedAt) {
-                        return@put call.respond(HttpStatusCode.Conflict, current)
-                    }
-                }
-
-                val updated = transaction {
-                    val row = BillsTable.selectAll()
-                        .where { (BillsTable.id eq billId) and (BillsTable.userId eq userId) }
-                        .singleOrNull()
-                        ?: return@transaction null
-
-                    val now = System.currentTimeMillis()
-                    BillsTable.update({ BillsTable.id eq billId }) {
-                        it[BillsTable.amountMinor] = amountMinor
-                        it[BillsTable.amount] = Money.fromMinor(amountMinor)
-                        it[BillsTable.billType] = body.billType
-                        it[BillsTable.categoryId] = body.categoryId
-                        it[BillsTable.categoryName] = body.categoryName
-                        it[BillsTable.subCategoryName] = body.subCategoryName
-                        it[BillsTable.accountId] = body.accountId
-                        it[BillsTable.remark] = body.remark
-                        it[BillsTable.sortOrder] = body.sortOrder
-                        // PUT 是全量替换语义（与 remark 等字段一致）：传 null 即清除打点。
-                        it[BillsTable.latitude] = body.latitude
-                        it[BillsTable.longitude] = body.longitude
-                        it[BillsTable.updatedAt] = now
-                    }
-
-                    BillDTO(
-                        id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = body.billType,
-                        categoryId = body.categoryId, categoryName = body.categoryName,
-                        subCategoryName = body.subCategoryName, accountId = body.accountId,
-                        remark = body.remark, date = row[BillsTable.date],
-                        source = row[BillsTable.billSource], createdAt = row[BillsTable.createdAt],
-                        updatedAt = now, sortOrder = body.sortOrder,
-                        latitude = body.latitude, longitude = body.longitude
-                    )
-                }
-
-                if (updated != null) {
-                    call.respond(updated)
-                } else {
-                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
+                // 条件 PUT（乐观锁）：版本条件随单条 UPDATE 生效，0 行命中再二次区分
+                // 404（不存在）/ 409（版本不匹配，响应体附当前最新 DTO 供客户端重取 base 重放）。
+                when (val result = billService.updateBill(
+                    id = billId,
+                    userId = userId,
+                    baseUpdatedAt = body.baseUpdatedAt,
+                    amountMinor = amountMinor,
+                    billType = body.billType,
+                    categoryId = body.categoryId,
+                    categoryName = body.categoryName,
+                    subCategoryName = body.subCategoryName,
+                    accountId = body.accountId,
+                    remark = body.remark,
+                    sortOrder = body.sortOrder,
+                    latitude = body.latitude,
+                    longitude = body.longitude
+                )) {
+                    is BillUpdateResult.Updated -> call.respond(result.bill)
+                    is BillUpdateResult.VersionConflict -> call.respond(HttpStatusCode.Conflict, result.current)
+                    BillUpdateResult.NotFound -> call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
                 }
             }
 
