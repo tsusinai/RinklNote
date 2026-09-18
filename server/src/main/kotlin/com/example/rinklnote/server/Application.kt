@@ -13,6 +13,8 @@ import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
 import com.example.rinklnote.server.services.FeishuBotService
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.MailIngestConfig
+import com.example.rinklnote.server.services.MailIngestService
 import com.example.rinklnote.server.services.MpBotService
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
@@ -302,6 +304,23 @@ fun Application.module() {
         log = log
     )
     rateService.start(appScope)
+
+    // 邮件账单转发自动入账（2026-09-18 Task 4.4）：默认关闭——配置 MAIL_INGEST_USER_ID +
+    // MAIL_IMAP_HOST/USER/PASSWORD（可选 PORT / MAIL_SENDER_WHITELIST / MAIL_INGEST_INTERVAL_MS）后启用。
+    // 凭证只走环境变量；正文只在内存解析，不落盘不送 LLM（隐私红线见 MailIngestService 注释头）。
+    val mailIngestConfig = MailIngestConfig.fromEnv()
+    if (mailIngestConfig != null) {
+        val mailIngest = MailIngestService(
+            config = mailIngestConfig,
+            billService = billService,
+            alert = { text -> alertNotifier.deliver(text) },
+            log = log
+        )
+        mailIngest.start(appScope)
+        log.info("邮件账单入账已启用（IMAP=${mailIngestConfig.host} 白名单=${mailIngestConfig.senders.size}条）")
+    } else {
+        log.info("邮件账单入账未配置（缺 MAIL_INGEST_USER_ID / MAIL_IMAP_* 环境变量），保持关闭")
+    }
 
     // 管理端只读服务：LLM/ASR 只回「是否已配置」布尔，绝不回显 key 值（隐私红线见 AdminService 注释头）。
     val adminService = AdminService(

@@ -124,13 +124,16 @@ class BillService {
         amountMinor: Long,
         categoryName: String?,
         remark: String?,
-        source: String = "QQ"
+        source: String = "QQ",
+        // 账单日（epoch 毫秒，业务时区「当日 0 点」口径）；null = 今天（邮件账单等带原始支付日期的
+        // 入口传解析出的日期，2026-09-18 Task 4.4）。
+        date: Long? = null
     ): BillDTO {
         require(amountMinor > 0) { "金额必须大于0" }
         val sanitizedRemark = remark?.take(500)
 
         val now = System.currentTimeMillis()
-        val todayStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
+        val todayStart = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
             .toInstant()
             .toEpochMilli()

@@ -16,6 +16,8 @@ object BotCommands {
     const val SOURCE_WECOM = "WECOM"
     const val SOURCE_MP = "MP"
     const val SOURCE_AI = "AI"
+    // 邮件账单转发自动入账（2026-09-18 Task 4.4，非 bot 通道，仅作 bills.bill_source 标记）
+    const val SOURCE_MAIL = "MAIL"
 
     // ── 推送开关指令 ──
     // 「每日推送」指令：在 bot 会话里直接开/关/查日报主动推送（写的就是 App「我的」页那个字段）。
