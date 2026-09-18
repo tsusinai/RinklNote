@@ -67,7 +67,7 @@ const currentTitle = navItems.find(isActive)?.label ?? '运维'
 .admin-root { display: flex; min-height: 100vh; background: var(--bg, #f5f7fa); }
 .admin-side {
   width: 200px; flex-shrink: 0; display: flex; flex-direction: column;
-  background: #10293b; color: #e8eef4; padding: 16px 12px;
+  background: #10293b; color: #e8eef4; padding: 20px 14px;
 }
 .admin-brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 16px; }
 .admin-brand-name { font-size: 13px; font-weight: 600; opacity: .92; }
@@ -82,7 +82,7 @@ const currentTitle = navItems.find(isActive)?.label ?? '运维'
   transition: background var(--dur-expand) var(--ease), color var(--dur-expand) var(--ease);
 }
 .admin-nav-link:hover { background: rgba(255, 255, 255, .06); color: #fff; }
-.admin-nav-link.on { background: rgba(126, 193, 252, .16); color: #7ec1fc; font-weight: 600; }
+.admin-nav-link.on { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); font-weight: 600; }
 .admin-side-footer { margin-top: auto; padding: 8px; }
 .admin-back { color: #8fa3b5; font-size: 12px; text-decoration: none; }
 .admin-back:hover { color: #c3d0dc; }

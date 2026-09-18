@@ -48,12 +48,14 @@ const loggedIn = computed(() => !!auth.token)
 </template>
 
 <style scoped>
+
 .landing { min-height: 100vh; }
-.landing-header { position: sticky; top: 0; z-index: 50; display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; backdrop-filter: blur(8px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--border-light); }
-.brand { font-weight: 800; font-size: 18px; letter-spacing: -0.01em; }
-/* 顶栏 CTA 走全局 .btn/.btn-primary/.pressable（按钮按 token 切换文案与链路） */
-.feature-bg { background: radial-gradient(1200px 500px at 50% -10%, rgba(126,193,252,.16), transparent 60%); }
-.feature { max-width: 1080px; margin: 0 auto; padding: 64px 24px; }
-.feature.alt { background: rgba(126,193,252,.05); }
+.landing-header { position: sticky; top: 0; z-index: 50; display: flex; justify-content: space-between; align-items: center; padding: 18px clamp(20px, 5vw, 64px); backdrop-filter: blur(16px); background: color-mix(in srgb, var(--bg) 84%, transparent); border-bottom: 1px solid var(--border); }
+.brand { font-weight: 800; font-size: 22px; letter-spacing: -0.04em; }
+.feature-bg { border-top: 1px solid var(--border); }
+.feature { max-width: 1080px; margin: 0 auto; padding: 92px 24px; }
+.feature + .feature { border-top: 1px solid var(--border-light); }
+.feature.alt { max-width: none; padding-left: max(24px, calc((100% - 1080px) / 2 + 24px)); padding-right: max(24px, calc((100% - 1080px) / 2 + 24px)); background: color-mix(in srgb, var(--primary-soft) 38%, transparent); }
 @media (max-width: 640px) { .feature { padding: 44px 16px; } }
+
 </style>

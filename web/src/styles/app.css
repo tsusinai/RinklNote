@@ -1,104 +1,15 @@
-/* 通用卡片 */
-.card { background: var(--card); border: 1px solid var(--border-light); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
-.card-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
-
-/* 按压缩放（仅 CTA 用，对齐 App 0.97/120ms） */
-.pressable { transition: transform var(--dur-press) var(--ease); }
-.pressable:active { transform: scale(var(--press-scale)); }
-
-/* 按钮 */
-.btn { padding: 11px 16px; border-radius: 12px; border: none; font-size: 14px; cursor: pointer; font-family: inherit; transition: transform var(--dur-press) var(--ease); }
-.btn:active { transform: scale(var(--press-scale)); }
-.btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 600; }
-.btn-ghost, .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
-.btn.danger { background: var(--expense); color: var(--on-expense); }
-.block { width: 100%; }
-
-/* 收支/语义 */
-.text-expense { color: var(--expense); }
-.text-income { color: var(--income); }
-
-/* 开关 */
-.toggle { display: flex; gap: 8px; }
-.toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
-.toggle-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: transparent; }
-
-/* 金额输入 */
-.amount-input { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-
-/* 网格 */
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-
-/* 选中 */
-.sel { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 15px; font-family: inherit; }
-
-/* 分类按钮 */
-.cat-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 12px; cursor: pointer; }
-.cat-btn.on { background: var(--primary-soft); border-color: var(--primary); }
-.cat-icon { font-size: 22px; }
-
-/* 标签 */
-.tag { padding: 2px 8px; border-radius: 6px; font-size: 12px; }
-.tag-qq { background: var(--tag-qq-bg); color: var(--tag-qq-fg); }
-.tag-web { background: var(--tag-web-bg); color: var(--tag-web-fg); }
-.tag-app { background: var(--tag-app-bg); color: var(--tag-app-fg); }
-.tag-other { background: var(--border-light); color: var(--muted); }
-
-/* 消息 */
-.msg { font-size: 14px; margin: 10px 0; }
-.msg.ok { color: var(--income); }
-.msg.err { color: var(--expense); }
-
-/* 表格滚动 */
-.tbl-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-
-/* 空状态 */
-.empty-inline, .empty-cell { text-align: center; color: var(--muted); padding: 16px 0; font-size: 13px; }
-
-/* 汇总卡 */
-.summary-card { background: var(--card); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow-sm); }
-.summary-card .label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
-.summary-card .val { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-
-/* Skeleton 骨架屏（组件 <Skeleton.vue> 与直接挂类均可） */
-.ui-skeleton { position: relative; overflow: hidden; background: var(--surface-2); border-radius: 8px; }
-.ui-skeleton.round { border-radius: 999px; }
-.ui-skeleton::after {
-  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, var(--skeleton-sheen), transparent);
-  animation: ui-shimmer 1.4s var(--ease) infinite;
-}
-@keyframes ui-shimmer { to { transform: translateX(100%); } }
-
-/* 页面居中（Bookkeeping/Me 有 scoped .page 覆盖，其余控制台页面共用） */
-.page { max-width: 960px; margin: 0 auto; }
-
-@media (max-width: 768px) {
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
-  .grid-4 { grid-template-columns: repeat(3, 1fr); }
-  .card { padding: 16px; }
-}
-
-/* ============================================================
- * 页面转场（RouterView <Transition>，方向由 router/transition.ts 判定）
- * 前进 page-forward / 后退 page-back / 纯 fade page-fade；
- * 只动 transform/opacity，时长取 --dur-page(280ms)；reduced-motion 由 theme.css 全局规则冻结。
- * 审计结论（2026-09-17）：控制台内已按 tab 序号定向转场；此处唯一补齐点——
- * 纯 fade（landing↔login、进出控制台）入场加 6px 上浮，落定更柔和，方向感中立。
- * ============================================================ */
-.page-forward-enter-active, .page-forward-leave-active,
-.page-back-enter-active, .page-back-leave-active,
-.page-fade-enter-active, .page-fade-leave-active {
-  transition: opacity var(--dur-page) var(--ease), transform var(--dur-page) var(--ease);
-}
-/* 前进：新页从右侧滑入，旧页向左滑出 */
-.page-forward-enter-from { opacity: 0; transform: translateX(24px); }
-.page-forward-leave-to   { opacity: 0; transform: translateX(-24px); }
-/* 后退：新页从左侧滑入，旧页向右滑出 */
-.page-back-enter-from { opacity: 0; transform: translateX(-24px); }
-.page-back-leave-to   { opacity: 0; transform: translateX(24px); }
-/* 纯 fade + 微上浮入场（离场保持纯 fade，方向中立） */
-.page-fade-enter-from { opacity: 0; transform: translateY(6px); }
-.page-fade-leave-to { opacity: 0; }
+.card{background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--border-light);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-sm);transition:transform var(--dur-expand) var(--ease),box-shadow var(--dur-expand) var(--ease),border-color var(--dur-expand) var(--ease)}
+.card:hover{border-color:var(--border);box-shadow:var(--shadow)} .card-title{font-size:14px;font-weight:700;letter-spacing:.02em;margin-bottom:14px}
+.pressable{transition:transform var(--dur-press) var(--ease),box-shadow var(--dur-expand) var(--ease)} .pressable:active{transform:scale(var(--press-scale))}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 18px;border-radius:999px;border:1px solid transparent;font-size:14px;cursor:pointer;font-family:inherit;transition:transform var(--dur-press) var(--ease),background var(--dur-expand) var(--ease),box-shadow var(--dur-expand) var(--ease),border-color var(--dur-expand) var(--ease)} .btn:hover{transform:translateY(-2px)} .btn-primary{background:var(--primary);color:var(--on-primary);font-weight:700;box-shadow:0 8px 20px color-mix(in srgb,var(--primary) 22%,transparent)} .btn-primary:hover{box-shadow:0 12px 26px color-mix(in srgb,var(--primary) 30%,transparent)} .btn-ghost,.btn.ghost{background:transparent;color:var(--text);border-color:var(--border)} .btn-ghost:hover,.btn.ghost:hover{background:var(--surface-2);border-color:var(--text)} .btn.danger{background:var(--expense);color:var(--on-expense)} .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}.block{width:100%}
+.text-expense{color:var(--expense)} .text-income{color:var(--income)}
+.toggle{display:flex;gap:8px}.toggle-btn{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;transition:background var(--dur-expand) var(--ease),color var(--dur-expand) var(--ease),border-color var(--dur-expand) var(--ease),transform var(--dur-press) var(--ease)} .toggle-btn.on{background:var(--primary);color:var(--on-primary);font-weight:700;border-color:transparent}
+.amount-input,.sel{font-family:inherit}.sel{padding:11px 14px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:15px;transition:border-color var(--dur-expand) var(--ease),box-shadow var(--dur-expand) var(--ease),background var(--dur-expand) var(--ease)} .sel:hover{border-color:var(--primary)} .sel:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft)}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.cat-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:13px 7px;border-radius:14px;border:1px solid var(--border-light);background:var(--card);color:var(--text);font-size:12px;cursor:pointer;transition:transform var(--dur-expand) var(--ease),background var(--dur-expand) var(--ease),border-color var(--dur-expand) var(--ease)} .cat-btn:hover{transform:translateY(-3px);border-color:var(--primary)} .cat-btn.on{background:var(--primary-soft);border-color:var(--primary)} .cat-icon{font-size:22px}
+.tag{padding:3px 9px;border-radius:999px;font-size:12px}.tag-qq{background:var(--tag-qq-bg);color:var(--tag-qq-fg)}.tag-web{background:var(--tag-web-bg);color:var(--tag-web-fg)}.tag-app{background:var(--tag-app-bg);color:var(--tag-app-fg)}.tag-other{background:var(--border-light);color:var(--muted)}
+.msg{font-size:14px;margin:10px 0}.msg.ok{color:var(--income)}.msg.err{color:var(--expense)}.tbl-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}.empty-inline,.empty-cell{text-align:center;color:var(--muted);padding:18px 0;font-size:13px}.summary-card{background:var(--card);border:1px solid var(--border-light);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);transition:transform var(--dur-expand) var(--ease),box-shadow var(--dur-expand) var(--ease)} .summary-card:hover{transform:translateY(-3px);box-shadow:var(--shadow)} .summary-card .label{font-size:12px;color:var(--muted);margin-bottom:8px}.summary-card .val{font-size:26px;font-weight:800}
+.ui-skeleton{position:relative;overflow:hidden;background:var(--surface-2);border-radius:10px}.ui-skeleton.round{border-radius:999px}.ui-skeleton::after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,var(--skeleton-sheen),transparent);animation:ui-shimmer 1.4s var(--ease) infinite}@keyframes ui-shimmer{to{transform:translateX(100%)}}
+.page{max-width:1080px;margin:0 auto}.page>h2{margin:4px 0 24px;font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.04em;line-height:1}.page>h2::after{content:'';display:block;width:42px;height:4px;background:var(--primary);margin-top:14px;border-radius:2px}
+.page-forward-enter-active,.page-forward-leave-active,.page-back-enter-active,.page-back-leave-active,.page-fade-enter-active,.page-fade-leave-active{transition:opacity var(--dur-page) var(--ease),transform var(--dur-page) var(--ease)} .page-forward-enter-from{opacity:0;transform:translateX(24px)}.page-forward-leave-to{opacity:0;transform:translateX(-24px)}.page-back-enter-from{opacity:0;transform:translateX(-24px)}.page-back-leave-to{opacity:0;transform:translateX(24px)}.page-fade-enter-from{opacity:0;transform:translateY(8px)}.page-fade-leave-to{opacity:0}
+@media(max-width:768px){.grid-2,.grid-3{grid-template-columns:1fr}.grid-4{grid-template-columns:repeat(3,1fr)}.card{padding:17px}.page>h2{margin-bottom:20px}}
