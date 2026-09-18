@@ -3,6 +3,7 @@ package com.example.rinklnote.server
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.AdminService
+import com.example.rinklnote.server.services.AlertNotifier
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
 import com.example.rinklnote.server.services.AvatarStorage
@@ -49,7 +50,6 @@ fun main() {
 
 fun Application.module() {
     install(CallLogging)
-    configureErrorHandling()
     configureSerialization()
     configureDatabase()
     configureSecurity()
@@ -161,6 +161,23 @@ fun Application.module() {
     } else {
         log.info("订阅号未配置 —— 可在 Web 设置页维护")
     }
+
+    // 全局异常告警（2026-09-18 Task 0.8）：未捕获异常经 Bot 通道推给主账号（ADMIN_IDENTITIES）。
+    // StatusPages 需在路由前安装，但告警目标依赖上面各 Bot 服务 —— 因此 configureErrorHandling
+    // 挪到这里（仍在 routing 之前，语义不变）。告警只含路径与异常摘要，不含请求体。
+    val alertNotifier = AlertNotifier(
+        userService = userService,
+        send = { channel, targetId, content ->
+            when (channel) {
+                BotCommands.SOURCE_QQ -> qqBotService.sendC2CMessage(targetId, content, "")
+                BotCommands.SOURCE_FEISHU -> feishuBotService.sendText(targetId, content)
+                BotCommands.SOURCE_WECOM -> wecomBotService.pushText(content)
+                else -> false
+            }
+        },
+        log = log
+    )
+    configureErrorHandling(alertNotifier)
 
     // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
     // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
