@@ -8,13 +8,16 @@ import { toMonthStr, fmtDate } from '../../utils/date'
 import { dailyExpense, monthlyTrend, expenseByCategory, inPeriod, type ChartPeriod } from '../../utils/chartData'
 import { CHART_ANIMATION, readChartPalette, readChartAxisColor, readExpenseIncomeColors, readChartLineColor } from '../../utils/echartsTheme'
 import { formatMoney } from '../../utils/money'
+import { exportMonthlyShareImage } from '../../utils/shareImage'
 import { categoryEmoji } from '../../utils/categoryIcon'
+import { useToast } from '../../composables/useToast'
 import EmptyState from '../../components/ui/EmptyState.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
 import type { MonthlyReview } from '../../types'
 
 const data = useDataStore()
 const theme = useThemeStore()
+const toast = useToast()
 const period = ref<ChartPeriod>('month')
 const revMonth = ref(toMonthStr(Date.now()))
 const review = ref<MonthlyReview | null>(null)
@@ -156,6 +159,20 @@ async function loadReview() {
   } finally { reviewLoading.value = false }
 }
 
+/* 导出月度分享图（Task 3.5）：对当前选择的复盘月份出图，聚合走 utils/shareImage.ts（chartData 同口径） */
+const shareBusy = ref(false)
+async function exportShare() {
+  const [y, m] = revMonth.value.split('-').map(Number)
+  if (!y || !m) return
+  shareBusy.value = true
+  try {
+    // 取当月 15 日为锚点（任意当月时刻均可，聚合只看自然月窗口）
+    const ok = await exportMonthlyShareImage(data.bills, new Date(y, m - 1, 15).getTime())
+    if (ok) toast.push('分享图已导出')
+    else toast.push('导出失败：当前环境不支持画布', 'err')
+  } finally { shareBusy.value = false }
+}
+
 async function init() {
   if (!data.bills.length) {
     loading.value = true
@@ -174,7 +191,10 @@ watch(revMonth, loadReview)
     <div v-reveal class="card rev-panel">
       <div class="rev-head">
         <h3>月度复盘</h3>
-        <input class="sel" type="month" v-model="revMonth" />
+        <div class="rev-actions">
+          <input class="sel" type="month" v-model="revMonth" />
+          <button class="share-btn" type="button" :disabled="shareBusy" aria-label="导出月度分享图" @click="exportShare">导出分享图</button>
+        </div>
       </div>
       <div v-if="reviewLoading" class="rev-body">
         <Skeleton height="16px" /><Skeleton height="14px" width="70%" /><Skeleton height="14px" width="50%" />
@@ -262,6 +282,16 @@ watch(revMonth, loadReview)
 .rev-panel { margin-bottom: 16px; }
 .rev-head { display: flex; justify-content: space-between; align-items: center; }
 .rev-head h3 { margin: 0; }
+.rev-actions { display: flex; align-items: center; gap: 8px; }
+/* 分享图导出按钮：轻量描边样式，与月份选择器同行 */
+.share-btn {
+  padding: 9px 14px; border-radius: 12px; border: 1px solid var(--border); background: none;
+  color: var(--primary); font-size: 13px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  transition: background var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease);
+}
+.share-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
+.share-btn:disabled { opacity: .6; cursor: default; }
+@media (max-width: 640px) { .rev-actions { flex-direction: column; align-items: stretch; } }
 .rev-body { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .rev-summary { white-space: pre-wrap; color: var(--text); line-height: 1.6; margin: 0; }
 .rev-hl { color: var(--muted); line-height: 1.9; }
