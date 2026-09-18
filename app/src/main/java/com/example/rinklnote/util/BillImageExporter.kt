@@ -128,6 +128,295 @@ object BillImageExporter {
         return FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
     }
 
+    // ===========================================================================
+    // 年度账单分享图（Task 2.7）：12 月热力格 + 年总收支 + Top5 分类 + 小盘贺词。
+    // 版式与日图同骨架（固定 1080px 宽、固定深色系、量后画两遍），内容量固定
+    // （12 格 + 最多 5 行），总高度有界，无需截断逻辑。
+    // ===========================================================================
+
+    /** 年度版式的度量结果：所有 y 坐标一次算好，绘制阶段只查表。 */
+    private class AnnualLayout(
+        val heightPx: Int,
+        val cardBottom: Float,
+        val titleTop: Float,
+        val subtitleTop: Float,
+        val headDividerY: Float,
+        val totalsTop: Float,
+        val totalsDividerY: Float,
+        val heatLabelTop: Float,
+        val heatTop: Float,
+        val heatCellHeight: Float,
+        val heatDividerY: Float,
+        val topLabelTop: Float,
+        val topRowTops: List<Float>,
+        val topRowBarWidths: List<Float>,
+        val greetingTop: Float,
+        val footerTop: Float
+    )
+
+    /**
+     * 导出年度账单分享图。
+     *
+     * @param context 任意 Context（只用 cacheDir 与 FileProvider）
+     * @param year 年份（标题用）
+     * @param stats 年度聚合数据（调用方用 [aggregateAnnualStats] 生成，金额一律分）
+     * @return content:// Uri；失败（IO / OOM 等）返回 null
+     */
+    fun exportAnnual(context: Context, year: Int, stats: AnnualStats): Uri? {
+        return try {
+            exportAnnualInternal(context, year, stats)
+        } catch (e: OutOfMemoryError) {
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun exportAnnualInternal(context: Context, year: Int, stats: AnnualStats): Uri {
+        val dir = File(context.cacheDir, "share").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+
+        val layout = measureAnnualLayout(stats)
+        val bitmap = Bitmap.createBitmap(CANVAS_WIDTH, layout.heightPx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawAnnualLayout(canvas, layout, year, stats)
+
+        val stamp = LocalDateTime.now(bookkeepingZone()).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        val file = File(dir, "rinklnote-year-$year-$stamp.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        bitmap.recycle()
+        return FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+    }
+
+    private fun measureAnnualLayout(stats: AnnualStats): AnnualLayout {
+        val titleP = textPaint(24f, TITLE_DARK, bold = true)
+        val subtitleP = textPaint(13f, TEXT_GRAY)
+        val labelP = textPaint(15f, TITLE_DARK, bold = true)
+        val statLabelP = textPaint(13f, TEXT_GRAY)
+        val statValueP = textPaint(18f, BODY_DARK, bold = true)
+        val monthP = textPaint(11f, BODY_DARK)
+        val monthAmountP = textPaint(9f, BODY_DARK)
+        val topNameP = textPaint(14f, BODY_DARK)
+        val topAmountP = textPaint(14f, BODY_DARK, bold = true)
+        val greetingP = textPaint(14f, BODY_DARK)
+        val footerP = textPaint(12f, TEXT_GRAY)
+
+        val hairline = 1f
+        val cardTop = 20f * PX_PER_DP
+        val cardBottomPad = 24f * PX_PER_DP
+        val footerGap = 14f * PX_PER_DP
+        val pageBottomPad = 24f * PX_PER_DP
+        val contentWidth = CANVAS_WIDTH - 2 * (SIDE_MARGIN_DP + CARD_PAD_H_DP) * PX_PER_DP
+
+        // 热力格：3 行 × 4 列，格宽 = (内容宽 − 3×间距) / 4，格高 64dp
+        val heatGap = 10f * PX_PER_DP
+        val heatCellW = (contentWidth - 3 * heatGap) / 4f
+        val heatCellH = 64f * PX_PER_DP
+        // Top5 行：行高 30dp，条形图最大宽 = 内容宽的 45%
+        val topRowH = 30f * PX_PER_DP
+        val topMaxBar = contentWidth * 0.45f
+        val top1 = stats.topCategories.firstOrNull()?.amountMinor ?: 0L
+        val topBarWidths = stats.topCategories.map { cat ->
+            if (top1 <= 0L) 0f else (cat.amountMinor.toFloat() / top1) * topMaxBar
+        }
+
+        var y = cardTop + 24f * PX_PER_DP
+        val titleTop = y
+        y += lineH(titleP) + 4f * PX_PER_DP
+        val subtitleTop = y
+        y += lineH(subtitleP) + 16f * PX_PER_DP
+        val headDividerY = y + 0.5f
+        y += hairline + 16f * PX_PER_DP
+
+        // 年总收支：三列（支出/收入/结余），列高 = 标签行 + 值行
+        val totalsTop = y
+        y += lineH(statLabelP) + 6f * PX_PER_DP + lineH(statValueP) + 16f * PX_PER_DP
+        val totalsDividerY = y + 0.5f
+        y += hairline + 16f * PX_PER_DP
+
+        // 12 月热力格
+        val heatLabelTop = y
+        y += lineH(labelP) + 12f * PX_PER_DP
+        val heatTop = y
+        y += 3 * heatCellH + 2 * heatGap + 16f * PX_PER_DP
+        val heatDividerY = y + 0.5f
+        y += hairline + 16f * PX_PER_DP
+
+        // Top5 分类
+        val topLabelTop = y
+        y += lineH(labelP) + 8f * PX_PER_DP
+        val topRowTops = stats.topCategories.map { rowTop ->
+            val t = y
+            y += topRowH
+            t
+        }
+        y += if (stats.topCategories.isEmpty()) 0f else 8f * PX_PER_DP
+
+        // 小盘贺词（居中）
+        y += 12f * PX_PER_DP
+        val greetingTop = y
+        y += lineH(greetingP) + cardBottomPad
+        val cardBottom = y
+        val footerTop = cardBottom + footerGap
+        val heightPx = (footerTop + lineH(footerP) + pageBottomPad).toInt()
+
+        return AnnualLayout(
+            heightPx = heightPx,
+            cardBottom = cardBottom,
+            titleTop = titleTop,
+            subtitleTop = subtitleTop,
+            headDividerY = headDividerY,
+            totalsTop = totalsTop,
+            totalsDividerY = totalsDividerY,
+            heatLabelTop = heatLabelTop,
+            heatTop = heatTop,
+            heatCellHeight = heatCellH,
+            heatDividerY = heatDividerY,
+            topLabelTop = topLabelTop,
+            topRowTops = topRowTops,
+            topRowBarWidths = topBarWidths,
+            greetingTop = greetingTop,
+            footerTop = footerTop
+        )
+    }
+
+    private fun drawAnnualLayout(canvas: Canvas, layout: AnnualLayout, year: Int, stats: AnnualStats) {
+        val sideMargin = SIDE_MARGIN_DP * PX_PER_DP
+        val contentLeft = sideMargin + CARD_PAD_H_DP * PX_PER_DP
+        val contentRight = CANVAS_WIDTH - sideMargin - CARD_PAD_H_DP * PX_PER_DP
+        val contentWidth = contentRight - contentLeft
+
+        // 页面底 + 白色圆角卡
+        canvas.drawColor(PAGE_BG)
+        val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD_BG }
+        canvas.drawRoundRect(
+            RectF(sideMargin, 20f * PX_PER_DP, CANVAS_WIDTH - sideMargin, layout.cardBottom),
+            CARD_RADIUS_DP * PX_PER_DP,
+            CARD_RADIUS_DP * PX_PER_DP,
+            cardPaint
+        )
+
+        // 1px 发丝分割线
+        val hair = Paint().apply { color = LINE_GRAY; strokeWidth = 1f; isAntiAlias = false }
+        fun hairline(y: Float) = canvas.drawLine(contentLeft, y, contentRight, y, hair)
+
+        // 卡头：标题 + 副标题
+        val titleP = textPaint(24f, TITLE_DARK, bold = true)
+        canvas.drawText("${year} 年度账单", contentLeft, baseline(layout.titleTop, titleP), titleP)
+        val subtitleP = textPaint(13f, TEXT_GRAY)
+        canvas.drawText("RinklNote 记一笔 · 小盘陪你回顾这一年", contentLeft, baseline(layout.subtitleTop, subtitleP), subtitleP)
+        hairline(layout.headDividerY)
+
+        // 年总收支：三列布局（支出 | 收入 | 结余）
+        val statLabelP = textPaint(13f, TEXT_GRAY)
+        val statValueP = textPaint(18f, BODY_DARK, bold = true)
+        val colW = contentWidth / 3f
+        val totals = listOf(
+            Triple("支出", Money.formatPlain(stats.totalExpenseMinor), EXPENSE_RED),
+            Triple("收入", Money.formatPlain(stats.totalIncomeMinor), INCOME_GREEN),
+            Triple(
+                "结余",
+                (if (stats.netMinor >= 0) "+" else "-") + Money.formatPlain(abs(stats.netMinor)),
+                if (stats.netMinor >= 0) INCOME_GREEN else EXPENSE_RED
+            )
+        )
+        totals.forEachIndexed { i, (label, value, color) ->
+            val x = contentLeft + colW * i
+            statValueP.color = color
+            canvas.drawText(label, x, baseline(layout.totalsTop, statLabelP), statLabelP)
+            canvas.drawText(value, x, baseline(layout.totalsTop + lineH(statLabelP) + 6f * PX_PER_DP, statValueP), statValueP)
+        }
+        hairline(layout.totalsDividerY)
+
+        // 12 月热力格：按当月支出 / 最大月支出 映射支出红透明度（0.15~1.0），无支出的月份浅灰
+        val heatLabelP = textPaint(15f, TITLE_DARK, bold = true)
+        canvas.drawText("月度支出热力", contentLeft, baseline(layout.heatLabelTop, heatLabelP), heatLabelP)
+        val heatGap = 10f * PX_PER_DP
+        val heatCellW = (contentWidth - 3 * heatGap) / 4f
+        val maxMonth = stats.monthlyExpenseMinor.maxOrNull() ?: 0L
+        val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val monthP = textPaint(11f, BODY_DARK, bold = true)
+        val monthAmountP = textPaint(9f, BODY_DARK)
+        val monthLabels = listOf("1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月")
+        for (month in 0 until 12) {
+            val row = month / 4
+            val col = month % 4
+            val left = contentLeft + col * (heatCellW + heatGap)
+            val top = layout.heatTop + row * (layout.heatCellHeight + heatGap)
+            val value = stats.monthlyExpenseMinor[month]
+            val alpha = if (value <= 0L || maxMonth <= 0L) 0x14 else (0x14 + 0xE1 * (value.toFloat() / maxMonth)).toInt().coerceIn(0x14, 0xF5)
+            cellPaint.color = (EXPENSE_RED and 0x00FFFFFF) or (alpha shl 24)
+            canvas.drawRoundRect(
+                RectF(left, top, left + heatCellW, top + layout.heatCellHeight),
+                8f * PX_PER_DP, 8f * PX_PER_DP, cellPaint
+            )
+            // 月名 + 金额（金额超宽省略号）
+            val amountText = if (value > 0L) Money.formatPlain(value) else "—"
+            monthP.color = BODY_DARK
+            canvas.drawText(monthLabels[month], left + 10f * PX_PER_DP, baseline(top + 12f * PX_PER_DP, monthP), monthP)
+            monthAmountP.color = if (value > 0L) EXPENSE_RED else TEXT_GRAY
+            canvas.drawText(
+                ellipsize(amountText, monthAmountP, heatCellW - 20f * PX_PER_DP),
+                left + 10f * PX_PER_DP, baseline(top + 12f * PX_PER_DP + lineH(monthP) + 4f * PX_PER_DP, monthAmountP), monthAmountP
+            )
+        }
+        hairline(layout.heatDividerY)
+
+        // Top5 分类：名次 + 分类名 + 占比条 + 金额
+        val topLabelP = textPaint(15f, TITLE_DARK, bold = true)
+        canvas.drawText("年度支出 Top5 分类", contentLeft, baseline(layout.topLabelTop, topLabelP), topLabelP)
+        val topNameP = textPaint(14f, BODY_DARK)
+        val topAmountP = textPaint(14f, BODY_DARK, bold = true)
+        val rankP = textPaint(12f, TEXT_GRAY, bold = true)
+        val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = EXPENSE_RED }
+        val barTopOffset = 22f * PX_PER_DP
+        val barH = 5f * PX_PER_DP
+        stats.topCategories.forEachIndexed { i, cat ->
+            val top = layout.topRowTops[i]
+            rankP.color = TEXT_GRAY
+            canvas.drawText("${i + 1}.", contentLeft, baseline(top, topNameP), rankP)
+            val rankW = rankP.measureText("${i + 1}.")
+            val nameX = contentLeft + rankW + 6f * PX_PER_DP
+            canvas.drawText(
+                ellipsize(cat.categoryName, topNameP, contentWidth * 0.5f - rankW),
+                nameX, baseline(top, topNameP), topNameP
+            )
+            // 占比条：紧贴分类名下方，宽度按 Top1 归一
+            val barW = layout.topRowBarWidths[i]
+            if (barW > 0f) {
+                canvas.drawRoundRect(
+                    RectF(nameX, top + barTopOffset, nameX + barW, top + barTopOffset + barH),
+                    barH / 2f, barH / 2f, barPaint
+                )
+            }
+            val amountText = Money.format(cat.amountMinor)
+            topAmountP.color = BODY_DARK
+            canvas.drawText(amountText, contentRight - topAmountP.measureText(amountText), baseline(top, topAmountP), topAmountP)
+        }
+
+        // 小盘贺词（居中，纯中文文案）
+        val greetingP = textPaint(14f, BODY_DARK)
+        val greeting = annualGreeting(stats)
+        canvas.drawText(
+            greeting,
+            (CANVAS_WIDTH - greetingP.measureText(greeting)) / 2f,
+            baseline(layout.greetingTop, greetingP),
+            greetingP
+        )
+
+        // 页脚品牌
+        val footerP = textPaint(12f, TEXT_GRAY)
+        val brand = "RinklNote 记一笔"
+        canvas.drawText(
+            brand,
+            (CANVAS_WIDTH - footerP.measureText(brand)) / 2f,
+            baseline(layout.footerTop, footerP),
+            footerP
+        )
+    }
+
     // ---------------------------------------------------------------------------
     // 布局度量（先量后画，保证位图高度一次到位，不建超大图再裁）
     // ---------------------------------------------------------------------------

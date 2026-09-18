@@ -181,12 +181,13 @@ internal fun PersonalizationCard(
     }
 }
 
-/** «通用» 组：导出账单、版本信息、退出登录（红字置底）。 */
+/** «通用» 组：导出账单、年度账单分享图、版本信息、退出登录（红字置底）。 */
 @Composable
 internal fun AboutCard(
     isLoggedIn: Boolean,
     versionName: String,
     onExportClick: () -> Unit,
+    onAnnualReportClick: () -> Unit,
     onLogoutClick: () -> Unit
 ) {
     SettingsGroupCard(title = "通用") {
@@ -194,6 +195,14 @@ internal fun AboutCard(
             icon = R.drawable.ic_export,
             label = "导出账单 (CSV)",
             onClick = onExportClick
+        )
+        RinklDivider()
+        // 年度账单分享图：12 月热力格 + 年总收支 + Top5 分类 + 小盘贺词（Task 2.7）
+        SettingsRow(
+            icon = R.drawable.ic_chart,
+            label = "年度账单",
+            value = "分享图",
+            onClick = onAnnualReportClick
         )
         RinklDivider()
         SettingsRow(

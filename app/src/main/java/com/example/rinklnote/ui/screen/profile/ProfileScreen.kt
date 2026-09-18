@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.profile
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -75,11 +76,16 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.util.BillImageExporter
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.aggregateAnnualStats
 import com.example.rinklnote.util.exportBillsToCsv
+import com.example.rinklnote.util.today
 import dev.chrisbanes.haze.HazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 我的页（Profile）—— 个人形象入口 + 数据、通知、个性化等设置。
@@ -146,6 +152,8 @@ fun ProfileScreen(
     val quickAmounts by settingsManager.quickAmounts
         .collectAsStateWithLifecycle(initialValue = SettingsManager.DEFAULT_QUICK_AMOUNTS)
     var showQuickAmountsEditor by remember { mutableStateOf(false) }
+    // 年度账单分享图：年份选择 → 聚合 → Canvas 绘图 → 系统分享面板。
+    var showAnnualYearPicker by remember { mutableStateOf(false) }
     // 展示徽章：服务端勾选 ∩ 实时解锁态（删账单回退后自动隐藏，零存储特性的展示端兜底）。
     val achievements by rememberAchievementStates()
     val displayBadges = displayableShowcaseBadges(state.showcaseBadges, achievements)
@@ -253,6 +261,31 @@ fun ProfileScreen(
         }.getOrNull() ?: "1.0"
     }
 
+    // 年度账单分享图导出（Task 2.7）：全量账单聚合 → Canvas 年度版式 → ACTION_SEND 分享面板。
+    val exportAnnualShare: (Int) -> Unit = { year ->
+        coroutineScope.launch {
+            val bills = repository.observeAllBills().first()
+            val stats = aggregateAnnualStats(bills, year)
+            val uri = withContext(Dispatchers.IO) {
+                BillImageExporter.exportAnnual(context, year, stats)
+            }
+            if (uri == null) {
+                Toast.makeText(context, "生成年度账单失败，请重试", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            try {
+                context.startActivity(Intent.createChooser(send, "分享年度账单"))
+            } catch (_: Exception) {
+                Toast.makeText(context, "未找到可分享的应用", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     // 登录态变化时刷新 profile。
     LaunchedEffect(state.isLoggedIn) {
         if (state.isLoggedIn) authViewModel.onEvent(AuthEvent.FetchProfile)
@@ -355,6 +388,7 @@ fun ProfileScreen(
                             exportBillsToCsv(context, bills)
                         }
                     },
+                    onAnnualReportClick = { showAnnualYearPicker = true },
                     onLogoutClick = { dialog = ProfileDialog.Logout }
                 )
             }
@@ -447,6 +481,29 @@ fun ProfileScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showPayNotifyGuide = false }) { Text("知道了") }
+            }
+        )
+    }
+
+    // 年度账单年份选择：当年与之前 4 年（无账单的年份导出为「空年贺词」版式，不拦截）。
+    if (showAnnualYearPicker) {
+        val currentYear = remember { today().year }
+        AlertDialog(
+            onDismissRequest = { showAnnualYearPicker = false },
+            title = { Text("选择年份") },
+            text = {
+                Column {
+                    (currentYear downTo currentYear - 4).forEach { year ->
+                        TextButton(onClick = {
+                            showAnnualYearPicker = false
+                            exportAnnualShare(year)
+                        }) { Text("${year} 年") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showAnnualYearPicker = false }) { Text("取消") }
             }
         )
     }
