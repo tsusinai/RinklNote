@@ -246,6 +246,17 @@ private fun DrawerContent(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
+            // 常去地点建议：打点位置接近已知地点时出现（「用」= 选中该地点的常用分类）。
+            state.placeSuggestion?.let { place ->
+                SuggestionSection(
+                    label = "上次在「${place.placeName}」附近记过" +
+                        (place.categoryName?.let { " · 常用「$it」" } ?: ""),
+                    onUse = { viewModel.onEvent(QuickAddEvent.PlaceSuggestionClick) },
+                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissPlaceSuggestion) }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             if (state.templates.isNotEmpty()) {
                 TemplatesSection(
                     templates = state.templates,

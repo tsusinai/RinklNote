@@ -16,6 +16,8 @@ import com.example.rinklnote.data.repository.ChatRepository
 import com.example.rinklnote.data.repository.ChatRepositoryImpl
 import com.example.rinklnote.data.repository.ChallengeRepository
 import com.example.rinklnote.data.repository.ChallengeRepositoryImpl
+import com.example.rinklnote.data.repository.PlaceRepository
+import com.example.rinklnote.data.repository.PlaceRepositoryImpl
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.notification.DailyReportReceiver
@@ -66,6 +68,7 @@ class RinklNoteApp : Application() {
     val budgetRepository: BudgetRepository by lazy { BudgetRepositoryImpl(database) }
     val challengeRepository: ChallengeRepository by lazy { ChallengeRepositoryImpl(database) }
     val chatRepository: ChatRepository by lazy { ChatRepositoryImpl(database) }
+    val placeRepository: PlaceRepository by lazy { PlaceRepositoryImpl(database.placeDao()) }
 
     // 主屏小组件点分类 / 深链 rinklnote://add → 欲预填快速记账抽屉的参数；
     // MainActivity 从 Intent extra / deep-link URI 装入，AppNavigation 消费后清空。
