@@ -6,7 +6,7 @@ import io.ktor.server.application.*
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 
 class LearningService(
     private val llmParser: LLMParser,
@@ -114,7 +114,7 @@ ${corrections.joinToString("\n")}
                             it[VoiceKeywordsTable.keyword] = rule.keyword
                             it[VoiceKeywordsTable.categoryName] = rule.categoryName
                             it[VoiceKeywordsTable.priority] = 8
-                            it[VoiceKeywordsTable.createdAt] = LocalDateTime.now().toString()
+                            it[VoiceKeywordsTable.createdAt] = TimeUtil.now().toString()
                         }
                     }
                 }
@@ -143,7 +143,7 @@ ${corrections.joinToString("\n")}
                             it[VoiceKeywordsTable.keyword] = keyword
                             it[VoiceKeywordsTable.categoryName] = correctedCat
                             it[VoiceKeywordsTable.priority] = 8
-                            it[VoiceKeywordsTable.createdAt] = LocalDateTime.now().toString()
+                            it[VoiceKeywordsTable.createdAt] = TimeUtil.now().toString()
                         }
                     }
                 }

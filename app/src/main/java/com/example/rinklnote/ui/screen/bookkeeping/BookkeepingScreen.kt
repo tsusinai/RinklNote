@@ -79,6 +79,7 @@ import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.DayPart
 import com.example.rinklnote.util.bookkeepingZone
+import com.example.rinklnote.util.today
 import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -115,7 +116,7 @@ fun BookkeepingScreen(
 
     val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {
-        val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
+        val d = today().plusMonths(state.selectedMonthOffset.toLong())
         "${d.year}年${d.monthValue}月"
     }
 
@@ -217,7 +218,7 @@ fun BookkeepingScreen(
                 SummaryBar(
                     totalExpense = state.totalExpense,
                     totalIncome = state.totalIncome,
-                    currentMonth = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
+                    currentMonth = today().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     aiSummary = if (isCurrentMonth) state.aiSummary else null,
                     aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false
                 )

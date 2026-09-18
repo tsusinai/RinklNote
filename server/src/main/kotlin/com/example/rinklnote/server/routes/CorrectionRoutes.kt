@@ -11,7 +11,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 
 @Serializable
 data class CorrectionRequest(
@@ -41,7 +41,7 @@ fun Route.correctionRoutes() {
                         it[originalCategory] = body.originalCategory
                         it[correctedCategory] = body.correctedCategory
                         it[processed] = false
-                        it[correctedAt] = LocalDateTime.now().toString()
+                        it[correctedAt] = TimeUtil.now().toString()
                     }
                 }
                 call.respond(HttpStatusCode.Created, mapOf("message" to "修正已记录"))

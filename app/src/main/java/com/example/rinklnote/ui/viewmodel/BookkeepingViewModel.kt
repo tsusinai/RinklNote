@@ -15,6 +15,7 @@ import com.example.rinklnote.domain.MonthDetailData
 import com.example.rinklnote.domain.buildMonthDetail
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.util.bookkeepingZone
+import com.example.rinklnote.util.today
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import com.example.rinklnote.util.reorderRanks
@@ -30,7 +31,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.LocalDate
 import java.time.LocalTime
 
 /** 首页顶部横幅背景按当前时段切换：早晨/白天/傍晚/深夜 → 4 张图。 */
@@ -218,7 +218,7 @@ class BookkeepingViewModel(
         _monthState.update { it.copy(aiSummaryLoading = true) }
         try {
             // 始终缓存当月：与 selectedMonthOffset 无关
-            val d = LocalDate.now()
+            val d = today()
             val month = "%d-%02d".format(d.year, d.monthValue)
             val r = api.getMonthlySummary(month)
             val text = buildString {

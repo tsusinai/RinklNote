@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.mindrot.jbcrypt.BCrypt
 import com.example.rinklnote.server.tables.UsersTable
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 import java.util.*
 
 data class UserInfo(
@@ -53,7 +53,7 @@ class UserService(
                 it[UsersTable.phone] = phone?.takeIf { p -> p.isNotBlank() }
                 it[UsersTable.email] = normalizeEmail(email)
                 it[passwordHash] = hash
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
         }
         val token = generateToken(userId, phone)
@@ -133,7 +133,7 @@ class UserService(
         return findByQqOpenid(openid) ?: transaction {
             val userId = UsersTable.insert {
                 it[UsersTable.qqOpenid] = openid
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
             UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
         }
@@ -227,7 +227,7 @@ class UserService(
         return findByChannelColumn(column, value) ?: transaction {
             val userId = UsersTable.insert {
                 it[column] = value
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
             UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
         }

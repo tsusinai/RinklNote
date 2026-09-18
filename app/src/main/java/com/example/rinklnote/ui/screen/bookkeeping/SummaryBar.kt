@@ -37,7 +37,7 @@ import com.example.rinklnote.util.Money
 @SuppressLint("DefaultLocale")
 @Composable
 fun SummaryBar(
-    currentMonth: Int = java.time.LocalDate.now().monthValue,
+    currentMonth: Int = com.example.rinklnote.util.today().monthValue,
     totalExpense: Long,
     totalIncome: Long,
     aiSummary: String? = null,
