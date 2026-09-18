@@ -17,6 +17,7 @@ import com.example.rinklnote.server.services.MpBotService
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQBotWebSocketClient
+import com.example.rinklnote.server.services.RateService
 import com.example.rinklnote.server.services.PushScheduler
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
@@ -33,6 +34,10 @@ import com.example.rinklnote.server.services.nlu.RuleBasedParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -286,6 +291,18 @@ fun Application.module() {
         else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
     )
 
+    // 汇率服务（2026-09-18 Task 4.2）：免 key 开放源（open.er-api.com，USD 基准）每日拉一次，
+    // 缓存 bot_config KV；失败回落上次成功值，从未成功回落演示表（与 App DEMO_RATES_VS_CNY 同值）。
+    val rateHttpClient = HttpClient(CIO)
+    val rateService = RateService(
+        fetchJson = { url ->
+            try { rateHttpClient.get(url).bodyAsText() } catch (_: Exception) { null }
+        },
+        apiUrl = System.getenv("RATE_API_URL") ?: RateService.DEFAULT_API_URL,
+        log = log
+    )
+    rateService.start(appScope)
+
     // 管理端只读服务：LLM/ASR 只回「是否已配置」布尔，绝不回显 key 值（隐私红线见 AdminService 注释头）。
     val adminService = AdminService(
         dbTypeName = { DbRuntimeInfo.typeName },
@@ -303,6 +320,7 @@ fun Application.module() {
         feishuBotService.shutdown()
         wecomBotService.shutdown()
         asrService.shutdown()
+        rateHttpClient.close()
     }
 
     routing {
@@ -326,6 +344,7 @@ fun Application.module() {
         mpWebhookRoutes(mpBotService, userService, billService, nluService, budgetService, insightService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
+        rateRoutes(rateService)
         adminRoutes(adminService, qqBotService, qqWsClient)
     }
 }
