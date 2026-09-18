@@ -2,11 +2,11 @@
 
 本文件为 AI 编码代理（Codex / Claude Code / WorkBuddy 等）提供本仓库的工作指引。**动手改代码前请先通读。**
 
-> 最后校正：2026-09-16（相对上版的主要变化：新增省钱挑战 + 成就徽章 + 主题解锁（Room v15 `challenges` 表、三端同步）、bills 增加 lat/lng（Room v16，账单地图真实数据 + 定位聚焦）、当天账单页 `day-detail` 与分享图导出、AI 快捷询问 chips、新账号种子收敛为仅「无账户」账户、WebView 引导深链修正为 `/console/settings`）。
+> 最后校正：2026-09-17（核对实际目录、路由、构建配置与 Git 提交/工作树；补记个人资料页、Web 404 兜底及当前 Git 工作流）。
 
 ## 项目
 
-**RinklNote 记一笔** —— 个人记账应用，双端一体（Android App + Ktor 服务端 + Web SPA + QQ 机器人），全链路支持自然语言与 AI 洞察。
+**RinklNote 记一笔** —— 个人记账应用，Android App + Ktor 服务端 + Web SPA，并接入 QQ / 飞书 / 企微 / 订阅号机器人，支持自然语言记账与 AI 洞察。
 
 - **所有 UI 文案与代码注释统一使用中文。**
 - 仓库是 **monorepo**，Android（`:app`）与服务端（`:server`）都已 include 进 Gradle；Web（`web/`）走 npm 独立构建。
@@ -21,12 +21,11 @@ RinklNote/
 └─ gradle/libs.versions.toml   统一版本目录
 ```
 
-其它文件：`README.md`（人读的项目总览）、`FEATURES.md`（功能现状与升级规划）、`CLAUDE.md`（指向本文件）。
+源码入口：App `app/src/main/java/com/example/rinklnote/`，Server `server/src/main/kotlin/com/example/rinklnote/server/`，Web `web/src/`；对应测试在 `app/src/test/`、`server/src/test/`、`web/src/**/__tests__/`。Room schema 在 `app/schemas/`，Web 锁文件为 `web/package-lock.json`。其它文件：`README.md`（人读的项目总览）、`FEATURES.md`（功能现状与升级规划）、`CLAUDE.md`（指向本文件）。
 
 ## 构建与测试
 
-> **环境前提（本机 Windows）**：默认 JDK 24 会让 Gradle 8.13 建 Test 任务报 `Type T not present`，且用户路径含撇号（`C:\Users\a'su's`）会破坏 Gradle 缓存。跑任何 gradle 命令前先导出：
-> `export JAVA_HOME="D:/Codes/AndroidStudio/jbr" GRADLE_USER_HOME="D:/Codes/RinklNote/.gradle-home"`
+> **环境前提（本机 Windows）**：默认 JDK 24 会让 Gradle 8.13 建 Test 任务报 `Type T not present`，且用户路径含撇号（`C:\Users\a'su's`）会破坏 Gradle 缓存。PowerShell 中先执行 `$env:JAVA_HOME = 'D:/Codes/AndroidStudio/jbr'; $env:GRADLE_USER_HOME = 'D:/Codes/RinklNote/.gradle-home'`；Git Bash 中先执行 `export JAVA_HOME="D:/Codes/AndroidStudio/jbr" GRADLE_USER_HOME="D:/Codes/RinklNote/.gradle-home"`。
 > （详见 docs/superpowers/plans/2026-09-09-budget-upgrade.md）
 
 ### Android 客户端（`:app`）
@@ -35,15 +34,15 @@ RinklNote/
 ./gradlew assembleDebug            # 构建 debug APK
 ./gradlew assembleRelease          # 构建 release APK（minify + shrinkResources 已开）
 ./gradlew installDebug             # 安装到已连接设备
-./gradlew test                     # 全部 JVM 单元测试（离线）
+./gradlew :app:testDebugUnitTest   # App 全部 JVM 单元测试（离线）
 ./gradlew connectedAndroidTest     # 仪器测试（需设备/模拟器）
 ./gradlew lint                     # Android Lint
 
 # 跑单个测试类
-./gradlew test --tests "com.example.rinklnote.ui.viewmodel.BookkeepingViewModelTest"
+./gradlew :app:testDebugUnitTest --tests "com.example.rinklnote.ui.viewmodel.BookkeepingViewModelTest"
 ```
 
-`namespace` / `applicationId` = `com.example.rinklnote`；compileSdk 36、minSdk 28、targetSdk 36；JVM target 11。App 单测套件当前**全绿**（2026-09 修复完 6 项历史失败），改动后请保持。
+`namespace` / `applicationId` = `com.example.rinklnote`；compileSdk 36、minSdk 28、targetSdk 36；JVM target 11。App 曾在 2026-09 修复 6 项历史单测失败；每次改动后以本次实际测试结果为准。
 
 ### 服务端（`server/`）
 
@@ -55,7 +54,7 @@ RinklNote/
 
 - `settings.gradle.kts` 已 `include(":server")`，可直接用 Gradle 构建（README 若与此冲突，以本文件为准）。
 - 模块用 `kotlin("jvm")` + `application` 插件，`mainClass = com.example.rinklnote.server.ApplicationKt`，**JVM target 17**（与 app 的 11 不同）。
-- 入口 `Application.kt`，配置读 `src/main/resources/application.conf` + 环境变量；测试用 H2（见 `TestDatabase.kt`），当前 91 项全绿。
+- 入口 `Application.kt`，配置读 `src/main/resources/application.conf` + 环境变量；测试用 H2（见 `TestDatabase.kt`）。测试数量与结果以本次运行输出为准。
 
 ### Web（`web/`）
 
@@ -70,8 +69,16 @@ npm run test        # vitest run
 
 ### 版本号规则
 
-所有依赖版本集中在 `gradle/libs.versions.toml`，用 `alias(libs.plugins.*)` / `libs.*` 引用，**不要在 build 文件里硬编码版本或 Maven 坐标**。
+所有 Gradle 依赖版本集中在 `gradle/libs.versions.toml`，用 `alias(libs.plugins.*)` / `libs.*` 引用，**不要在 build 文件里硬编码版本或 Maven 坐标**。
 （已知违反：`server/build.gradle.kts` 里硬编码了 `com.h2database:h2:2.3.232` 与 `org.bouncycastle:bcprov-jdk18on:1.78`，改到该文件时顺手收敛。）
+
+## Git 工作流（2026-09-17 核对）
+
+- 主工作树位于 `D:/Codes/RinklNote`，核对前分支为 `main`，跟踪 `origin/main`；`server/main` 是第二远端的同名分支。核对前这三者同在 `826d607`，工作区没有未提交改动。这个提交号只是快照，开始任务时重新查，不要当作固定基线。
+- 仓库同时挂有多个工作树：仓库内 `.claude/worktrees/` 及 `D:/Codes/RinklNote-*`。同一分支已被别的工作树占用时不能直接在当前目录切入；先用 `git worktree list --porcelain` 确认路径与分支，再决定在哪个工作树修改。不要清理不属于当前任务的工作树或分支。
+- 近期历史同时存在功能分支合并（`goal/*`、`feat/*` 等）和按 App / Server / Web 分阶段直接提交到 `main`；提交前先核对当前分支及其上游，不要把某一种提交方式当成全库强制规则。`git log --first-parent` 可看主线，普通 `git log` 可追模块提交。
+- 开始和收尾都运行 `git status --short --branch`、`git branch -vv`；提交前查看 `git diff`、`git diff --check`，按本次改动的**具体路径**暂存，再查看 `git diff --cached`。避免 `git add -A` 混入其它工作树、构建产物或并行任务的文件。合并或推送前重新确认上游与目标远端，`origin` 是 GitHub，`server` 是部署机仓库。
+- 当前没有跟踪的 `.github/workflows/`、其它 CI 配置或启用的仓库 Git hook（`.git/hooks/` 只有 sample）；验证依靠各模块命令与必要的真机 / 服务端冒烟。`docs/vibe-coding-workflow.md` 记录了历史协作流程，其测试数和环境命令是当时快照，以本文件和当前构建配置为准。
 
 ## 技术栈
 
@@ -110,13 +117,13 @@ Compose UI（collectAsStateWithLifecycle）
 | `data/repository/` | 仓库接口 + `*Impl` |
 | `domain/` | `BillType`、`Source`、`MessageKind`、`MonthlyChart` |
 | `navigation/` | `AppNavigation`（NavHost 编排）、`BookingOrchestrator` |
-| `ui/` | `component/`（含 `MoreDrawer` 更多抽屉、`RinklTopBar`、`PressScale`）、`screen/{bookkeeping,plan,assets,ai,profile,login,quickadd,currency,importbills,map,search,web,challenge,day}`、`viewmodel/`、`theme/`（含 `RinklColors` 主题令牌）、`util/`（含 `DisplayPreferences`、`LocationGrabber` 一次性定位、`BillImageExporter` 分享图绘制）。注意：`screen/import/` 目录名与包名 `...screen.importbills` **不一致是有意的，别"修"**；搜索 / 导入的 ViewModel 就近放在各自 screen 包（路由级短生命周期），其余 VM 在 `viewmodel/` |
+| `ui/` | `component/`（含 `MoreDrawer` 更多抽屉、`RinklTopBar`、`PressScale`）、`screen/{bookkeeping,plan,assets,ai,profile,login,quickadd,currency,import,map,search,web,challenge,day}`、`viewmodel/`、`theme/`（含 `RinklColors` 主题令牌）、`util/`（含 `DisplayPreferences`、`LocationGrabber` 一次性定位、`BillImageExporter` 分享图绘制）。注意：`screen/import/` 目录名与包名 `...screen.importbills` **不一致是有意的，别"修"**；搜索 / 导入 / 个人资料的 ViewModel 就近放在各自 screen 包（路由级短生命周期），其余 VM 在 `viewmodel/` |
 | `sync/` | `SyncManager`（双向同步，Mutex 单飞） |
 | `notification/` | `DailyReportReceiver`、`NotificationHelper` |
 | `widget/` | `RinklNoteAppWidget`（Glance 桌面小组件） |
 | `util/` | `DateUtil`（业务时区）、`Money`（分⇄元换算/格式化）、`ReorderRanks`（拖动排序）、`BillCsvExporter`、`VoiceInputUtil`、`VoiceRecorder` |
 
-**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**。flat route 全集：`ai`、`bill-edit`（编辑账单独立页）、`budget-categories`（分类预算）、`budget-edit`、`account-editor/{accountId}`、`month-detail`、`challenges`（Rk省钱计划「大字报乐园」hub，记账页「更多」抽屉进入）、`challenge-arena`（挑战竞技场）、`challenge-detail/{type}`（单挑战详情，String 参数 = ChallengeType 常量）、`challenge-achievements`（成就徽章馆）、`challenge-predictor`（结余预测器）、`challenge-themes`（主题换装间）、`day-detail/{dayStart}`（当天账单页，Long 参数）、`bill-map`（账单地图，可选 `?focusBillId=` 聚焦指定账单）、`bill-import`（CSV 导入）、`multi-currency`（多币种）、`bill-search`（搜索账单）、`custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）、`web-view?url={url}&title={title}`（内嵌网页，参数 URL 编码）。记账页「更多抽屉」`MoreDrawer` 是 地图 / 导入 / 多币种 / 搜索 / Rk省钱计划 的统一入口。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判（有 `NavigationTransitionDirectionTest` 把关）。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
+**导航（易错点）**：`AppNavigation.kt` 用的是 **Jetpack Navigation Compose（`NavHost`）**，不是 `HorizontalPager`。4 个底部 tab（计划 / 记账 / 资产 / 我的），start destination 是**记账**。flat route 全集：`ai`、`bill-edit`（编辑账单独立页）、`budget-categories`（分类预算）、`budget-edit`、`account-editor/{accountId}`、`month-detail`、`challenges`（Rk省钱计划「大字报乐园」hub，记账页「更多」抽屉进入）、`challenge-arena`（挑战竞技场）、`challenge-detail/{type}`（单挑战详情，String 参数 = ChallengeType 常量）、`challenge-achievements`（成就徽章馆）、`challenge-predictor`（结余预测器）、`challenge-themes`（主题换装间）、`day-detail/{dayStart}`（当天账单页，Long 参数）、`bill-map`（账单地图，可选 `?focusBillId=` 聚焦指定账单）、`bill-import`（CSV 导入）、`multi-currency`（多币种）、`bill-search`（搜索账单）、`personal-profile`（个人资料）、`custom-theme`（自定义主题）、`background-crop/{uri}`（背景裁剪）、`web-view?url={url}&title={title}`（内嵌网页，参数 URL 编码）。记账页「更多抽屉」`MoreDrawer` 是 地图 / 导入 / 多币种 / 搜索 / Rk省钱计划 的统一入口。页面过渡方向按 **tab 顺序**判定，不能按 push/pop 判（有 `NavigationTransitionDirectionTest` 把关）。`HorizontalPager` 只出现在 `MonthChartPager`（月度明细的三段式图表）。
 
 **关键模式**
 
@@ -148,7 +155,7 @@ Compose UI（collectAsStateWithLifecycle）
 
 ### Web —— Vue 3 SPA
 
-`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,console/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。主题令牌是 `src/styles/theme.css` 的 CSS 变量（含 `--on-primary`，图表色已对齐 App 的 PiePalette）；提交信息里的「Web 端令牌同步」指 **CSS 设计令牌**，不是登录态同步，别会错意。管理端在 `/admin`（AdminLayout + 四页：运维大盘/用户管理/机器人运维/推送历史），非管理员守卫直接 404（不暴露存在）；管理员判定走服务端 `ADMIN_IDENTITIES` 环境变量（`requireAdmin`，`/api/admin/*` 全只读 + 手机号掩码，隐私红线见 AdminService 注释头）。**App 内 WebView 深链必须用 `/console/*`**：settings 等是 console 子路由，根路径没有 catch-all，深链打错（如 `/settings`）vue-router 会空渲染 → WebView 白屏（2026-09-16 已修的真实案例）。
+`src/api`（各域 REST 封装 + `http.ts`）、`src/stores`（Pinia：auth / data / theme）、`src/router`（含 guards）、`src/views/{Landing,Login,NotFound,console/*,admin/*,landing/*}`、`src/utils`、`src/components`、`src/styles`。主题令牌是 `src/styles/theme.css` 的 CSS 变量（含 `--on-primary`，图表色已对齐 App 的 PiePalette）；提交信息里的「Web 端令牌同步」指 **CSS 设计令牌**，不是登录态同步，别会错意。管理端在 `/admin`（AdminLayout + 四页：运维大盘/用户管理/机器人运维/推送历史），非管理员守卫直接 404（不暴露存在）；管理员判定走服务端 `ADMIN_IDENTITIES` 环境变量（`requireAdmin`，`/api/admin/*` 全只读 + 手机号掩码，隐私红线见 AdminService 注释头）。**App 内 WebView 深链必须用 `/console/*`**：settings 等是 console 子路由，根路径已有 404 catch-all，但误用 `/settings` 会落到 404 页，无法进入设置。
 
 ## 硬性约定
 
