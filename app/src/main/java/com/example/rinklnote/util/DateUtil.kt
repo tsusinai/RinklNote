@@ -17,6 +17,10 @@ private val headerFormatter = DateTimeFormatter.ofPattern("yyyy-M-d")
  */
 fun bookkeepingZone(): ZoneId = ZoneId.of("Asia/Shanghai")
 
+/** 业务时区的「今天」：月导航、当月基准、当月总结等一律用它；
+ *  别直接用 LocalDate.now()——那会随设备系统时区漂移，导致跨端日期错位。 */
+fun today(): LocalDate = LocalDate.now(bookkeepingZone())
+
 fun Long.toDateString(): String {
     val localDate = Instant.ofEpochMilli(this).atZone(bookkeepingZone()).toLocalDate()
     return localDate.format(dateFormatter)

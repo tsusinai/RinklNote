@@ -119,7 +119,7 @@ object BillImageExporter {
         val canvas = Canvas(bitmap)
         drawLayout(canvas, layout, title, totalExpenseMinor, totalIncomeMinor)
 
-        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        val stamp = LocalDateTime.now(bookkeepingZone()).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
         val file = File(dir, "rinklnote-day-$stamp.png")
         FileOutputStream(file).use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)

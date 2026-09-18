@@ -11,7 +11,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 
 @Serializable
 data class KeywordRequest(
@@ -82,7 +82,7 @@ fun Route.keywordRoutes() {
                             it[VoiceKeywordsTable.keyword] = body.keyword
                             it[VoiceKeywordsTable.categoryName] = body.categoryName
                             it[VoiceKeywordsTable.priority] = body.priority
-                            it[VoiceKeywordsTable.createdAt] = LocalDateTime.now().toString()
+                            it[VoiceKeywordsTable.createdAt] = TimeUtil.now().toString()
                         } get VoiceKeywordsTable.id
                     }
                 }

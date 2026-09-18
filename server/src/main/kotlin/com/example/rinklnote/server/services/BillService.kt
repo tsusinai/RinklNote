@@ -36,6 +36,15 @@ data class BillDTO(
     val longitude: Double? = null
 )
 
+/** 条件 PUT（乐观锁）的三种结果：
+ *  Updated 成功；VersionConflict 版本不匹配（附服务端当前最新 DTO，客户端据此重取 base 重放）；
+ *  NotFound 账单不存在或非本人账单。 */
+sealed interface BillUpdateResult {
+    data class Updated(val bill: BillDTO) : BillUpdateResult
+    data class VersionConflict(val current: BillDTO) : BillUpdateResult
+    data object NotFound : BillUpdateResult
+}
+
 @Serializable
 data class SyncResponse(
     val bills: List<BillDTO>,
@@ -46,6 +55,19 @@ data class SyncResponse(
     // the same updatedAt across a page boundary.
     val nextAfter: Long? = null,
     val nextAfterId: Long? = null
+)
+
+/** 账单搜索响应（2026-09-18 Task 0.6）：当前页列表 + 分页元数据 +
+ *  「当前筛选全集」的聚合（汇总卡跨页展示用），金额一律整数分。 */
+@Serializable
+data class BillSearchResponse(
+    val bills: List<BillDTO>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
+    val totalPages: Int,
+    val sumExpenseMinor: Long,
+    val sumIncomeMinor: Long
 )
 
 @Serializable
@@ -229,6 +251,71 @@ class BillService {
         )
     }
 
+    /**
+     * 账单搜索（2026-09-18 Task 0.6）：服务端条件拼接 + 分页，替代 Web 端全量内存过滤。
+     * - 只查未删除（软删过滤），按 userId 隔离；
+     * - q 模糊匹配备注 / 分类名（不区分大小写）；
+     * - minMinor / maxMinor 为整数分比较（元入参由路由层经 Money.toMinor 换算），区间含边界；
+     * - fromDayStart / toDayEnd 为 epoch 毫秒（业务时区当天边界，含首尾，由路由层解析）；
+     * - 分页 page 从 1 起；total / 聚合覆盖当前筛选全集（跨页）。
+     * 排序：date 倒序、id 倒序（最新在前，与 Web 列表现有习惯一致）。
+     */
+    fun searchBills(
+        userId: Long,
+        q: String? = null,
+        minMinor: Long? = null,
+        maxMinor: Long? = null,
+        categoryId: Long? = null,
+        fromDayStart: Long? = null,
+        toDayEnd: Long? = null,
+        page: Int = 1,
+        pageSize: Int = 20
+    ): BillSearchResponse {
+        val safePage = page.coerceAtLeast(1)
+        val safeSize = pageSize.coerceIn(1, 200)
+
+        fun filterOp(): Op<Boolean> = with(SqlExpressionBuilder) {
+            var op: Op<Boolean> = (BillsTable.userId eq userId) and (BillsTable.deleted eq false)
+            if (!q.isNullOrBlank()) {
+                val like = "%" + q.trim().lowercase() + "%"
+                op = op and (BillsTable.remark.lowerCase().like(like) or BillsTable.categoryName.lowerCase().like(like))
+            }
+            if (minMinor != null) op = op and (BillsTable.amountMinor greaterEq minMinor)
+            if (maxMinor != null) op = op and (BillsTable.amountMinor lessEq maxMinor)
+            if (categoryId != null) op = op and (BillsTable.categoryId eq categoryId)
+            if (fromDayStart != null) op = op and (BillsTable.date greaterEq fromDayStart)
+            if (toDayEnd != null) op = op and (BillsTable.date lessEq toDayEnd)
+            op
+        }
+
+        return transaction {
+            val where: Op<Boolean> = filterOp()
+            val total = BillsTable.selectAll().where { where }.count()
+            val sumExpense = BillsTable.select(BillsTable.amountMinor.sum())
+                .where { where and (BillsTable.billType eq "EXPENSE") }
+                .first()[BillsTable.amountMinor.sum()] ?: 0L
+            val sumIncome = BillsTable.select(BillsTable.amountMinor.sum())
+                .where { where and (BillsTable.billType eq "INCOME") }
+                .first()[BillsTable.amountMinor.sum()] ?: 0L
+
+            val bills = BillsTable.selectAll()
+                .where { where }
+                .orderBy(BillsTable.date to SortOrder.DESC, BillsTable.id to SortOrder.DESC)
+                .limit(safeSize, offset = (safePage - 1).toLong() * safeSize)
+                .map { it.toBillDto() }
+
+            BillSearchResponse(
+                bills = bills,
+                page = safePage,
+                pageSize = safeSize,
+                total = total,
+                totalPages = ((total + safeSize - 1) / safeSize).toInt(),
+                sumExpenseMinor = sumExpense,
+                sumIncomeMinor = sumIncome
+            )
+        }
+    }
+
     fun deleteBill(billId: Long, userId: Long): Boolean {
         val now = System.currentTimeMillis()
         return transaction {
@@ -239,6 +326,60 @@ class BillService {
                 it[updatedAt] = now
             }
             updated > 0
+        }
+    }
+
+    /**
+     * 条件 PUT（乐观锁，2026-09-18 Task 0.1）：单条 UPDATE 把版本条件写进 WHERE，
+     * 消灭旧「先读后写」实现在两步之间被并发写入穿插导致的丢更新窗口。
+     * baseUpdatedAt 为 null 时不带版本条件（无条件覆盖，旧客户端兼容）。
+     * 0 行命中时二次区分：记录不存在 → NotFound；存在但版本不匹配 → VersionConflict（附当前最新 DTO）。
+     */
+    fun updateBill(
+        id: Long,
+        userId: Long,
+        baseUpdatedAt: Long?,
+        amountMinor: Long,
+        billType: String,
+        categoryId: Long,
+        categoryName: String,
+        subCategoryName: String?,
+        accountId: Long,
+        remark: String?,
+        sortOrder: Long?,
+        latitude: Double?,
+        longitude: Double?
+    ): BillUpdateResult = transaction {
+        val now = System.currentTimeMillis()
+        val affected = BillsTable.update({
+            if (baseUpdatedAt == null) {
+                (BillsTable.id eq id) and (BillsTable.userId eq userId)
+            } else {
+                (BillsTable.id eq id) and (BillsTable.userId eq userId) and
+                    (BillsTable.updatedAt eq baseUpdatedAt)
+            }
+        }) {
+            it[BillsTable.amountMinor] = amountMinor
+            it[BillsTable.amount] = Money.fromMinor(amountMinor)
+            it[BillsTable.billType] = billType
+            it[BillsTable.categoryId] = categoryId
+            it[BillsTable.categoryName] = categoryName
+            it[BillsTable.subCategoryName] = subCategoryName
+            it[BillsTable.accountId] = accountId
+            it[BillsTable.remark] = remark
+            it[BillsTable.sortOrder] = sortOrder
+            // PUT 是全量替换语义（与 remark 等字段一致）：传 null 即清除打点。
+            it[BillsTable.latitude] = latitude
+            it[BillsTable.longitude] = longitude
+            it[BillsTable.updatedAt] = now
+        }
+        val row = BillsTable.selectAll()
+            .where { (BillsTable.id eq id) and (BillsTable.userId eq userId) }
+            .singleOrNull()
+        when {
+            affected > 0 && row != null -> BillUpdateResult.Updated(row.toBillDto())
+            row != null -> BillUpdateResult.VersionConflict(row.toBillDto())
+            else -> BillUpdateResult.NotFound
         }
     }
 

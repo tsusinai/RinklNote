@@ -131,13 +131,13 @@ import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.today
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 
 data class Tabs(
@@ -787,13 +787,13 @@ fun AppNavigation(app: RinklNoteApp) {
                 composable("month-detail") {
                     val state by bookkeepingVM.monthState.collectAsStateWithLifecycle()
                     val monthLabel = remember(state.selectedMonthOffset) {
-                        val d = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong())
+                        val d = today().plusMonths(state.selectedMonthOffset.toLong())
                         "${d.year}年${d.monthValue}月"
                     }
                     MonthDetailOverlay(
                         monthLabel = monthLabel,
                         bills = state.bills,
-                        month = LocalDate.now().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
+                        month = today().plusMonths(state.selectedMonthOffset.toLong()).withDayOfMonth(1),
                         expenseTotal = state.totalExpense,
                         incomeTotal = state.totalIncome,
                         monthDetail = state.monthDetail,

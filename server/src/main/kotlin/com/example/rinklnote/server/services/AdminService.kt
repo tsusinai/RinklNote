@@ -7,8 +7,6 @@ import com.example.rinklnote.server.tables.UsersTable
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDate
-import java.time.ZoneId
 
 /**
  * 管理端只读服务（前缀 /api/admin，配套 AdminRoutes）。
@@ -211,10 +209,7 @@ class AdminService(
             }
         }
 
-        /** 业务时区（Asia/Shanghai）当日 0 点的 epoch 毫秒。 */
-        private fun currentShanghaiDayStart(): Long =
-            LocalDate.now(ZoneId.of("Asia/Shanghai"))
-                .atStartOfDay(ZoneId.of("Asia/Shanghai"))
-                .toInstant().toEpochMilli()
+        /** 业务时区（Asia/Shanghai）当日 0 点的 epoch 毫秒（统一走 TimeUtil）。 */
+        private fun currentShanghaiDayStart(): Long = TimeUtil.todayStartMillis()
     }
 }

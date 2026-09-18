@@ -2,12 +2,11 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
+import com.example.rinklnote.server.services.BillUpdateResult
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.TimeUtil
 import com.example.rinklnote.server.services.nlu.NLUService
-import com.example.rinklnote.server.tables.BillsTable
 import io.ktor.http.*
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -15,6 +14,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 @Serializable
 data class CreateBillRequest(
@@ -39,6 +40,19 @@ data class CreateBillRequest(
 @Serializable
 data class ParseRequest(val text: String)
 
+/** yyyy-MM-dd → 业务时区（Asia/Shanghai）当天 0 点的 epoch 毫秒；解析失败返回 null。 */
+private fun parseDayStartMillis(day: String): Long? =
+    try {
+        LocalDate.parse(day).atStartOfDay(TimeUtil.BOOKKEEPING_ZONE).toInstant().toEpochMilli()
+    } catch (_: DateTimeParseException) {
+        null
+    }
+
+/** yyyy-MM-dd → 业务时区当天「最后一毫秒」（区间含 to 当天）。 */
+private fun parseDayEndMillis(day: String): Long =
+    LocalDate.parse(day).plusDays(1).atStartOfDay(TimeUtil.BOOKKEEPING_ZONE)
+        .toInstant().toEpochMilli() - 1
+
 fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
     // Public endpoints — reference data, no auth required
     get("/api/bills/categories") {
@@ -55,6 +69,36 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
         }
 
         route("/api/bills") {
+            // 账单搜索（Task 0.6）：服务端分页过滤，替代 Web 全量内存扫描。
+            // min/max 为「元」入参（内部经 Money.toMinor 换整数分比较）；
+            // from/to 为 yyyy-MM-dd，按业务时区取当天边界，to 含当天。
+            get("/search") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val fromParam = call.request.queryParameters["from"]
+                val toParam = call.request.queryParameters["to"]
+                if (fromParam != null && parseDayStartMillis(fromParam) == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "from 日期格式应为 yyyy-MM-dd"))
+                }
+                if (toParam != null && parseDayStartMillis(toParam) == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "to 日期格式应为 yyyy-MM-dd"))
+                }
+
+                val response = billService.searchBills(
+                    userId = userId,
+                    q = call.request.queryParameters["q"],
+                    minMinor = call.request.queryParameters["min"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
+                    maxMinor = call.request.queryParameters["max"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
+                    categoryId = call.request.queryParameters["categoryId"]?.toLongOrNull(),
+                    fromDayStart = fromParam?.let { parseDayStartMillis(it) },
+                    toDayEnd = toParam?.let { parseDayEndMillis(it) },
+                    page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1,
+                    pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 20
+                )
+                call.respond(response)
+            }
+
             get("/sync") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()
@@ -144,56 +188,26 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 require(amountMinor > 0) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
 
-                // 条件 PUT：带 baseUpdatedAt 且和服务端最新 updatedAt 不符 → 409 + 当前最新 DTO，
-                // 客户端据此重取 base 重放，避免离线/陈旧端覆盖新端改动。
-                if (body.baseUpdatedAt != null) {
-                    val current = billService.getBill(billId, userId)
-                    if (current == null) {
-                        return@put call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
-                    }
-                    if (current.updatedAt != body.baseUpdatedAt) {
-                        return@put call.respond(HttpStatusCode.Conflict, current)
-                    }
-                }
-
-                val updated = transaction {
-                    val row = BillsTable.selectAll()
-                        .where { (BillsTable.id eq billId) and (BillsTable.userId eq userId) }
-                        .singleOrNull()
-                        ?: return@transaction null
-
-                    val now = System.currentTimeMillis()
-                    BillsTable.update({ BillsTable.id eq billId }) {
-                        it[BillsTable.amountMinor] = amountMinor
-                        it[BillsTable.amount] = Money.fromMinor(amountMinor)
-                        it[BillsTable.billType] = body.billType
-                        it[BillsTable.categoryId] = body.categoryId
-                        it[BillsTable.categoryName] = body.categoryName
-                        it[BillsTable.subCategoryName] = body.subCategoryName
-                        it[BillsTable.accountId] = body.accountId
-                        it[BillsTable.remark] = body.remark
-                        it[BillsTable.sortOrder] = body.sortOrder
-                        // PUT 是全量替换语义（与 remark 等字段一致）：传 null 即清除打点。
-                        it[BillsTable.latitude] = body.latitude
-                        it[BillsTable.longitude] = body.longitude
-                        it[BillsTable.updatedAt] = now
-                    }
-
-                    BillDTO(
-                        id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = body.billType,
-                        categoryId = body.categoryId, categoryName = body.categoryName,
-                        subCategoryName = body.subCategoryName, accountId = body.accountId,
-                        remark = body.remark, date = row[BillsTable.date],
-                        source = row[BillsTable.billSource], createdAt = row[BillsTable.createdAt],
-                        updatedAt = now, sortOrder = body.sortOrder,
-                        latitude = body.latitude, longitude = body.longitude
-                    )
-                }
-
-                if (updated != null) {
-                    call.respond(updated)
-                } else {
-                    call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
+                // 条件 PUT（乐观锁）：版本条件随单条 UPDATE 生效，0 行命中再二次区分
+                // 404（不存在）/ 409（版本不匹配，响应体附当前最新 DTO 供客户端重取 base 重放）。
+                when (val result = billService.updateBill(
+                    id = billId,
+                    userId = userId,
+                    baseUpdatedAt = body.baseUpdatedAt,
+                    amountMinor = amountMinor,
+                    billType = body.billType,
+                    categoryId = body.categoryId,
+                    categoryName = body.categoryName,
+                    subCategoryName = body.subCategoryName,
+                    accountId = body.accountId,
+                    remark = body.remark,
+                    sortOrder = body.sortOrder,
+                    latitude = body.latitude,
+                    longitude = body.longitude
+                )) {
+                    is BillUpdateResult.Updated -> call.respond(result.bill)
+                    is BillUpdateResult.VersionConflict -> call.respond(HttpStatusCode.Conflict, result.current)
+                    BillUpdateResult.NotFound -> call.respond(HttpStatusCode.NotFound, mapOf("message" to "账单不存在"))
                 }
             }
 

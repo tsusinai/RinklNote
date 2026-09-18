@@ -14,6 +14,7 @@ import com.example.rinklnote.server.tables.UsersTable
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.selectAll
+import org.mindrot.jbcrypt.BCrypt
 
 class UserServiceTest {
 
@@ -217,6 +218,42 @@ class UserServiceTest {
         assertTrue(ids.contains(u3.id))
         assertFalse("仅订阅号用户不应进入推送枚举", ids.contains(u4.id))
         assertEquals(3, pushUsers.size)
+    }
+
+    // ── QQ 无密码用户首次设密（2026-09-18 全端优化 Task 0.3）──
+
+    /** 直接从库读密码哈希（UserInfo 不暴露该字段，属公共面）。 */
+    private fun hashOf(userId: Long): String? = transaction {
+        UsersTable.selectAll().where { UsersTable.id eq userId }
+            .singleOrNull()?.get(UsersTable.passwordHash)
+    }
+
+    @Test
+    fun `updatePassword on null-hash user sets password as first time`() {
+        // QQ / 通道注册的账号没有密码（password_hash 为 null），此前改密直接失败无法设密
+        val u = service.createByQqOpenid("openid-nopass")
+        assertNull(hashOf(u.id))
+
+        // 视为首次设密：跳过旧密码校验，任意旧密码值都能设置成功
+        assertTrue(service.updatePassword(u.id, "whatever-old", "NewPass9"))
+
+        val newHash = hashOf(u.id)
+        assertNotNull(newHash)
+        assertTrue(BCrypt.checkpw("NewPass9", newHash!!))
+    }
+
+    @Test
+    fun `after first time set further changes require old password`() {
+        val u = service.createByQqOpenid("openid-nopass2")
+        assertTrue(service.updatePassword(u.id, "", "NewPass9"))
+
+        // 已有密码后再改：旧密码错误必须拒绝
+        assertFalse(service.updatePassword(u.id, "", "Another1"))
+        assertTrue(BCrypt.checkpw("NewPass9", hashOf(u.id)!!))
+
+        // 旧密码正确才可再改
+        assertTrue(service.updatePassword(u.id, "NewPass9", "Another1"))
+        assertTrue(BCrypt.checkpw("Another1", hashOf(u.id)!!))
     }
 
     // ── 邮箱身份（2026-09-17 优化登录方式）──

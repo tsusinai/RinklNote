@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 
 // 中文数字字符集（小写 + 大写财务数字 + 零/两/廿），用于金额正则匹配与归一。
 private const val CN_NUM_CHARS = "零〇一二两廿三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟"
@@ -137,7 +137,7 @@ class DefaultNLUService(
                     it[VoiceKeywordsTable.keyword] = keyword
                     it[VoiceKeywordsTable.categoryName] = categoryName
                     it[VoiceKeywordsTable.priority] = 5
-                    it[VoiceKeywordsTable.createdAt] = LocalDateTime.now().toString()
+                    it[VoiceKeywordsTable.createdAt] = TimeUtil.now().toString()
                 }
             }
         }

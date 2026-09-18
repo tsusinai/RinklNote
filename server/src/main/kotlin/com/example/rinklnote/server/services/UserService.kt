@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.mindrot.jbcrypt.BCrypt
 import com.example.rinklnote.server.tables.UsersTable
-import java.time.LocalDateTime
+import com.example.rinklnote.server.services.TimeUtil
 import java.util.*
 
 data class UserInfo(
@@ -53,7 +53,7 @@ class UserService(
                 it[UsersTable.phone] = phone?.takeIf { p -> p.isNotBlank() }
                 it[UsersTable.email] = normalizeEmail(email)
                 it[passwordHash] = hash
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
         }
         val token = generateToken(userId, phone)
@@ -116,12 +116,6 @@ class UserService(
     /** 邮箱归一：去空白 + 转小写；null 原样返回。三端约定邮箱身份大小写不敏感。 */
     private fun normalizeEmail(email: String?): String? = email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
-    fun findByQQ(qqNumber: String): UserInfo? {
-        return transaction {
-            UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.toUserInfo()
-        }
-    }
-
     fun findByQqOpenid(openid: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.toUserInfo()
@@ -133,7 +127,7 @@ class UserService(
         return findByQqOpenid(openid) ?: transaction {
             val userId = UsersTable.insert {
                 it[UsersTable.qqOpenid] = openid
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
             UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
         }
@@ -227,7 +221,7 @@ class UserService(
         return findByChannelColumn(column, value) ?: transaction {
             val userId = UsersTable.insert {
                 it[column] = value
-                it[createdAt] = LocalDateTime.now().toString()
+                it[createdAt] = TimeUtil.now().toString()
             } get UsersTable.id
             UsersTable.selectAll().where { UsersTable.id eq userId }.singleOrNull()!!.toUserInfo()
         }
@@ -347,11 +341,16 @@ class UserService(
 
     fun updatePassword(userId: Long, oldPassword: String, newPassword: String): Boolean {
         return transaction {
-            val hash = UsersTable.selectAll()
+            val row = UsersTable.selectAll()
                 .where { UsersTable.id eq userId }
-                .singleOrNull()?.get(UsersTable.passwordHash)
-                ?: return@transaction false
-            if (!BCrypt.checkpw(oldPassword, hash)) return@transaction false
+                .singleOrNull() ?: return@transaction false
+            val hash = row[UsersTable.passwordHash]
+            if (hash != null) {
+                // 已有密码：正常改密，校验旧密码
+                if (!BCrypt.checkpw(oldPassword, hash)) return@transaction false
+            }
+            // 无密码（QQ 等通道注册）视为首次设密：跳过旧密码校验，直接设置新密码。
+            // 新密码规则仍由路由层 PasswordPolicy 把关。
             UsersTable.update({ UsersTable.id eq userId }) {
                 it[passwordHash] = BCrypt.hashpw(newPassword, BCrypt.gensalt())
             }
