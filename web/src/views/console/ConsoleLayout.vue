@@ -1,21 +1,34 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useThemeStore } from '../../stores/theme'
 import { useDataStore } from '../../stores/data'
 import Icon from '../../components/ui/Icon.vue'
+import CommandPalette from '../../components/CommandPalette.vue'
 import type { IconName } from '../../components/ui/icons'
 import { pageTransition } from '../../router/transition'
 import avatarUrl from '../../assets/xiaopan-avatar.png'
 
 /* 布局壳：桌面=侧栏（品牌/分组导航/用户卡/退出），移动=顶栏(标题+主题切换)+底栏 5 tab。
- * 「设置」不占移动端底栏，入口在我的页与桌面侧栏；颜色全部走 CSS 变量。 */
+ * 「设置」不占移动端底栏，入口在我的页与桌面侧栏；颜色全部走 CSS 变量。
+ * Ctrl+K（Task 3.4）：全局命令面板快捷键（mac ⌘K 同样生效）——
+ * 修饰键组合无「输入冲突」，输入框聚焦时也响应；纯按键快捷键由各页面自行挂接并守卫可编辑元素。 */
 const route = useRoute()
 const router = useRouter()
 const store = useAuthStore()
 const theme = useThemeStore()
 const data = useDataStore()
+
+const paletteOpen = ref(false)
+function onGlobalKey(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault() // 拦截浏览器「焦点地址栏搜索」默认行为
+    paletteOpen.value = !paletteOpen.value
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 
 interface NavItem { name: string; label: string; icon: IconName }
 const groups: { title: string; items: NavItem[] }[] = [
@@ -65,6 +78,12 @@ function logout() {
         <img :src="avatarUrl" alt="小盘头像" class="brand-avatar" />
         <span class="brand-name">记一笔</span>
       </div>
+      <!-- 命令面板入口（桌面侧栏）：点按等价 Ctrl+K -->
+      <button class="palette-entry" type="button" @click="paletteOpen = true">
+        <Icon name="search" :size="16" />
+        <span>快捷操作</span>
+        <kbd>Ctrl K</kbd>
+      </button>
       <nav class="nav">
         <div v-for="g in groups" :key="g.title" class="nav-group">
           <div class="nav-title">{{ g.title }}</div>
@@ -90,12 +109,17 @@ function logout() {
       </div>
     </aside>
 
-    <!-- 移动端顶栏：页面标题 + 主题切换 -->
+    <!-- 移动端顶栏：页面标题 + 命令面板 + 主题切换 -->
     <header class="topbar">
       <span class="topbar-title">{{ pageTitle }}</span>
-      <button class="theme-btn" :aria-label="isDark ? '切换为亮色' : '切换为暗色'" @click="toggleTheme">
-        <Icon :name="isDark ? 'sun' : 'moon'" :size="18" />
-      </button>
+      <span class="topbar-actions">
+        <button class="theme-btn" aria-label="打开命令面板" @click="paletteOpen = true">
+          <Icon name="search" :size="18" />
+        </button>
+        <button class="theme-btn" :aria-label="isDark ? '切换为亮色' : '切换为暗色'" @click="toggleTheme">
+          <Icon :name="isDark ? 'sun' : 'moon'" :size="18" />
+        </button>
+      </span>
     </header>
 
     <!-- 内层路由：控制台内部按 tab 序号判方向转场（page-forward/back），进出控制台由 App 层 fade -->
@@ -118,6 +142,9 @@ function logout() {
         <span>{{ t.label }}</span>
       </button>
     </nav>
+
+    <!-- Ctrl+K 命令面板（全控制台共用一个实例） -->
+    <CommandPalette :open="paletteOpen" @close="paletteOpen = false" />
   </div>
 </template>
 
@@ -135,9 +162,19 @@ function logout() {
   background: color-mix(in srgb, var(--bg) 92%, var(--card));
   position: sticky; top: 0; height: 100vh; z-index: 1;
 }
-.brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 34px; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 12px; }
 .brand-avatar { width: 40px; height: 40px; border-radius: 13px; object-fit: cover; box-shadow: 0 6px 16px color-mix(in srgb,var(--primary) 20%,transparent); }
 .brand-name { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -.04em; }
+/* 命令面板入口：轻量描边按钮，不动既有导航样式 */
+.palette-entry {
+  display: flex; align-items: center; gap: 8px; margin: 0 10px 20px;
+  padding: 8px 12px; border-radius: 11px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit;
+  transition: color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease);
+}
+.palette-entry:hover { color: var(--text); border-color: var(--primary); }
+.palette-entry span { flex: 1; text-align: left; }
+.palette-entry kbd { font-size: 10px; border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; color: var(--muted); }
 .nav { flex: 1; display: flex; flex-direction: column; gap: 24px; overflow-y: auto; }
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
 .nav-title { font-size: 11px; color: var(--muted); padding: 0 13px 8px; user-select: none; letter-spacing: .16em; text-transform: uppercase; }
@@ -177,6 +214,7 @@ function logout() {
     background: color-mix(in srgb,var(--bg) 86%,transparent); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border);
   }
   .topbar-title { font-size: 16px; font-weight: 600; color: var(--text); }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; }
   .theme-btn {
     display: flex; align-items: center; justify-content: center;
     width: 34px; height: 34px; border-radius: 50%;
