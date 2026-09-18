@@ -56,6 +56,8 @@ class PushScheduler(
     private val anomalyProvider: suspend (userId: Long) -> String?,
     private val habitProvider: suspend (userId: Long) -> String?,
     private val dailyReportProvider: suspend (userId: Long) -> String?,
+    /** 周报（账单教练，2026-09-18 Task 1.4）：每周一 ≥9:00 推一次；默认 null（未接线不推，行为零变化）。 */
+    private val weeklyProvider: suspend (userId: Long) -> String? = { null },
     private val clock: () -> LocalDateTime = { LocalDateTime.now(SHANGHAI) },
     private val intervalMs: Long = 30_000L,
     /** 重试指数退避基数：第 n 次重试延迟 = base × 2^(n-1)。测试注入小值。 */
@@ -71,6 +73,9 @@ class PushScheduler(
 
         /** 月结最早发送小时（仅月末当天）。 */
         private const val MONTHLY_EARLIEST_HOUR = 20
+
+        /** 周报（账单教练）最早发送小时（仅周一）。 */
+        private const val WEEKLY_EARLIEST_HOUR = 9
 
         /** 首次发送失败后最多重试次数（总尝试 ≤ 1 + 3 次）。 */
         const val MAX_RETRIES = 3
@@ -151,6 +156,12 @@ class PushScheduler(
                 val dueMinutes = u.dailyReportHour * 60 + u.dailyReportMinute
                 if (u.dailyReportEnabled && nowMinutes >= dueMinutes) {
                     pushIfNeeded(u.id, channel, targetId, "DAILY_REPORT", dayKey, dailyReportProvider)
+                }
+                // 周报（账单教练）：每周一 ≥9:00 一条，dayKey 锚定本周一日期（一周一条，错峰重推安全）。
+                if (now.dayOfWeek == java.time.DayOfWeek.MONDAY && hour >= WEEKLY_EARLIEST_HOUR) {
+                    val weekKey = "weekly-" + today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                        .format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    pushIfNeeded(u.id, channel, targetId, "WEEKLY_REPORT", weekKey, weeklyProvider)
                 }
             } catch (e: Exception) {
                 log.warn("push user=${u.id} failed: ${e.message}")

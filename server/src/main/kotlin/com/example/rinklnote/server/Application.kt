@@ -21,6 +21,7 @@ import com.example.rinklnote.server.services.PushScheduler
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.WecomBotService
+import com.example.rinklnote.server.services.coach.CoachService
 import com.example.rinklnote.server.services.asr.AsrConfig
 import com.example.rinklnote.server.services.asr.WhisperAsrService
 import com.example.rinklnote.server.services.insight.InsightService
@@ -182,6 +183,8 @@ fun Application.module() {
     // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
     // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
     // 目标通道已在调度器内按 飞书 > 企业微信 > QQ 取第一个已绑定，这里只做「通道 → 发送实现」的映射。
+    // 周报（2026-09-18 Task 1.4）：周一推账单教练的个性化建议（烧穿预警/可执行周建议，仅聚合输入）。
+    val coachService = CoachService(billService, budgetService, challengeService)
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
@@ -258,6 +261,7 @@ fun Application.module() {
             if (habit == null) null
             else insightService.polishHabitCopy(habit)
         },
+        weeklyProvider = { userId -> coachService.weeklyPushCopy(userId) },
         intervalMs = 30_000L,
         log = log
     )
