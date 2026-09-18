@@ -42,10 +42,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <!-- add：快速记账预填深链；bill-search：长按快捷方式「搜账单」深链 -->
                 <data
                     android:scheme="rinklnote"
                     android:host="add" />
+                <data
+                    android:scheme="rinklnote"
+                    android:host="bill-search" />
             </intent-filter>
+            <!-- 长按应用图标的快捷方式 -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <activity
             android:name=".navigation.ShareReceiveActivity"

@@ -75,6 +75,7 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.exportBillsToCsv
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.flow.first
@@ -141,6 +142,10 @@ fun ProfileScreen(
     val avatarUri by settingsManager.avatarUri.collectAsStateWithLifecycle(initialValue = null)
     val nickname by settingsManager.nickname.collectAsStateWithLifecycle(initialValue = null)
     val cardOverlay by settingsManager.cardOverlay.collectAsStateWithLifecycle(initialValue = false)
+    // 小组件预设金额快捷 chip（整数分，默认 ¥10/¥50）。
+    val quickAmounts by settingsManager.quickAmounts
+        .collectAsStateWithLifecycle(initialValue = SettingsManager.DEFAULT_QUICK_AMOUNTS)
+    var showQuickAmountsEditor by remember { mutableStateOf(false) }
     // 展示徽章：服务端勾选 ∩ 实时解锁态（删账单回退后自动隐藏，零存储特性的展示端兜底）。
     val achievements by rememberAchievementStates()
     val displayBadges = displayableShowcaseBadges(state.showcaseBadges, achievements)
@@ -327,6 +332,7 @@ fun ProfileScreen(
                     themeMode = themeMode,
                     backgroundUri = backgroundUri,
                     cardOverlay = cardOverlay,
+                    quickAmountsMinor = quickAmounts,
                     onThemeClick = { dialog = ProfileDialog.Theme },
                     onCustomThemeClick = onCustomThemeClick,
                     onBackgroundClick = {
@@ -335,7 +341,8 @@ fun ProfileScreen(
                         )
                     },
                     onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
-                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } }
+                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } },
+                    onQuickAmountsClick = { showQuickAmountsEditor = true }
                 )
             }
             item(key = "about") {
@@ -443,6 +450,80 @@ fun ProfileScreen(
             }
         )
     }
+
+    // 小组件快捷金额编辑：两个「元」输入框，合法才落库（整数分存储）。
+    if (showQuickAmountsEditor) {
+        QuickAmountsEditorDialog(
+            current = quickAmounts,
+            onConfirm = { minors ->
+                showQuickAmountsEditor = false
+                coroutineScope.launch { settingsManager.setQuickAmounts(minors) }
+                Toast.makeText(context, "小组件快捷金额已更新", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showQuickAmountsEditor = false }
+        )
+    }
+}
+
+/**
+ * 小组件快捷金额编辑弹窗：两组「元」输入（最多 2 个 chip），格式非法时提示且不关闭。
+ * 金额入参「元字符串」→ [Money.parseMinor] 转整数分落库，与全 App 金额口径一致。
+ */
+@Composable
+private fun QuickAmountsEditorDialog(
+    current: List<Long>,
+    onConfirm: (List<Long>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val first = remember(current) {
+        mutableStateOf(current.getOrNull(0)?.let { Money.toYuanInputString(it) } ?: "")
+    }
+    val second = remember(current) {
+        mutableStateOf(current.getOrNull(1)?.let { Money.toYuanInputString(it) } ?: "")
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("小组件快捷金额") },
+        text = {
+            Column {
+                Text(
+                    text = "桌面小组件上会显示两个金额 chip，点按直接预填记账（最多 2 个）。",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = first.value,
+                    onValueChange = { first.value = it },
+                    label = { Text("金额一（元）") },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = second.value,
+                    onValueChange = { second.value = it },
+                    label = { Text("金额二（元，可留空）") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val minors = listOf(first.value, second.value)
+                    .filter { it.isNotBlank() }
+                    .map { Money.parseMinor(it) }
+                if (minors.any { it == null }) {
+                    Toast.makeText(context, "金额格式不正确，请输入如 12.50", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                onConfirm(minors.filterNotNull())
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 }
 
 /** 我的页悬浮顶栏：极简，仅居中「我的」标题 + scrim 渐隐（滚动后渐显）。 */

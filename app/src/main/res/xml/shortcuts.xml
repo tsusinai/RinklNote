@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    长按应用图标的快捷方式（静态）：
+    - 语音记账：深链 rinklnote://add?voice=1 → 落记账页并直接进入语音条（PendingQuickAdd.voice）
+    - 快速记账：深链 rinklnote://add → 落记账页并打开快速记账抽屉（既有通路）
+    - 搜账单：  深链 rinklnote://bill-search → NavHost deepLink 直达搜索页
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="voice_add"
+        android:enabled="true"
+        android:icon="@drawable/ic_mic"
+        android:shortcutShortLabel="@string/shortcut_voice_short"
+        android:shortcutLongLabel="@string/shortcut_voice_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="rinklnote://add?voice=1"
+            android:targetPackage="com.example.rinklnote"
+            android:targetClass="com.example.rinklnote.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="quick_add"
+        android:enabled="true"
+        android:icon="@drawable/ic_add_bill"
+        android:shortcutShortLabel="@string/shortcut_quick_short"
+        android:shortcutLongLabel="@string/shortcut_quick_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="rinklnote://add"
+            android:targetPackage="com.example.rinklnote"
+            android:targetClass="com.example.rinklnote.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="search_bills"
+        android:enabled="true"
+        android:icon="@drawable/ic_search"
+        android:shortcutShortLabel="@string/shortcut_search_short"
+        android:shortcutLongLabel="@string/shortcut_search_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="rinklnote://bill-search"
+            android:targetPackage="com.example.rinklnote"
+            android:targetClass="com.example.rinklnote.MainActivity" />
+    </shortcut>
+</shortcuts>

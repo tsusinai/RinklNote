@@ -37,6 +37,11 @@ class SettingsManager(private val context: Context) {
         private val KEY_DAILY_REPORT_QQ_BOT = booleanPreferencesKey("daily_report_qq_bot")
         // 支付通知监听记账：默认关闭；开启还须用户在系统里授予「通知使用权」，两道闸缺一不可。
         private val KEY_PAY_NOTIFY_ENABLED = booleanPreferencesKey("pay_notify_enabled")
+        // 小组件预设金额快捷 chip（整数分，逗号分隔，取前 2 个）；默认 ¥10/¥50。
+        private val KEY_QUICK_AMOUNTS = stringPreferencesKey("widget_quick_amounts")
+
+        /** 小组件快捷金额默认值：¥10 / ¥50（整数分）。 */
+        val DEFAULT_QUICK_AMOUNTS: List<Long> = listOf(1000L, 5000L)
         // 个性化：自选头像与昵称（null = 未设置，头像回落首字符徽章、昵称回落手机号）。
         private val KEY_AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val KEY_NICKNAME = stringPreferencesKey("nickname")
@@ -167,6 +172,26 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setPayNotifyEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[KEY_PAY_NOTIFY_ENABLED] = enabled }
+    }
+
+    /** 小组件快捷金额：整数分列表（最多取前 2 个；空/非法输入回落默认 ¥10/¥50）。 */
+    val quickAmounts: Flow<List<Long>> = context.settingsDataStore.data.map { prefs ->
+        prefs[KEY_QUICK_AMOUNTS]
+            ?.split(',')
+            ?.mapNotNull { it.trim().toLongOrNull() }
+            ?.filter { it > 0 }
+            ?.take(2)
+            ?.takeIf { it.isNotEmpty() }
+            ?: DEFAULT_QUICK_AMOUNTS
+    }
+
+    /** 写入小组件快捷金额（整数分，调用方保证 ≤2 个有效值）。 */
+    suspend fun setQuickAmounts(minors: List<Long>) {
+        val cleaned = minors.filter { it > 0 }.take(2)
+        context.settingsDataStore.edit {
+            if (cleaned.isEmpty()) it.remove(KEY_QUICK_AMOUNTS)
+            else it[KEY_QUICK_AMOUNTS] = cleaned.joinToString(",")
+        }
     }
 
     suspend fun setBalanceHidden(hidden: Boolean) {

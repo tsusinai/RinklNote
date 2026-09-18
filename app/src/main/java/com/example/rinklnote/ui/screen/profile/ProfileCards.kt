@@ -13,6 +13,7 @@ import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.SettingsRow
+import com.example.rinklnote.util.Money
 
 /**
  * «我的»页的四张设置分组卡。
@@ -115,11 +116,13 @@ internal fun PersonalizationCard(
     themeMode: ThemeMode,
     backgroundUri: String?,
     cardOverlay: Boolean,
+    quickAmountsMinor: List<Long>,
     onThemeClick: () -> Unit,
     onCustomThemeClick: () -> Unit,
     onBackgroundClick: () -> Unit,
     onRemoveBackground: () -> Unit,
-    onCardOverlayChange: (Boolean) -> Unit
+    onCardOverlayChange: (Boolean) -> Unit,
+    onQuickAmountsClick: () -> Unit
 ) {
     SettingsGroupCard(title = "个性化") {
         // —— 主题外观 ——
@@ -153,6 +156,14 @@ internal fun PersonalizationCard(
                 onClick = onRemoveBackground
             )
         }
+        // —— 小组件 ——
+        RinklDivider()
+        SettingsRow(
+            icon = R.drawable.ic_wallet,
+            label = "小组件快捷金额",
+            value = quickAmountsMinor.joinToString(" / ") { "¥${Money.toYuanInputString(it)}" },
+            onClick = onQuickAmountsClick
+        )
         // —— 可读性 ——
         RinklDivider()
         SettingsRow(
