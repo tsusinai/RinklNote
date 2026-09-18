@@ -205,15 +205,16 @@ fun BookkeepingScreen(
         ) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             // 时段横幅留在列表里随时间滚走（与顶栏解耦）；配图背景时只垫出顶栏高度，取消上方空白。
+            // contentType：异构 item 分类回收桶，滚动复用只比对同类项（性能任务 2.8，无视觉变化）。
             if (backgroundUri == null) {
-                item(key = "day-banner") { DayBanner(headerBg = headerBg) }
+                item(key = "day-banner", contentType = "header") { DayBanner(headerBg = headerBg) }
             } else {
-                item(key = "top-bar-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
+                item(key = "top-bar-inset", contentType = "header") { Spacer(modifier = Modifier.height(topBarHeight)) }
             }
 
-            item(key = "spacer-0") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+            item(key = "spacer-0", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
 
-            item {
+            item(key = "summary", contentType = "summary") {
                 // AI 总结仅对「当月」展示；切换到其它月份时关闭总结栏（只留合计行）。
                 SummaryBar(
                     totalExpense = state.totalExpense,
@@ -224,18 +225,18 @@ fun BookkeepingScreen(
                 )
             }
 
-            item(key = "spacer-1") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+            item(key = "spacer-1", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
 
-            item(key = "chart") {
+            item(key = "chart", contentType = "chart") {
                 HeatmapBox(
                     heatmap = heatmap,
                     onDetailClick = onMonthDetailClick
                 )
             }
-            item(key = "spacer-2") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+            item(key = "spacer-2", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
 
             groupedBills.forEach { (date, bills) ->
-                item(key = date) {
+                item(key = date, contentType = "day-card") {
                     // 缓存该日合计，重组时不重复 sumOf。
                     val totalAmount = remember(date, bills) {
                         bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amountMinor else it.amountMinor }
@@ -256,7 +257,7 @@ fun BookkeepingScreen(
                     Spacer(modifier = Modifier.height(horizonalPadding))
                 }
             }
-            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(100.dp)) }
+            item(key = "bottom-spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(100.dp)) }
         }
         }
 

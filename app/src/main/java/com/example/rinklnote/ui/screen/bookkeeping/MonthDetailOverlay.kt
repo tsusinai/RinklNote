@@ -132,10 +132,11 @@ fun MonthDetailOverlay(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
-            item(key = "banner") { FramedBanner(expenseTotal, incomeTotal) }
+            // contentType：异构 item 分类回收桶（性能任务 2.8，无视觉变化）。
+            item(key = "banner", contentType = "header") { FramedBanner(expenseTotal, incomeTotal) }
 
             // 图表（占比|折线|柱状 三段可滑）
-            item(key = "chart-pager") {
+            item(key = "chart-pager", contentType = "chart") {
                 Spacer(modifier = Modifier.height(10.dp))
                 MonthChartPager(
                     month = month,
@@ -150,7 +151,7 @@ fun MonthDetailOverlay(
             }
 
             // 每日支出热力图（复用首页组件）→ 点天筛选
-            item(key = "heatmap") {
+            item(key = "heatmap", contentType = "chart") {
                 Spacer(modifier = Modifier.height(10.dp))
                 HeatmapBox(
                     heatmap = MonthHeatmap(
@@ -169,14 +170,14 @@ fun MonthDetailOverlay(
             }
 
             if (filter != MonthFilter.None) {
-                item(key = "filter") {
+                item(key = "filter", contentType = "banner") {
                     Spacer(modifier = Modifier.height(10.dp))
                     FilterBanner(filter) { filter = MonthFilter.None }
                 }
             }
 
             if (filteredBills.isEmpty()) {
-                item(key = "empty") {
+                item(key = "empty", contentType = "banner") {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
                         contentAlignment = Alignment.Center
@@ -187,7 +188,7 @@ fun MonthDetailOverlay(
             }
 
             filteredGroup.forEach { (catName, subtotal, catBills) ->
-                item(key = "cat_$catName") {
+                item(key = "cat_$catName", contentType = "category-card") {
                     Spacer(modifier = Modifier.height(10.dp))
                     CategoryCard(catName, subtotal, catBills, onEditBill)
                 }

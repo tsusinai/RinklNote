@@ -27,7 +27,7 @@ import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
     entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class, Challenge::class, Place::class],
-    version = 17,
+    version = 18,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -333,14 +333,24 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v18：bills 增加 (deleted, date) 复合索引（性能任务 2.8 索引复核）。
+         * 只加索引不动列，Room 校验的索引名 = index_bills_deleted_date（与 @Index 生成规则一致）。
+         */
+        private val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_bills_deleted_date` ON bills (`deleted`, `date`)")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
-                // 不再挂 fallbackToDestructiveMigration 兜底：MIGRATION_1_2 … 16_17 全链路已覆盖，
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                // 不再挂 fallbackToDestructiveMigration 兜底：MIGRATION_1_2 … 17_18 全链路已覆盖，
                 // 未覆盖路径应升级期报错暴露（宁可崩溃也不静默清库）。
                 .build()
         }

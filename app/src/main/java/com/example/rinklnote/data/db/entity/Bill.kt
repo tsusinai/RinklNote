@@ -27,6 +27,10 @@ import com.example.rinklnote.domain.Source
         Index("category_id"),
         Index("account_id"),
         Index("date"),
+        // 复合索引（性能任务 2.8 索引复核）：所有查询都以 deleted = 0 打头、多数再按 date
+        // 范围/排序（observeAll / observeByMonth / 日粒度统计），(deleted, date) 让列表与
+        // 统计查询走索引序扫描，免去全表过滤 + 排序。
+        Index("deleted", "date"),
         Index("server_id", unique = true)
     ]
 )
