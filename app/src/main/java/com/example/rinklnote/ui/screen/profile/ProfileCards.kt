@@ -59,16 +59,18 @@ internal fun SyncCard(
     }
 }
 
-/** «通知» 组：本地通知开关 + 通知时间 + QQ 日报推送。 */
+/** «通知» 组：本地通知开关 + 通知时间 + QQ 日报推送 + 支付通知一键记账（默认关）。 */
 @Composable
 internal fun DailyReportCard(
     enabled: Boolean,
     hour: Int,
     minute: Int,
     qqBot: Boolean,
+    payNotify: Boolean,
     onEnabledChange: (Boolean) -> Unit,
     onTimeClick: () -> Unit,
-    onQqBotChange: (Boolean) -> Unit
+    onQqBotChange: (Boolean) -> Unit,
+    onPayNotifyChange: (Boolean) -> Unit
 ) {
     SettingsGroupCard(title = "通知") {
         SettingsRow(
@@ -88,6 +90,13 @@ internal fun DailyReportCard(
             icon = R.drawable.ic_link,
             label = "QQ 日报推送",
             trailing = { Switch(checked = qqBot, onCheckedChange = onQqBotChange) }
+        )
+        RinklDivider()
+        // 支付通知监听：默认关；开启时由 ProfileScreen 弹权限说明并引导授予「通知使用权」
+        SettingsRow(
+            icon = R.drawable.ic_notification,
+            label = "支付通知一键记账",
+            trailing = { Switch(checked = payNotify, onCheckedChange = onPayNotifyChange) }
         )
     }
 }

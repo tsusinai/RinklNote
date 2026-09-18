@@ -28,10 +28,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -59,6 +61,7 @@ import com.example.rinklnote.data.local.TokenManager
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.notification.DailyReportReceiver
+import com.example.rinklnote.notification.PayNotifyListenerService
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
@@ -131,6 +134,9 @@ fun ProfileScreen(
     val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
     val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
     val dailyReportQqBot by settingsManager.dailyReportQqBot.collectAsStateWithLifecycle(initialValue = false)
+    // 支付通知一键记账：默认关闭；开启需再授予系统「通知使用权」（双闸门，见 PayNotifyListenerService）。
+    val payNotifyEnabled by settingsManager.payNotifyEnabled.collectAsStateWithLifecycle(initialValue = false)
+    var showPayNotifyGuide by remember { mutableStateOf(false) }
     // 个性化：本地头像缓存 / 昵称缓存（登录后卡片优先服务端值，离线时回落这里）/ 卡片白色蒙版。
     val avatarUri by settingsManager.avatarUri.collectAsStateWithLifecycle(initialValue = null)
     val nickname by settingsManager.nickname.collectAsStateWithLifecycle(initialValue = null)
@@ -188,6 +194,20 @@ fun ProfileScreen(
             authViewModel.onEvent(AuthEvent.SetDailyReportQq(on, dailyReportHour, dailyReportMinute))
         } else {
             Toast.makeText(context, "登录后 QQ 日报推送才会生效", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 支付通知一键记账：打开时若尚未授予「通知使用权」，弹权限说明卡引导去系统设置。
+    // 开关先落 true（意图明确），服务侧仍要求使用权实际授予后才会被系统绑定生效。
+    val onPayNotifyChange: (Boolean) -> Unit = { on ->
+        coroutineScope.launch { settingsManager.setPayNotifyEnabled(on) }
+        if (on) {
+            val granted = PayNotifyListenerService.listenerGranted(context)
+            if (granted) {
+                Toast.makeText(context, "已开启，检测到支付通知会提醒记一笔", Toast.LENGTH_SHORT).show()
+            } else {
+                showPayNotifyGuide = true
+            }
         }
     }
 
@@ -295,9 +315,11 @@ fun ProfileScreen(
                     hour = dailyReportHour,
                     minute = dailyReportMinute,
                     qqBot = dailyReportQqBot,
+                    payNotify = payNotifyEnabled,
                     onEnabledChange = onDailyReportEnabledChange,
                     onTimeClick = { dialog = ProfileDialog.TimePicker },
-                    onQqBotChange = onDailyReportQqBotChange
+                    onQqBotChange = onDailyReportQqBotChange,
+                    onPayNotifyChange = onPayNotifyChange
                 )
             }
             item(key = "personalization") {
@@ -392,6 +414,34 @@ fun ProfileScreen(
                 },
                 onDismiss = dismissDialog
             )
+    }
+
+    // 支付通知监听权限说明（独立于上面的 ProfileDialog 状态机，仅此一处使用）：
+    // 明示用途 + 数据边界（纯本地解析、不上传），引导去系统设置授予「通知使用权」。
+    if (showPayNotifyGuide) {
+        AlertDialog(
+            onDismissRequest = { showPayNotifyGuide = false },
+            title = { Text("开启支付通知记账") },
+            text = {
+                Text(
+                    text = "开启后，检测到微信 / 支付宝 / 银行 App 的支付或收款通知时，" +
+                        "会发一条「记一笔」提醒，点按即可带金额快速记账。\n\n" +
+                        "· 需要授予本应用系统「通知使用权」，仅用于读取上述白名单应用的支付通知；\n" +
+                        "· 通知内容只在本机解析，不上传、不保存；\n" +
+                        "· 随时可以在这里关闭。",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showPayNotifyGuide = false
+                    PayNotifyListenerService.openListenerSettings(context)
+                }) { Text("去开启使用权") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPayNotifyGuide = false }) { Text("知道了") }
+            }
+        )
     }
 }
 

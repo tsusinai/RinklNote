@@ -35,6 +35,8 @@ class SettingsManager(private val context: Context) {
         private val KEY_DAILY_REPORT_HOUR = intPreferencesKey("daily_report_hour")
         private val KEY_DAILY_REPORT_MINUTE = intPreferencesKey("daily_report_minute")
         private val KEY_DAILY_REPORT_QQ_BOT = booleanPreferencesKey("daily_report_qq_bot")
+        // 支付通知监听记账：默认关闭；开启还须用户在系统里授予「通知使用权」，两道闸缺一不可。
+        private val KEY_PAY_NOTIFY_ENABLED = booleanPreferencesKey("pay_notify_enabled")
         // 个性化：自选头像与昵称（null = 未设置，头像回落首字符徽章、昵称回落手机号）。
         private val KEY_AVATAR_URI = stringPreferencesKey("avatar_uri")
         private val KEY_NICKNAME = stringPreferencesKey("nickname")
@@ -103,6 +105,9 @@ class SettingsManager(private val context: Context) {
     val dailyReportMinute: Flow<Int> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_MINUTE] ?: 0 }
     val dailyReportQqBot: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_QQ_BOT] ?: false }
 
+    /** 支付通知监听记账开关：默认 false（关闭）。实际生效还需系统「通知使用权」已授予。 */
+    val payNotifyEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_PAY_NOTIFY_ENABLED] ?: false }
+
     /** 自定义主题的 10 个颜色槽；未自定义的槽不会出现在 map 里。 */
     val customThemeColors: Flow<Map<RinklThemeSlot, Color>> = context.settingsDataStore.data.map { prefs ->
         buildMap {
@@ -158,6 +163,10 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setDailyReportQqBot(enabled: Boolean) {
         context.settingsDataStore.edit { it[KEY_DAILY_REPORT_QQ_BOT] = enabled }
+    }
+
+    suspend fun setPayNotifyEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[KEY_PAY_NOTIFY_ENABLED] = enabled }
     }
 
     suspend fun setBalanceHidden(hidden: Boolean) {
