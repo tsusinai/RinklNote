@@ -146,6 +146,18 @@ object QQMessageProcessor {
                 return
             }
 
+            // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService，
+            // 命中即短路回执，未命中返回 null 继续走自然语言路由。
+            BotCorrectService.handle(content, user.id, billService)?.let { reply ->
+                if (groupOpenid != null) {
+                    qqBotService.sendGroupMessage(groupOpenid, reply, msgId)
+                } else {
+                    qqBotService.sendC2CMessage(openid, reply, msgId)
+                }
+                logger.info("QQ last-bill correction for user ${user.id}: $reply")
+                return
+            }
+
             val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
             val reply = router.route(content, user.id)
             val out = if (isNew) "欢迎！已开通 QQ 记账账号。用中文说「午餐20元」即可记账；回复「登录」可获取网页登录码。\n\n$reply" else reply

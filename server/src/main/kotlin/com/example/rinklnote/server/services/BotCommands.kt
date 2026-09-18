@@ -31,4 +31,19 @@ object BotCommands {
     // ── 登录码指令 ──
     // 用户发「登录」类消息 → 机器人下发一次性登录码供网页/App 端换取登录。
     val LOGIN_CODE = Regex("登录|登录码|验证码|网页登录|扫码", RegexOption.IGNORE_CASE)
+
+    // ── 最近一单修正指令（2026-09-18 Task 1.1，四通道共用 BotCorrectService）──
+    // 「改金额30 / 改金额改成30 / 金额改成30 / 金额改为30」：把最近一单金额改成指定值（元）。
+    // 金额分组可空（空 = 用户没给数字，回执引导格式）；中文数字交给正常记账链路。
+    val EDIT_AMOUNT = Regex("(?:改金额|金额改成|金额改为)\\s*(?:改成?\\s*)?([0-9]+(?:\\.[0-9]+)?)?\\s*元?")
+    // 「改分类 交通 / 改分类改成交通 / 改分类为交通」：把最近一单分类改成指定分类名。
+    val EDIT_CATEGORY = Regex("改分类\\s*(?:改成?|为|到)?\\s*([一-龥A-Za-z0-9]{1,12})")
+    // 「删上一笔 / 删除上一笔 / 删掉上一笔 / 撤销」：软删最近一单。与 PhoneIntentRouter 的
+    // 泛化删除意图不同：本指令由 BotCorrectService 在四通道处理器里**先**短路执行，
+    // 只针对「最新一笔未删账单」，不做模糊匹配。
+    val DELETE_LAST = Regex("删(?:除|掉)?上一笔|撤销|撤回")
+
+    /** 命中任一最近一单修正指令（供处理器短路判断）。 */
+    fun isLastBillCorrection(text: String): Boolean =
+        EDIT_AMOUNT.containsMatchIn(text) || EDIT_CATEGORY.containsMatchIn(text) || DELETE_LAST.containsMatchIn(text)
 }

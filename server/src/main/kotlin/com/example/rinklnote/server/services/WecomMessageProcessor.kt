@@ -133,6 +133,9 @@ object WecomMessageProcessor {
             return "绑定码：$code（5 分钟内有效）\n在网页/App 的「企微绑定」处输入此码，即可把企业微信绑到你的记账账号。"
         }
 
+        // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService。
+        BotCorrectService.handle(content, user.id, billService)?.let { return it }
+
         // 自然语言记账/问账：source=WECOM 一路透传到 BillService.createBill（bills.bill_source）
         val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
         val reply = router.route(content, user.id, BotCommands.SOURCE_WECOM)

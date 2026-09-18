@@ -125,6 +125,9 @@ object MpMessageProcessor {
             return "订阅号暂不支持发绑定码～ 绑定请用 App/Web 的其他通道（QQ / 飞书 / 企业微信）。"
         }
 
+        // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService。
+        BotCorrectService.handle(content, user.id, billService)?.let { return it }
+
         // 自然语言记账/问账：source=MP 一路透传到 BillService.createBill（bills.bill_source）
         val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
         val reply = router.route(content, user.id, BotCommands.SOURCE_MP)
