@@ -138,6 +138,13 @@ object FeishuMessageProcessor {
                 return
             }
 
+            // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService。
+            BotCorrectService.handle(content, user.id, billService)?.let { reply ->
+                feishuBotService.sendText(senderOpenId, reply, messageId)
+                logger.info("飞书最近一单修正 user=${user.id}: $reply")
+                return
+            }
+
             // 自然语言记账/问账：source=FEISHU 一路透传到 BillService.createBill（bills.bill_source）
             val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
             val reply = router.route(content, user.id, BotCommands.SOURCE_FEISHU)

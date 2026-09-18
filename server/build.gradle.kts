@@ -30,8 +30,11 @@ dependencies {
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.java.time)
     implementation(libs.postgresql)
-    implementation("com.h2database:h2:2.3.232")
+    implementation(libs.h2)
     implementation(libs.hikari)
+
+    // Mail ingest（IMAP 轮询邮件账单，Task 4.4）
+    implementation(libs.angus.mail)
 
     // Auth
     implementation(libs.java.jwt)
@@ -49,7 +52,7 @@ dependencies {
     implementation(libs.ktor.client.websockets)
 
     // Ed25519 crypto (QQ Bot webhook signature)
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78")
+    implementation(libs.bouncycastle)
 
     // Kotlin Serialization
     implementation(libs.kotlinx.serialization.json)

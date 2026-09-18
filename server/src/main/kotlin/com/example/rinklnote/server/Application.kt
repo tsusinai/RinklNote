@@ -3,6 +3,7 @@ package com.example.rinklnote.server
 import com.example.rinklnote.server.plugins.*
 import com.example.rinklnote.server.routes.*
 import com.example.rinklnote.server.services.AdminService
+import com.example.rinklnote.server.services.AlertNotifier
 import com.example.rinklnote.server.services.AiAssistService
 import com.example.rinklnote.server.services.AiTokenService
 import com.example.rinklnote.server.services.AvatarStorage
@@ -12,14 +13,18 @@ import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
 import com.example.rinklnote.server.services.FeishuBotService
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.MailIngestConfig
+import com.example.rinklnote.server.services.MailIngestService
 import com.example.rinklnote.server.services.MpBotService
 import com.example.rinklnote.server.services.PhoneIntentRouter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQBotWebSocketClient
+import com.example.rinklnote.server.services.RateService
 import com.example.rinklnote.server.services.PushScheduler
 import com.example.rinklnote.server.services.TemplateService
 import com.example.rinklnote.server.services.UserService
 import com.example.rinklnote.server.services.WecomBotService
+import com.example.rinklnote.server.services.coach.CoachService
 import com.example.rinklnote.server.services.asr.AsrConfig
 import com.example.rinklnote.server.services.asr.WhisperAsrService
 import com.example.rinklnote.server.services.insight.InsightService
@@ -31,6 +36,10 @@ import com.example.rinklnote.server.services.nlu.RuleBasedParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -49,7 +58,6 @@ fun main() {
 
 fun Application.module() {
     install(CallLogging)
-    configureErrorHandling()
     configureSerialization()
     configureDatabase()
     configureSecurity()
@@ -162,9 +170,28 @@ fun Application.module() {
         log.info("订阅号未配置 —— 可在 Web 设置页维护")
     }
 
+    // 全局异常告警（2026-09-18 Task 0.8）：未捕获异常经 Bot 通道推给主账号（ADMIN_IDENTITIES）。
+    // StatusPages 需在路由前安装，但告警目标依赖上面各 Bot 服务 —— 因此 configureErrorHandling
+    // 挪到这里（仍在 routing 之前，语义不变）。告警只含路径与异常摘要，不含请求体。
+    val alertNotifier = AlertNotifier(
+        userService = userService,
+        send = { channel, targetId, content ->
+            when (channel) {
+                BotCommands.SOURCE_QQ -> qqBotService.sendC2CMessage(targetId, content, "")
+                BotCommands.SOURCE_FEISHU -> feishuBotService.sendText(targetId, content)
+                BotCommands.SOURCE_WECOM -> wecomBotService.pushText(content)
+                else -> false
+            }
+        },
+        log = log
+    )
+    configureErrorHandling(alertNotifier)
+
     // Bot 主动推送调度：月末月结卡片 / 每日异常提醒 / 时段习惯提醒（走 push_log 去重；ai_disabled 跳过）。
     // B1 通道底座：send 带通道维度，按 PushScheduler 选定的目标通道分发——
     // 目标通道已在调度器内按 飞书 > 企业微信 > QQ 取第一个已绑定，这里只做「通道 → 发送实现」的映射。
+    // 周报（2026-09-18 Task 1.4）：周一推账单教练的个性化建议（烧穿预警/可执行周建议，仅聚合输入）。
+    val coachService = CoachService(billService, budgetService, challengeService)
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
@@ -206,7 +233,7 @@ fun Application.module() {
             else {
                 val r = insightService.monthlyReview(userId, month)
                 buildString {
-                    append("📊 本月总结\n")
+                    appendLine("📊 小盘月报")
                     append(r.summary)
                     r.highlights.forEach { append("\n• ").append(it) }
                     if (r.spikeDays.isNotEmpty()) {
@@ -241,6 +268,7 @@ fun Application.module() {
             if (habit == null) null
             else insightService.polishHabitCopy(habit)
         },
+        weeklyProvider = { userId -> coachService.weeklyPushCopy(userId) },
         intervalMs = 30_000L,
         log = log
     )
@@ -265,6 +293,35 @@ fun Application.module() {
         else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
     )
 
+    // 汇率服务（2026-09-18 Task 4.2）：免 key 开放源（open.er-api.com，USD 基准）每日拉一次，
+    // 缓存 bot_config KV；失败回落上次成功值，从未成功回落演示表（与 App DEMO_RATES_VS_CNY 同值）。
+    val rateHttpClient = HttpClient(CIO)
+    val rateService = RateService(
+        fetchJson = { url ->
+            try { rateHttpClient.get(url).bodyAsText() } catch (_: Exception) { null }
+        },
+        apiUrl = System.getenv("RATE_API_URL") ?: RateService.DEFAULT_API_URL,
+        log = log
+    )
+    rateService.start(appScope)
+
+    // 邮件账单转发自动入账（2026-09-18 Task 4.4）：默认关闭——配置 MAIL_INGEST_USER_ID +
+    // MAIL_IMAP_HOST/USER/PASSWORD（可选 PORT / MAIL_SENDER_WHITELIST / MAIL_INGEST_INTERVAL_MS）后启用。
+    // 凭证只走环境变量；正文只在内存解析，不落盘不送 LLM（隐私红线见 MailIngestService 注释头）。
+    val mailIngestConfig = MailIngestConfig.fromEnv()
+    if (mailIngestConfig != null) {
+        val mailIngest = MailIngestService(
+            config = mailIngestConfig,
+            billService = billService,
+            alert = { text -> alertNotifier.deliver(text) },
+            log = log
+        )
+        mailIngest.start(appScope)
+        log.info("邮件账单入账已启用（IMAP=${mailIngestConfig.host} 白名单=${mailIngestConfig.senders.size}条）")
+    } else {
+        log.info("邮件账单入账未配置（缺 MAIL_INGEST_USER_ID / MAIL_IMAP_* 环境变量），保持关闭")
+    }
+
     // 管理端只读服务：LLM/ASR 只回「是否已配置」布尔，绝不回显 key 值（隐私红线见 AdminService 注释头）。
     val adminService = AdminService(
         dbTypeName = { DbRuntimeInfo.typeName },
@@ -282,6 +339,7 @@ fun Application.module() {
         feishuBotService.shutdown()
         wecomBotService.shutdown()
         asrService.shutdown()
+        rateHttpClient.close()
     }
 
     routing {
@@ -305,6 +363,7 @@ fun Application.module() {
         mpWebhookRoutes(mpBotService, userService, billService, nluService, budgetService, insightService)
         templateRoutes(templateService)
         aiAssistantRoutes(phoneIntentRouter, aiAssistService, aiTokenService)
+        rateRoutes(rateService)
         adminRoutes(adminService, qqBotService, qqWsClient)
     }
 }

@@ -53,6 +53,13 @@ fun Route.adminRoutes(
                 call.respond(adminService.listPushLogs(page))
             }
 
+            // 通道健康度（2026-09-18 Task 0.7）：最近 7 天各通道 成功/重试中/失败 计数，
+            // 供运维大盘展示；只回聚合计数，无推送文案（隐私红线同 AdminService 注释头）。
+            get("/push/health") {
+                call.requireAdmin() ?: return@get
+                call.respond(adminService.channelHealth())
+            }
+
             get("/bot/status") {
                 call.requireAdmin() ?: return@get
                 call.respond(

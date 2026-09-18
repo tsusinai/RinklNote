@@ -124,13 +124,16 @@ class BillService {
         amountMinor: Long,
         categoryName: String?,
         remark: String?,
-        source: String = "QQ"
+        source: String = "QQ",
+        // 账单日（epoch 毫秒，业务时区「当日 0 点」口径）；null = 今天（邮件账单等带原始支付日期的
+        // 入口传解析出的日期，2026-09-18 Task 4.4）。
+        date: Long? = null
     ): BillDTO {
         require(amountMinor > 0) { "金额必须大于0" }
         val sanitizedRemark = remark?.take(500)
 
         val now = System.currentTimeMillis()
-        val todayStart = LocalDate.now(ZoneId.of("Asia/Shanghai"))
+        val todayStart = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
             .toInstant()
             .toEpochMilli()
@@ -320,13 +323,64 @@ class BillService {
         val now = System.currentTimeMillis()
         return transaction {
             val updated = BillsTable.update({
-                (BillsTable.id eq billId) and (BillsTable.userId eq userId)
+                (BillsTable.id eq billId) and (BillsTable.userId eq userId) and (BillsTable.deleted eq false)
             }) {
                 it[deleted] = true
                 it[updatedAt] = now
             }
             updated > 0
         }
+    }
+
+    // ── 最近一单修正（2026-09-18 Task 1.1，Bot 多轮修正；四通道经 BotCorrectService 共用）──
+
+    /**
+     * 该用户最新一笔**未删**账单（「最近一单」）：按创建时间倒序取第一条。
+     * 不新增任何存储——「最近一单」就是实时查询结果；软删后自动落到再前一笔。
+     */
+    fun latestBill(userId: Long): BillDTO? = transaction {
+        BillsTable.selectAll()
+            .where { (BillsTable.userId eq userId) and (BillsTable.deleted eq false) }
+            .orderBy(BillsTable.createdAt to SortOrder.DESC, BillsTable.id to SortOrder.DESC)
+            .limit(1)
+            .firstOrNull()?.toBillDto()
+    }
+
+    /** 定向改金额（只动 amountMinor/amount 与 updatedAt）；账单不存在/非本人/已软删返回 null。 */
+    fun updateBillAmount(billId: Long, userId: Long, amountMinor: Long): BillDTO? {
+        require(amountMinor > 0) { "金额必须大于0" }
+        val now = System.currentTimeMillis()
+        return transaction {
+            BillsTable.update({
+                (BillsTable.id eq billId) and (BillsTable.userId eq userId) and (BillsTable.deleted eq false)
+            }) {
+                it[BillsTable.amountMinor] = amountMinor
+                it[BillsTable.amount] = Money.fromMinor(amountMinor)
+                it[updatedAt] = now
+            }
+            BillsTable.selectAll()
+                .where { (BillsTable.id eq billId) and (BillsTable.userId eq userId) and (BillsTable.deleted eq false) }
+                .singleOrNull()?.toBillDto()
+        }
+    }
+
+    /** 定向改分类（连同 billType 一并跟随目标分类）；分类不存在或账单不可改返回 null。 */
+    fun updateBillCategory(billId: Long, userId: Long, categoryId: Long, categoryName: String): BillDTO? = transaction {
+        val cat = CategoriesTable.selectAll()
+            .where { CategoriesTable.id eq categoryId }
+            .singleOrNull() ?: return@transaction null
+        val now = System.currentTimeMillis()
+        BillsTable.update({
+            (BillsTable.id eq billId) and (BillsTable.userId eq userId) and (BillsTable.deleted eq false)
+        }) {
+            it[BillsTable.categoryId] = categoryId
+            it[BillsTable.categoryName] = categoryName
+            it[BillsTable.billType] = cat[CategoriesTable.billType]
+            it[updatedAt] = now
+        }
+        BillsTable.selectAll()
+            .where { (BillsTable.id eq billId) and (BillsTable.userId eq userId) and (BillsTable.deleted eq false) }
+            .singleOrNull()?.toBillDto()
     }
 
     /**

@@ -31,6 +31,9 @@ kotlinxCoroutinesTest = "1.8.1"
 mockitoCore = "5.14.2"
 mockitoKotlin = "5.4.0"
 glance = "1.1.1"
+h2 = "2.3.232"
+bouncycastle = "1.78"
+angusMail = "2.0.3"
 
 [libraries]
 # AndroidX
@@ -87,6 +90,13 @@ exposed-jdbc = { group = "org.jetbrains.exposed", name = "exposed-jdbc", version
 exposed-java-time = { group = "org.jetbrains.exposed", name = "exposed-java-time", version.ref = "exposed" }
 postgresql = { group = "org.postgresql", name = "postgresql", version.ref = "postgresql" }
 hikari = { group = "com.zaxxer", name = "HikariCP", version.ref = "hikari" }
+h2 = { group = "com.h2database", name = "h2", version.ref = "h2" }
+
+# Server - Mail ingest（邮件账单转发解析，Task 4.4；Angus Mail 为 Jakarta Mail 2.1 官方实现，含 IMAP/POP3）
+angus-mail = { group = "org.eclipse.angus", name = "angus-mail", version.ref = "angusMail" }
+
+# Server - Crypto（QQ Bot webhook Ed25519 验签）
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 
 # Server - Auth
 java-jwt = { group = "com.auth0", name = "java-jwt", version.ref = "javaJwt" }

@@ -277,7 +277,8 @@ class AdminApiTest {
         val (_, token) = register(USER_PHONE)
         runBlocking {
             for (path in listOf(
-                "/api/admin/overview", "/api/admin/users", "/api/admin/push-logs", "/api/admin/bot/status"
+                "/api/admin/overview", "/api/admin/users", "/api/admin/push-logs", "/api/admin/bot/status",
+                "/api/admin/push/health"
             )) {
                 val resp = get(path, token)
                 assertEquals("非管理员 GET $path 应 403", HttpStatusCode.Forbidden, resp.status)
@@ -438,10 +439,13 @@ class AdminApiTest {
     fun `push-logs 倒序分页且仅元数据无文案`() {
         AdminIdentities.refresh(ADMIN_PHONE)
         val (_, adminToken) = register(ADMIN_PHONE)
-        transaction {
-            PushLogTable.insert { it[userId] = 1L; it[type] = "MONTHLY_SUMMARY"; it[dayKey] = "2026-08"; it[pushedAt] = 100 }
-            PushLogTable.insert { it[userId] = 2L; it[type] = "ANOMALY"; it[dayKey] = "2026-09-15"; it[pushedAt] = 300 }
-            PushLogTable.insert { it[userId] = 3L; it[type] = "HABIT"; it[dayKey] = "2026-09-16"; it[pushedAt] = 200 }
+        // 记录本用例插入的自增 id（H2 序列不因 deleteAll 重置，不能假设从 1 起）
+        val insertedIds = transaction {
+            listOf(
+                PushLogTable.insert { it[userId] = 1L; it[type] = "MONTHLY_SUMMARY"; it[dayKey] = "2026-08"; it[pushedAt] = 100 } get PushLogTable.id,
+                PushLogTable.insert { it[userId] = 2L; it[type] = "ANOMALY"; it[dayKey] = "2026-09-15"; it[pushedAt] = 300 } get PushLogTable.id,
+                PushLogTable.insert { it[userId] = 3L; it[type] = "HABIT"; it[dayKey] = "2026-09-16"; it[pushedAt] = 200 } get PushLogTable.id
+            )
         }
         runBlocking {
             val page = get("/api/admin/push-logs?page=1", adminToken).json()
@@ -450,7 +454,7 @@ class AdminApiTest {
             assertEquals(3, items.size)
             // id 倒序（最新在前）
             assertEquals(
-                listOf(3L, 2L, 1L),
+                insertedIds.sortedDescending(),
                 items.map { it.jsonObject.longAt("id") }
             )
             // 隐私红线：条目里只有 id/userId/type/dayKey/pushedAt，无文案类字段
@@ -464,7 +468,46 @@ class AdminApiTest {
         }
     }
 
-    // ── 8. auth/me 的 isAdmin ──
+    // ── 8. push/health：通道健康度（2026-09-18 Task 0.7）──
+
+    @Test
+    fun `push-health 管理员可见各通道成功失败重试计数`() {
+        AdminIdentities.refresh(ADMIN_PHONE)
+        val (_, adminToken) = register(ADMIN_PHONE)
+        transaction {
+            PushLogTable.insert {
+                it[userId] = 1; it[type] = "DAILY_REPORT"; it[dayKey] = "2026-09-14"
+                it[pushedAt] = FIXED_NOW; it[channel] = "QQ"; it[status] = "OK"
+            }
+            PushLogTable.insert {
+                it[userId] = 2; it[type] = "DAILY_REPORT"; it[dayKey] = "2026-09-15"
+                it[pushedAt] = FIXED_NOW; it[channel] = "QQ"; it[status] = "FAILED"
+            }
+            PushLogTable.insert {
+                it[userId] = 3; it[type] = "DAILY_REPORT"; it[dayKey] = "2026-09-15"
+                it[pushedAt] = FIXED_NOW; it[channel] = "FEISHU"; it[status] = "RETRYING"
+            }
+        }
+        runBlocking {
+            val resp = get("/api/admin/push/health", adminToken)
+            assertEquals(HttpStatusCode.OK, resp.status)
+            // 响应体是通道健康度 JSON 数组
+            val arr = Json.parseToJsonElement(resp.bodyAsText()).jsonArray
+            assertEquals(2, arr.size)
+            val qq = arr.map { it.jsonObject }.first { it["channel"]!!.jsonPrimitive.content == "QQ" }
+            assertEquals(1L, qq["okCount"]!!.jsonPrimitive.long)
+            assertEquals(1L, qq["failedCount"]!!.jsonPrimitive.long)
+            assertEquals(0L, qq["retryingCount"]!!.jsonPrimitive.long)
+            val feishu = arr.map { it.jsonObject }.first { it["channel"]!!.jsonPrimitive.content == "FEISHU" }
+            assertEquals(1L, feishu["retryingCount"]!!.jsonPrimitive.long)
+            // 隐私红线：健康度只有聚合计数与时间戳，无任何文案字段
+            qq.keys.forEach { key ->
+                assertTrue(key in setOf("channel", "okCount", "retryingCount", "failedCount", "lastSuccessAt", "lastFailureAt"))
+            }
+        }
+    }
+
+    // ── 9. auth/me 的 isAdmin ──
 
     @Test
     fun `me 接口按名单返回 isAdmin`() {

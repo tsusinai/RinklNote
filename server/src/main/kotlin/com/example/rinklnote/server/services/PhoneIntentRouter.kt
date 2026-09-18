@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.coach.MascotVoice
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.insight.MonthlyAnomalyResponse
 import com.example.rinklnote.server.services.nlu.NLUService
@@ -78,13 +79,17 @@ class PhoneIntentRouter(
 
         // F. Bookkeeping
         val result = nluService.parse(content, userId)
+        // NLU 升级（Task 1.3）：上下文指代的追问文案直接回给用户（跳过记账/LLM）。
+        result.askReply?.let { return it }
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, Money.toMinor(result.amount), result.categoryName, result.remark, source)
-            return listOf(
-                "已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
-                "已记录成功～ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}",
-                "好嘞，已记录 ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"
-            ).random()
+            // 个人记忆层（2026-09-18 Task 1.2）：落账后异步累计聚合画像（商家词+次数+首选分类），
+            // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
+            UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
+            // 小盘人格化（Task 1.5）：回执统一走 MascotVoice（锚点「已记录」由指南锁定）
+            val base = MascotVoice.bookkeepingReceipt(bill.categoryName, bill.amountMinor)
+            // 模糊金额区间（Task 1.3）：回执标注「区间30~40元，按中值35元记」。
+            return result.amountNote?.let { "$base（$it）" } ?: base
         }
 
         // G. A category was recognised but no amount — keep the bookkeeping UX alive.
@@ -232,10 +237,7 @@ class PhoneIntentRouter(
             }
         }
         billService.deleteBill(target.id, userId)
-        return listOf(
-            "已删除：${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）",
-            "已删除成功～ ${target.categoryName} ¥${Money.format(target.amountMinor)}（${formatDate(target.date)}）"
-        ).random()
+        return MascotVoice.deleteReceipt(target.categoryName, target.amountMinor, formatDate(target.date))
     }
 
     // ── Help ──
@@ -250,6 +252,7 @@ class PhoneIntentRouter(
         余额: 看看我的余额
         最近: 最近几笔 / 最近10笔
         删除: 删除午餐 / 删掉刚才那笔
+        改账: 改金额30 / 改分类 交通 / 撤销（针对最近一单）
         总结: 分析一下这个月 / 8月
         异常: 今日异常 / 8月异常
         建议: 给点建议
@@ -294,11 +297,7 @@ class PhoneIntentRouter(
         return BOOKKEEPING_VERB.containsMatchIn(content)
     }
 
-    private fun greetingText(): String = listOf(
-        "你好呀，我是你的记账小帮手～ 直接说「午餐20元」就帮你记，问「这个月花了多少」我帮你查",
-        "嗨！记账、查账、删账、总结都在行，说「午餐20元」试试～",
-        "在呢～ 需要记账就说金额，比如「打车25元」；想知道我能做什么，回复【帮助】"
-    ).random()
+    private fun greetingText(): String = MascotVoice.greeting()
 
     private companion object {
         val HELP = Regex("帮助|怎么用|你能做什么|会什么|指令|功能|help|干什么|干嘛|做什么|你是谁|用途|能干嘛", RegexOption.IGNORE_CASE)

@@ -62,6 +62,8 @@ class AiAssistService(
     fun record(userId: Long, amountMinor: Long, category: String?, remark: String?): AiRecordResponse {
         require(amountMinor > 0) { "金额必须大于0" }
         val bill = billService.createBill(userId, amountMinor, category, remark, "AI")
+        // 个人记忆层（2026-09-18 Task 1.2）：AI 落账出口同样异步累计聚合画像（写失败不影响落账）。
+        UserMemoryService.recordBillAsync(userId, remark, bill.categoryName)
         return AiRecordResponse("已记录：${bill.categoryName} ¥${Money.format(bill.amountMinor)}")
     }
 
