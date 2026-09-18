@@ -30,7 +30,9 @@ class AdminService(
     /** ASR（Whisper）是否已配置 —— 只回布尔，绝不回显 key 值。 */
     private val asrConfigured: () -> Boolean = { false },
     /** 「今日」起点（Asia/Shanghai 当日 0 点 epoch 毫秒），测试注入固定时钟。 */
-    private val todayStartMillis: () -> Long = { currentShanghaiDayStart() }
+    private val todayStartMillis: () -> Long = { currentShanghaiDayStart() },
+    /** epoch 毫秒时钟（通道健康度统计窗口用），测试注入固定值。 */
+    private val nowMillis: () -> Long = { System.currentTimeMillis() }
 ) {
 
     // ── DTO（@Serializable，直接作为路由响应体）──
@@ -81,6 +83,23 @@ class AdminService(
         val total: Long,
         val totalPages: Int,
         val items: List<AdminPushLogRow>
+    )
+
+    /**
+     * 通道健康度（2026-09-18 Task 0.7）：统计窗口内各通道的推送结果计数。
+     * 只回聚合计数与时间戳元数据，无任何推送文案 —— 隐私红线同 push_log 既有约束。
+     */
+    @Serializable
+    data class AdminChannelHealth(
+        val channel: String,
+        /** 窗口内送达（含重试成功）条数。 */
+        val okCount: Long,
+        /** 窗口内仍在内存重试队列挂起的条数（进程重启后不会残留该状态）。 */
+        val retryingCount: Long,
+        /** 窗口内重试耗尽彻底失败的条数。 */
+        val failedCount: Long,
+        val lastSuccessAt: Long?,
+        val lastFailureAt: Long?
     )
 
     // ── 查询 ──
@@ -192,9 +211,58 @@ class AdminService(
         )
     }
 
+    /**
+     * 通道健康度（2026-09-18 Task 0.7）：最近 [windowMs]（默认 7 天）内按通道聚合 push_log
+     * 的状态计数（OK / RETRYING / FAILED）与最近成功 / 失败时刻。
+     * channel 为 null 的历史行归入 "UNKNOWN" 组。纯只读聚合，无明细无文案。
+     */
+    fun channelHealth(windowMs: Long = HEALTH_WINDOW_MS): List<AdminChannelHealth> = transaction {
+        val since = nowMillis() - windowMs
+        data class Acc(
+            var ok: Long = 0, var retrying: Long = 0, var failed: Long = 0,
+            var lastOkAt: Long? = null, var lastFailAt: Long? = null
+        )
+        val acc = linkedMapOf<String, Acc>()
+        PushLogTable.selectAll()
+            .where { PushLogTable.pushedAt greaterEq since }
+            .forEach { row ->
+                val ch = row[PushLogTable.channel] ?: "UNKNOWN"
+                val a = acc.getOrPut(ch) { Acc() }
+                val at = row[PushLogTable.pushedAt]
+                when (row[PushLogTable.status]) {
+                    PushScheduler.STATUS_OK -> { a.ok++; if (a.lastOkAt == null || at > a.lastOkAt!!) a.lastOkAt = at }
+                    PushScheduler.STATUS_RETRYING -> { a.retrying++; if (a.lastFailAt == null || at > a.lastFailAt!!) a.lastFailAt = at }
+                    PushScheduler.STATUS_FAILED -> { a.failed++; if (a.lastFailAt == null || at > a.lastFailAt!!) a.lastFailAt = at }
+                }
+            }
+        acc.entries
+            .sortedWith(compareBy({ channelRank(it.key) }, { it.key }))
+            .map { (ch, a) ->
+                AdminChannelHealth(
+                    channel = ch,
+                    okCount = a.ok,
+                    retryingCount = a.retrying,
+                    failedCount = a.failed,
+                    lastSuccessAt = a.lastOkAt,
+                    lastFailureAt = a.lastFailAt
+                )
+            }
+    }
+
+    private fun channelRank(channel: String): Int {
+        val idx = CHANNEL_ORDER.indexOf(channel)
+        return if (idx >= 0) idx else CHANNEL_ORDER.size
+    }
+
     companion object {
         const val DEFAULT_PAGE_SIZE = 20
         const val MAX_PAGE_SIZE = 100
+
+        /** 通道健康度统计窗口：最近 7 天。 */
+        const val HEALTH_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
+
+        /** 通道展示顺序（未知的排后面）。 */
+        private val CHANNEL_ORDER = listOf("QQ", "FEISHU", "WECOM", "MP")
 
         /**
          * 手机号掩码：11 位标准号保留前 3 后 4（138****1234）；
