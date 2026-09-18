@@ -64,10 +64,6 @@ fun Application.module() {
     val jwtAudience = System.getenv("JWT_AUDIENCE")
         ?: environment.config.propertyOrNull("jwt.audience")?.getString()
         ?: "rinklnote-app"
-    val webhookSecret = requireStrongSecret(
-        System.getenv("WEBHOOK_SECRET") ?: environment.config.propertyOrNull("webhook.secret")?.getString(),
-        "WEBHOOK_SECRET"
-    )
 
     val userService = UserService(jwtSecret, jwtIssuer, jwtAudience)
     val billService = BillService()
@@ -299,7 +295,6 @@ fun Application.module() {
         challengeRoutes(challengeService)
         correctionRoutes()
         keywordRoutes()
-        qqWebhookRoutes(webhookSecret, userService, billService, nluService)
         insightRoutes(insightService)
         qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
         qqBotManageRoutes(qqBotService, userService)

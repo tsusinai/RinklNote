@@ -116,12 +116,6 @@ class UserService(
     /** 邮箱归一：去空白 + 转小写；null 原样返回。三端约定邮箱身份大小写不敏感。 */
     private fun normalizeEmail(email: String?): String? = email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
 
-    fun findByQQ(qqNumber: String): UserInfo? {
-        return transaction {
-            UsersTable.selectAll().where { UsersTable.qqNumber eq qqNumber }.singleOrNull()?.toUserInfo()
-        }
-    }
-
     fun findByQqOpenid(openid: String): UserInfo? {
         return transaction {
             UsersTable.selectAll().where { UsersTable.qqOpenid eq openid }.singleOrNull()?.toUserInfo()

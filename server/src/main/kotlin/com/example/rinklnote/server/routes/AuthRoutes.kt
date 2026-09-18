@@ -74,9 +74,6 @@ data class AiSettingRequest(val disabled: Boolean)
 @Serializable
 data class DailyReportSettingRequest(val enabled: Boolean, val hour: Int, val minute: Int)
 
-@Serializable
-data class QqLoginRequest(val code: String)
-
 /**
  * PUT /api/auth/profile 的请求体：文字资料**整体替换**（null / 缺省 = 清除该字段）。
  * 头像不在此处改，走 POST /api/auth/avatar 独立上传。
@@ -200,34 +197,6 @@ fun Route.authRoutes(
             loginLimiter.recordSuccess(ip)
             val (userId, token) = result
             call.respond(AuthResponse(userId, token))
-        }
-
-        post("/qq-login") {
-            val ip = call.request.local.remoteHost
-            if (loginLimiter.isBlocked(ip)) {
-                call.respond(HttpStatusCode.TooManyRequests, MessageResponse("尝试次数过多，请稍后再试"))
-                return@post
-            }
-            val body = call.receive<QqLoginRequest>()
-            if (body.code.isBlank()) {
-                call.respond(HttpStatusCode.BadRequest, MessageResponse("登录码不能为空"))
-                return@post
-            }
-            val openid = qqBotService.consumeBindCode(body.code)
-            if (openid == null) {
-                loginLimiter.recordFailure(ip)
-                call.respond(HttpStatusCode.Unauthorized, MessageResponse("登录码无效或已过期"))
-                return@post
-            }
-            val user = userService.findByQqOpenid(openid)
-            if (user == null) {
-                loginLimiter.recordFailure(ip)
-                call.respond(HttpStatusCode.NotFound, MessageResponse("该QQ尚未开通账号，请先给机器人发消息"))
-                return@post
-            }
-            loginLimiter.recordSuccess(ip)
-            val token = userService.generateToken(user.id, user.phone)
-            call.respond(AuthResponse(user.id, token))
         }
 
         authenticate("auth-jwt") {

@@ -24,4 +24,4 @@ export const auth = {
 // 说明：旧 bindQq / unbindQq（/api/auth/bind-qq、/api/auth/unbind-qq）已随服务端下线删除；
 // 机器人绑定一律走 /api/{qq,feishu,wecom}-bot/{bind,unbind,bind-status}（设置页机器人管理区）。
 // 登录页 QQ 登录码入口（2026-09-17）随「优化登录方式」从新 UI 移除；服务端 /api/auth/qq-login
-// 按仓库惯例（旧协议废弃但保留运行）继续可用，存量旧版客户端仍在用。
+// 已于 2026-09-18 随废弃端点清理一并下线（三端 UI 均已无调用）。
