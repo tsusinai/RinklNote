@@ -15,13 +15,14 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog.vue'
 import EditBillModal from './EditBillModal.vue'
 import type { Bill } from '../../types'
 
-const PAGE_SIZE = 50 // 本地分页：每页 50 条
+const PAGE_SIZE = 50 // 服务端分页：每页 50 条
+const SEARCH_DEBOUNCE_MS = 300 // 搜索词输入防抖：停顿后才发请求
 
 const data = useDataStore()
 const toast = useToast()
 
 const search = ref('')
-const cat = ref('')
+const cat = ref<number | ''>('') // 分类过滤直接绑定分类 id（服务端按 categoryId 精确过滤）
 const from = ref('')
 const to = ref('')
 const page = ref(1)
@@ -30,42 +31,29 @@ const editing = ref<Bill | null>(null)
 const pendingRemove = ref<Bill | null>(null)
 const removing = ref(false)
 
-const monthCategories = computed(() => {
-  const s = new Set(data.bills.map((b) => b.categoryName))
-  return Array.from(s)
-})
+// 搜索结果（服务端返回）：当前页账单 + 分页元数据 + 全集聚合（汇总卡跨页口径）
+const list = ref<Bill[]>([])
+const total = ref(0)
+const totalPages = ref(1)
+const sumExpense = ref(0)
+const sumIncome = ref(0)
 
-// 筛选维度：搜索词（备注/分类模糊）、分类（精确）、日期范围（含首尾两天）
-const filtered = computed(() => data.bills.filter((b) => {
-  if (search.value) {
-    const q = search.value.toLowerCase()
-    if (!((b.remark ?? '').toLowerCase().includes(q) || b.categoryName.toLowerCase().includes(q))) return false
-  }
-  if (cat.value && b.categoryName !== cat.value) return false
-  if (from.value && !(b.date >= new Date(from.value + 'T00:00:00').getTime())) return false
-  if (to.value && !(b.date <= new Date(to.value + 'T23:59:59').getTime())) return false
-  return true
+const hasActiveFilter = computed(() => !!(search.value || cat.value !== '' || from.value || to.value))
+
+// 汇总卡口径 = 当前筛选全集（跨页）聚合，金额全程整数分，展示经 formatMoney 格式化
+const summary = computed(() => ({
+  count: total.value,
+  exp: sumExpense.value,
+  inc: sumIncome.value,
+  bal: sumIncome.value - sumExpense.value,
 }))
-
-const hasActiveFilter = computed(() => !!(search.value || cat.value || from.value || to.value))
-
-// 汇总口径修复：笔数/总支出/总收入/结余一律按「当前筛选后的列表」聚合（原先固定统计全部账单）。
-// 金额全程整数分求和，展示时经 formatMoney 格式化。
-const summary = computed(() => {
-  let count = 0, exp = 0, inc = 0
-  for (const b of filtered.value) {
-    count++
-    if (b.billType === 'EXPENSE') exp += b.amountMinor
-    else inc += b.amountMinor
-  }
-  return { count, exp, inc, bal: inc - exp }
-})
 
 // 筛选 chips：把已生效条件可视化为可删除的 chip（点 × 清除对应条件）
 const chips = computed(() => {
   const list: { key: string; label: string }[] = []
   if (search.value) list.push({ key: 'search', label: `搜索：${search.value}` })
-  if (cat.value) list.push({ key: 'cat', label: `分类：${cat.value}` })
+  const catName = data.cats.find((c) => c.id === cat.value)?.name
+  if (catName) list.push({ key: 'cat', label: `分类：${catName}` })
   if (from.value && to.value) list.push({ key: 'date', label: `日期：${from.value} ~ ${to.value}` })
   else if (from.value) list.push({ key: 'date', label: `日期：${from.value} 起` })
   else if (to.value) list.push({ key: 'date', label: `日期：至 ${to.value}` })
@@ -78,17 +66,54 @@ function clearChip(key: string) {
   else { from.value = ''; to.value = '' }
 }
 
-// 本地分页：筛选变化回第一页；页码越界时收敛到最后一页
-const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
-const paged = computed(() => filtered.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE))
-watch([search, cat, from, to], () => { page.value = 1 })
-watch(totalPages, () => { if (page.value > totalPages.value) page.value = totalPages.value })
+function currentParams(paramsPage: number) {
+  return {
+    q: search.value.trim() || undefined,
+    categoryId: cat.value === '' ? undefined : cat.value,
+    from: from.value || undefined,
+    to: to.value || undefined,
+    page: paramsPage,
+    pageSize: PAGE_SIZE,
+  }
+}
+
+// 拉取服务端搜索结果；页码越界时收敛回最后一页（watcher 会以收敛后的页码再拉一次）
+async function fetchResults() {
+  loading.value = true
+  try {
+    const res = await bills.search(currentParams(page.value))
+    list.value = res.bills
+    total.value = res.total
+    totalPages.value = Math.max(1, res.totalPages)
+    sumExpense.value = res.sumExpenseMinor
+    sumIncome.value = res.sumIncomeMinor
+    if (page.value > res.totalPages && page.value > 1) {
+      page.value = Math.max(1, res.totalPages)
+      return
+    }
+  } catch (e: any) {
+    toast.push(e?.message || '搜索失败', 'err')
+  } finally { loading.value = false }
+}
+
+// 筛选变化（除搜索词外）立即刷新并回第一页
+watch([cat, from, to], () => { page.value = 1; fetchResults() })
+// 搜索词防抖：停顿 300ms 后刷新并回第一页
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+watch(search, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 1; fetchResults() }, SEARCH_DEBOUNCE_MS)
+})
+// 翻页
+watch(page, () => { fetchResults() })
 
 async function load() {
-  if (!data.bills.length) {
-    loading.value = true
-    try { await data.loadData() } finally { loading.value = false }
-  }
+  loading.value = true
+  try {
+    // 分类下拉需要 cats；账单数据本身由搜索接口按页拉取
+    if (!data.cats.length) await data.loadData()
+    await fetchResults()
+  } finally { loading.value = false }
 }
 onMounted(load)
 
@@ -109,21 +134,34 @@ async function confirmRemove() {
     await bills.remove(b.id)
     toast.push('已删除')
     pendingRemove.value = null
-    await data.loadData()
+    await fetchResults()
   } catch (e: any) {
     toast.push(e?.message || '删除失败', 'err')
   } finally { removing.value = false }
 }
 
 // CSV 导出：金额全程整数分，分→元的展示统一走 money.ts 的 minorToDecimal（纯整数拆分，
-// 不再使用破坏整数分契约的 minor / 100 浮点除法）；导出行与页面汇总同口径（同为 filtered）。
-function downloadCsv() {
+// 不再使用破坏整数分契约的 minor / 100 浮点除法）；导出行与页面汇总同口径（同为当前筛选全集，
+// 搜索服务端化后按筛选条件翻页拉取，不再依赖全量内存列表）。
+async function downloadCsv() {
   const rows: (string | number)[][] = [['日期', '类型', '分类', '子分类', '金额', '备注', '来源']]
-  for (const b of filtered.value) {
-    rows.push([
-      fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
-      b.subCategoryName || '', minorToDecimal(b.amountMinor), b.remark || '', b.source, // 金额列：分→纯小数，无浮点误差
-    ])
+  try {
+    let exportPage = 1
+    const exportPageSize = 200 // 导出用大页，减少请求数
+    while (rows.length < 100_000) { // 防御性上限，防止异常分页死循环
+      const res = await bills.search({ ...currentParams(exportPage), pageSize: exportPageSize })
+      for (const b of res.bills) {
+        rows.push([
+          fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
+          b.subCategoryName || '', minorToDecimal(b.amountMinor), b.remark || '', b.source, // 金额列：分→纯小数，无浮点误差
+        ])
+      }
+      if (!res.bills.length || exportPage >= res.totalPages) break
+      exportPage++
+    }
+  } catch (e: any) {
+    toast.push(e?.message || '导出失败', 'err')
+    return
   }
   const csv = '\uFEFF' + toCsv(rows)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
@@ -137,7 +175,7 @@ function downloadCsv() {
   <div class="page">
     <h2>账单</h2>
 
-    <!-- 汇总卡：口径 = 当前筛选后的列表聚合 -->
+    <!-- 汇总卡：口径 = 当前筛选全集（跨页）聚合 -->
     <div class="summary-grid">
       <StatCard label="笔数" :value="String(summary.count)" />
       <StatCard label="总支出" :value="formatMoney(summary.exp)" tone="expense" />
@@ -148,8 +186,8 @@ function downloadCsv() {
     <div class="filters">
       <input class="sel w160" type="text" placeholder="搜索备注/分类..." v-model="search" />
       <select class="sel" v-model="cat">
-        <option value="">全部分类</option>
-        <option v-for="c in monthCategories" :key="c" :value="c">{{ c }}</option>
+        <option :value="''">全部分类</option>
+        <option v-for="c in data.cats" :key="c.id" :value="c.id">{{ c.name }}</option>
       </select>
       <input class="sel" type="date" v-model="from" />
       <span class="to-sep">至</span>
@@ -183,7 +221,7 @@ function downloadCsv() {
         </div>
 
         <TransitionGroup v-else name="row" tag="div" class="rows">
-          <div v-for="(b, i) in paged" :key="b.id" v-reveal="rowDelay(i)" class="bill-row">
+          <div v-for="(b, i) in list" :key="b.id" v-reveal="rowDelay(i)" class="bill-row">
             <span class="c-date">{{ fmtDateTime(b.date) }}</span>
             <span class="c-cat"><i class="cat-dot">{{ catEmoji(b.categoryName) }}</i>{{ b.categoryName }}</span>
             <span class="c-sub">{{ b.subCategoryName }}</span>
@@ -198,7 +236,7 @@ function downloadCsv() {
         </TransitionGroup>
 
         <EmptyState
-          v-if="!loading && !filtered.length"
+          v-if="!loading && !list.length"
           icon="receipt"
           :text="hasActiveFilter ? '未找到匹配的账单' : '暂无账单记录'"
           :hint="hasActiveFilter ? '调整筛选条件后再试试' : '去记账页记一笔开始吧'"
@@ -206,14 +244,14 @@ function downloadCsv() {
       </div>
     </div>
 
-    <!-- 本地分页页码器 -->
+    <!-- 服务端分页页码器 -->
     <div v-if="!loading && totalPages > 1" class="pager">
       <button class="page-btn pressable" type="button" :disabled="page <= 1" @click="page--">上一页</button>
-      <span class="page-info">第 {{ page }} / {{ totalPages }} 页 · 共 {{ filtered.length }} 条</span>
+      <span class="page-info">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
       <button class="page-btn pressable" type="button" :disabled="page >= totalPages" @click="page++">下一页</button>
     </div>
 
-    <EditBillModal v-if="editing" :bill="editing" @close="editing = null" @saved="editing = null; data.loadData()" />
+    <EditBillModal v-if="editing" :bill="editing" @close="editing = null" @saved="editing = null; data.loadData(); fetchResults()" />
 
     <ConfirmDialog
       :open="!!pendingRemove"

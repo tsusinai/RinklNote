@@ -29,6 +29,14 @@ export interface SyncResponse {
   nextAfter: number | null; nextAfterId: number | null;
 }
 
+/** 账单搜索响应（2026-09-18 Task 0.6 搜索服务端化）：当前页 + 分页元数据 +
+ *  「当前筛选全集」聚合（汇总卡跨页展示），金额一律整数分。 */
+export interface BillSearchResponse {
+  bills: Bill[]; page: number; pageSize: number;
+  total: number; totalPages: number;
+  sumExpenseMinor: number; sumIncomeMinor: number;
+}
+
 export interface Budget {
   id: number; monthStart: number; amountMinor: number; createdAt: number;
   updatedAt: number | null; deleted: boolean;

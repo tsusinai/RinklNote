@@ -4,6 +4,7 @@ import com.example.rinklnote.server.services.BillDTO
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BillUpdateResult
 import com.example.rinklnote.server.services.Money
+import com.example.rinklnote.server.services.TimeUtil
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -13,6 +14,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 @Serializable
 data class CreateBillRequest(
@@ -37,6 +40,19 @@ data class CreateBillRequest(
 @Serializable
 data class ParseRequest(val text: String)
 
+/** yyyy-MM-dd → 业务时区（Asia/Shanghai）当天 0 点的 epoch 毫秒；解析失败返回 null。 */
+private fun parseDayStartMillis(day: String): Long? =
+    try {
+        LocalDate.parse(day).atStartOfDay(TimeUtil.BOOKKEEPING_ZONE).toInstant().toEpochMilli()
+    } catch (_: DateTimeParseException) {
+        null
+    }
+
+/** yyyy-MM-dd → 业务时区当天「最后一毫秒」（区间含 to 当天）。 */
+private fun parseDayEndMillis(day: String): Long =
+    LocalDate.parse(day).plusDays(1).atStartOfDay(TimeUtil.BOOKKEEPING_ZONE)
+        .toInstant().toEpochMilli() - 1
+
 fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
     // Public endpoints — reference data, no auth required
     get("/api/bills/categories") {
@@ -53,6 +69,36 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
         }
 
         route("/api/bills") {
+            // 账单搜索（Task 0.6）：服务端分页过滤，替代 Web 全量内存扫描。
+            // min/max 为「元」入参（内部经 Money.toMinor 换整数分比较）；
+            // from/to 为 yyyy-MM-dd，按业务时区取当天边界，to 含当天。
+            get("/search") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized)
+
+                val fromParam = call.request.queryParameters["from"]
+                val toParam = call.request.queryParameters["to"]
+                if (fromParam != null && parseDayStartMillis(fromParam) == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "from 日期格式应为 yyyy-MM-dd"))
+                }
+                if (toParam != null && parseDayStartMillis(toParam) == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "to 日期格式应为 yyyy-MM-dd"))
+                }
+
+                val response = billService.searchBills(
+                    userId = userId,
+                    q = call.request.queryParameters["q"],
+                    minMinor = call.request.queryParameters["min"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
+                    maxMinor = call.request.queryParameters["max"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
+                    categoryId = call.request.queryParameters["categoryId"]?.toLongOrNull(),
+                    fromDayStart = fromParam?.let { parseDayStartMillis(it) },
+                    toDayEnd = toParam?.let { parseDayEndMillis(it) },
+                    page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1,
+                    pageSize = call.request.queryParameters["pageSize"]?.toIntOrNull() ?: 20
+                )
+                call.respond(response)
+            }
+
             get("/sync") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()

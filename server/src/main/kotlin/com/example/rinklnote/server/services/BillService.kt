@@ -57,6 +57,19 @@ data class SyncResponse(
     val nextAfterId: Long? = null
 )
 
+/** 账单搜索响应（2026-09-18 Task 0.6）：当前页列表 + 分页元数据 +
+ *  「当前筛选全集」的聚合（汇总卡跨页展示用），金额一律整数分。 */
+@Serializable
+data class BillSearchResponse(
+    val bills: List<BillDTO>,
+    val page: Int,
+    val pageSize: Int,
+    val total: Long,
+    val totalPages: Int,
+    val sumExpenseMinor: Long,
+    val sumIncomeMinor: Long
+)
+
 @Serializable
 data class SubCategoryDTO(
     val id: Long,
@@ -236,6 +249,71 @@ class BillService {
             createdAt = now, updatedAt = now, sortOrder = sortOrder,
             latitude = latitude, longitude = longitude
         )
+    }
+
+    /**
+     * 账单搜索（2026-09-18 Task 0.6）：服务端条件拼接 + 分页，替代 Web 端全量内存过滤。
+     * - 只查未删除（软删过滤），按 userId 隔离；
+     * - q 模糊匹配备注 / 分类名（不区分大小写）；
+     * - minMinor / maxMinor 为整数分比较（元入参由路由层经 Money.toMinor 换算），区间含边界；
+     * - fromDayStart / toDayEnd 为 epoch 毫秒（业务时区当天边界，含首尾，由路由层解析）；
+     * - 分页 page 从 1 起；total / 聚合覆盖当前筛选全集（跨页）。
+     * 排序：date 倒序、id 倒序（最新在前，与 Web 列表现有习惯一致）。
+     */
+    fun searchBills(
+        userId: Long,
+        q: String? = null,
+        minMinor: Long? = null,
+        maxMinor: Long? = null,
+        categoryId: Long? = null,
+        fromDayStart: Long? = null,
+        toDayEnd: Long? = null,
+        page: Int = 1,
+        pageSize: Int = 20
+    ): BillSearchResponse {
+        val safePage = page.coerceAtLeast(1)
+        val safeSize = pageSize.coerceIn(1, 200)
+
+        fun filterOp(): Op<Boolean> = with(SqlExpressionBuilder) {
+            var op: Op<Boolean> = (BillsTable.userId eq userId) and (BillsTable.deleted eq false)
+            if (!q.isNullOrBlank()) {
+                val like = "%" + q.trim().lowercase() + "%"
+                op = op and (BillsTable.remark.lowerCase().like(like) or BillsTable.categoryName.lowerCase().like(like))
+            }
+            if (minMinor != null) op = op and (BillsTable.amountMinor greaterEq minMinor)
+            if (maxMinor != null) op = op and (BillsTable.amountMinor lessEq maxMinor)
+            if (categoryId != null) op = op and (BillsTable.categoryId eq categoryId)
+            if (fromDayStart != null) op = op and (BillsTable.date greaterEq fromDayStart)
+            if (toDayEnd != null) op = op and (BillsTable.date lessEq toDayEnd)
+            op
+        }
+
+        return transaction {
+            val where: Op<Boolean> = filterOp()
+            val total = BillsTable.selectAll().where { where }.count()
+            val sumExpense = BillsTable.select(BillsTable.amountMinor.sum())
+                .where { where and (BillsTable.billType eq "EXPENSE") }
+                .first()[BillsTable.amountMinor.sum()] ?: 0L
+            val sumIncome = BillsTable.select(BillsTable.amountMinor.sum())
+                .where { where and (BillsTable.billType eq "INCOME") }
+                .first()[BillsTable.amountMinor.sum()] ?: 0L
+
+            val bills = BillsTable.selectAll()
+                .where { where }
+                .orderBy(BillsTable.date to SortOrder.DESC, BillsTable.id to SortOrder.DESC)
+                .limit(safeSize, offset = (safePage - 1).toLong() * safeSize)
+                .map { it.toBillDto() }
+
+            BillSearchResponse(
+                bills = bills,
+                page = safePage,
+                pageSize = safeSize,
+                total = total,
+                totalPages = ((total + safeSize - 1) / safeSize).toInt(),
+                sumExpenseMinor = sumExpense,
+                sumIncomeMinor = sumIncome
+            )
+        }
     }
 
     fun deleteBill(billId: Long, userId: Long): Boolean {

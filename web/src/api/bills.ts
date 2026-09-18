@@ -1,5 +1,5 @@
 import { api } from './http'
-import type { Bill, SyncResponse, MoneyStyle } from '../types'
+import type { Bill, SyncResponse, BillSearchResponse, MoneyStyle } from '../types'
 
 export interface CreateBillPayload {
   amountMinor: number; billType: MoneyStyle; categoryId: number; categoryName: string;
@@ -34,4 +34,10 @@ export const bills = {
     api<{ message: string }>(`/api/bills/${id}`, { method: 'DELETE' }),
   parse: (text: string) =>
     api<{ message?: string; bill?: Bill } | { message: string }>('/api/bills/parse', { method: 'POST', body: { text } }),
+  // 服务端搜索（2026-09-18 Task 0.6）：q 备注/分类模糊；min/max 为「元」入参（服务端换整数分）；
+  // from/to 为 yyyy-MM-dd（业务时区当天边界，含首尾）；page 从 1 起；pageSize 默认 20、上限 200。
+  search: (params: {
+    q?: string; min?: number; max?: number; categoryId?: number;
+    from?: string; to?: string; page?: number; pageSize?: number
+  }) => api<BillSearchResponse>('/api/bills/search', { query: params }),
 }
