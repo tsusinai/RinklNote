@@ -18,6 +18,7 @@ import androidx.compose.foundation.Canvas as IconCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -72,6 +74,7 @@ import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.SpendGeoProfile
 import dev.chrisbanes.haze.HazeState
 import java.io.File
 import kotlin.math.ceil
@@ -84,6 +87,7 @@ import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polygon
 
 /** 「回到我的位置」标记在 overlays 里的专用 id：重建账单标记时按此豁免，避免定位圆点被误清。 */
 private const val MY_LOCATION_MARKER_ID = "my_location"
@@ -593,6 +597,10 @@ private fun MapContent(
     // 聚合成标记（账单增删改 → locatedBills 变化 → 重算，地图实时刷新）
     val markerItems = remember(locatedBills) { buildBillMarkers(locatedBills) }
 
+    // 消费地理画像（Task 4.3）：0.01° 网格热力 + 地点排行（仅主动打点的支出账单）
+    val heatCells = remember(locatedBills) { SpendGeoProfile.aggregateGrid(locatedBills) }
+    var showRanking by remember { mutableStateOf(false) }
+
     // 点击回调经 rememberUpdatedState 固定取最新值，避免把 lambda 放进重组 keyed 效应里
     val currentOnOpenBill by rememberUpdatedState(onOpenBill)
 
@@ -619,11 +627,24 @@ private fun MapContent(
         }
     }
 
-    // 标记随账单数据重建：清掉旧账单标记（「我的位置」圆点按 id 豁免）后整批重画。
+    // 标记随账单数据重建：清掉旧账单标记与旧热力圆（「我的位置」圆点按 id 豁免）后整批重画。
     // 个人账单量级小，整批重建开销可忽略；LaunchedEffect 默认跑在主线程，
     // 满足 osmdroid「overlay 只能在主线程操作」的要求。
-    LaunchedEffect(mapView, markerItems, expenseColorArgb, incomeColorArgb) {
-        mapView.overlays.removeAll { it is Marker && it.id != MY_LOCATION_MARKER_ID }
+    LaunchedEffect(mapView, markerItems, heatCells, expenseColorArgb, incomeColorArgb) {
+        mapView.overlays.removeAll { (it is Marker && it.id != MY_LOCATION_MARKER_ID) || it is Polygon }
+        // 热力/聚合圆点图层（Task 4.3）：先画（压在标记下层），半径随网格支出占比放大。
+        // osmdroid 6.1.20 无 Circle overlay，用 Polygon.pointsAsCircle 等价实现；
+        // GCJ-02 纠偏 TODO 维持原状：热力是「片区级」观感，数百米偏移不影响看分布。
+        val topTotal = heatCells.firstOrNull()?.totalMinor ?: 0L
+        heatCells.forEach { cell ->
+            val polygon = Polygon(mapView).apply {
+                setPoints(Polygon.pointsAsCircle(GeoPoint(cell.cellLat, cell.cellLng), SpendGeoProfile.radiusMeters(cell.totalMinor, topTotal)))
+                fillPaint.color = (expenseColorArgb and 0x00FFFFFF) or 0x2E000000.toInt()
+                outlinePaint.color = android.graphics.Color.TRANSPARENT
+                outlinePaint.strokeWidth = 0f
+            }
+            mapView.overlays.add(polygon)
+        }
         markerItems.forEach { item ->
             val colorArgb = if (item.isExpense) expenseColorArgb else incomeColorArgb
             val markerIcon = buildMarkerDrawable(context, colorArgb, item.label)
@@ -753,6 +774,21 @@ private fun MapContent(
             }
         }
 
+        // 地点排行（Task 4.3）：左下角胶囊开关 + 展开的排行卡（Top 8 片区，支出合计降序）。
+        if (heatCells.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 14.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (showRanking) {
+                    GeoRankingPanel(cells = heatCells)
+                }
+                GeoRankingTogglePill(expanded = showRanking, onClick = { showRanking = !showRanking })
+            }
+        }
+
         // 右下角「回到我的位置」悬浮钮：点击采集一次定位 → 成功 animateTo 并画定位圆点；
         // 失败 Toast 提示。MyLocation 图标在 material-icons-extended（项目未引入该依赖，
         // 本文件也不新增依赖），故用 Canvas 手绘同款「准星」造型：外环 + 中心实心点 + 四向刻度，
@@ -839,6 +875,81 @@ private fun MapPageTopBar(hasBackground: Boolean, onBack: () -> Unit) {
             fontWeight = FontWeight.Medium,
             color = textColor,
             modifier = Modifier.align(Alignment.Center)
+        )
+    }
+}
+
+/**
+ * 「地点排行」面板（Task 4.3 消费地理画像）：0.01° 网格（≈1.1km 片区）聚合的
+ * 支出 Top 8。诚实口径：仅统计**主动打点**的支出账单，无地点名（不反向地理编码），
+ * 以网格内金额最大的分类代表该片区。
+ */
+@Composable
+private fun GeoRankingPanel(cells: List<SpendGeoProfile.CellRank>) {
+    Column(
+        modifier = Modifier
+            .widthIn(max = 260.dp)
+            .rinkShadow(RoundedCornerShape(15.dp))
+            .clip(RoundedCornerShape(15.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(
+            text = "地点排行",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "仅统计主动打点的支出账单 · 约 1km 片区聚合",
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        cells.take(8).forEachIndexed { index, cell ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${index + 1}. ${cell.topCategory?.takeIf { it.isNotBlank() } ?: "未知分类"}",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${Money.formatPlain(cell.totalMinor)} · ${cell.billCount} 笔",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** 「地点排行」开合胶囊：默认收起，展开时卡片列在胶囊上方（底部左下角，与定位钮对角）。 */
+@Composable
+private fun GeoRankingTogglePill(expanded: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .rinkShadow(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .then(applyCardGlass(RoundedCornerShape(18.dp)))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text = if (expanded) "收起排行" else "地点排行",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
