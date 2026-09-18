@@ -1,10 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
-import { PieChart, LineChart, BarChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import VChart from 'vue-echarts'
+import VChart from '../../utils/echarts' // ECharts 按需注册统一出口（utils/echarts.ts）
 import { useDataStore } from '../../stores/data'
 import { useThemeStore } from '../../stores/theme'
 import { insights } from '../../api/insights'
@@ -16,8 +12,6 @@ import { categoryEmoji } from '../../utils/categoryIcon'
 import EmptyState from '../../components/ui/EmptyState.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
 import type { MonthlyReview } from '../../types'
-
-use([CanvasRenderer, PieChart, LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent])
 
 const data = useDataStore()
 const theme = useThemeStore()
