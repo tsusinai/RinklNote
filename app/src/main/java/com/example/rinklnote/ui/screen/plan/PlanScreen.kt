@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
+import com.example.rinklnote.domain.BudgetRiskLevel
+import com.example.rinklnote.ui.component.BurnRiskBar
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -126,6 +128,12 @@ fun PlanScreen(
                     onEditBudget()
                 }
             )
+
+            // 预算-挑战联动预警（Task 4.1）：总额预算烧穿过快 → 橙色提示条（实时派生零存储）。
+            state.totalBurnRisk?.takeIf { it.level != BudgetRiskLevel.LOW }?.let { risk ->
+                Spacer(modifier = Modifier.height(10.dp))
+                BurnRiskBar(risk = risk, periodLabel = "本月")
+            }
 
             // 上月结余（仅展示，不结转）
             state.lastMonthSurplusMinor?.let { surplus ->

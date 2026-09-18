@@ -13,9 +13,11 @@ import com.example.rinklnote.data.db.entity.DailyCategoryAmount
 import com.example.rinklnote.data.db.entity.DailySpendStat
 import com.example.rinklnote.data.repository.BudgetRepository
 import com.example.rinklnote.data.repository.ChallengeRepository
+import com.example.rinklnote.domain.BudgetBurnRisk
 import com.example.rinklnote.domain.DayKind
 import com.example.rinklnote.domain.AchievementInput
 import com.example.rinklnote.domain.AchievementState
+import com.example.rinklnote.domain.budgetBurnRisk
 import com.example.rinklnote.domain.currentBookkeepingStreak
 import com.example.rinklnote.domain.dayKind
 import com.example.rinklnote.domain.evaluateAchievements
@@ -109,6 +111,11 @@ data class ChallengeState(
     val weekExpenseMinor: Long = 0L,
     /** 周周期剩余天数（含今天，不含下周一）。 */
     val weekRemainingDays: Int = 0,
+    // —— 预算燃烧风险（Task 4.1 预算-挑战联动，实时派生零存储；口径与 Web 端钉死一致） ——
+    /** 月总额预算燃烧风险；null = 未设预算 / 不可外推。 */
+    val monthBurnRisk: BudgetBurnRisk? = null,
+    /** 周预算挑战燃烧风险；null = 未设周预算 / 行非 ACTIVE。 */
+    val weeklyBurnRisk: BudgetBurnRisk? = null,
     // —— 成就墙（15 枚，evaluateAchievements 返回顺序即展示顺序） ——
     val achievements: List<AchievementState> = emptyList(),
     val themeUnlocks: List<ThemeUnlockState> = emptyList(),
@@ -241,6 +248,8 @@ internal fun deriveChallengeState(
         .sumOf { it.amountMinor }
         .takeIf { it > 0 }
     val forecastBalance = monthBudgetTotal?.let { it - forecast }
+    // 月总额预算燃烧风险（Task 4.1）：budgetBurnRisk 对 budget ≤ 0 自行返回 null
+    val monthBurnRisk = budgetBurnRisk(monthExpense, monthBudgetTotal ?: 0L, dayOfMonth, daysInMonth)
 
     // —— 打卡墙 ——
     val kindByDay = HashMap<Long, DayKind>(stats.size)
@@ -263,6 +272,13 @@ internal fun deriveChallengeState(
     val weeklyRow = challenges.firstOrNull {
         it.type == ChallengeType.WEEKLY_BUDGET && it.periodStart == weekStart && !it.deleted
     }
+    // 周预算燃烧风险：仅 ACTIVE 且已设上限（goal>0）的行参与（goal=0 = 还没手输，不预警）
+    val weeklyBurnRisk = weeklyRow
+        ?.takeIf { it.status == ChallengeStatus.ACTIVE && it.goal > 0 }
+        ?.let { row ->
+            val elapsedWeekDays = java.time.temporal.ChronoUnit.DAYS.between(weekStartDate, today).toInt() + 1
+            budgetBurnRisk(weekExpense, row.goal, elapsedWeekDays, 7)
+        }
     // 连续记账取「进行中的优先，否则最近承诺的一行」——已达成/已错过的最近一次也展示在卡上。
     val streakRow = challenges
         .filter { it.type == ChallengeType.BOOKKEEPING_STREAK && !it.deleted }
@@ -327,6 +343,8 @@ internal fun deriveChallengeState(
         weeklyChallenge = weeklyRow,
         weekExpenseMinor = weekExpense,
         weekRemainingDays = remainingDays(weekEnd, today),
+        monthBurnRisk = monthBurnRisk,
+        weeklyBurnRisk = weeklyBurnRisk,
         achievements = achievements,
         themeUnlocks = themeUnlocks,
     )
