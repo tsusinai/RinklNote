@@ -632,11 +632,12 @@ fun AppNavigation(app: RinklNoteApp) {
                     )
                 }
                 composable("multi-currency") {
-                    // 多币种预实现：本位币选择存 DataStore，汇率演示表。
+                    // 多币种：本位币存 DataStore，汇率接服务端 /api/rates（离线回落演示表）
                     MultiCurrencyScreen(
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         settingsManager = app.settingsManager,
+                        api = app.apiService,
                         onBack = { navController.popBackStack() }
                     )
                 }

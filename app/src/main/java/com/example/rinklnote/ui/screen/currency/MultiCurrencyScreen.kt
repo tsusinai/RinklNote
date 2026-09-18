@@ -26,10 +26,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.data.local.SettingsManager
+import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.RinklTopBar
@@ -46,6 +50,7 @@ import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.util.CurrencyRates
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -65,11 +70,9 @@ private val SUPPORTED_CURRENCIES = listOf(
 )
 
 /**
- * 演示汇率表（静态常量，相对 CNY 的近似牌价）。
- *
- * **演示数据：记账金额换算为后续接入点（bills 金额仍为整数分本位币）**——
- * 当前仅做静态展示，不参与任何记账/统计链路，也不改动 Room schema；
- * 后续接入实时汇率时整表替换即可。
+ * 演示汇率表（静态常量，相对 CNY 的近似牌价）——**回落兜底**：
+ * 服务端 `/api/rates` 失败 / 离线 / 缺码的币种回落此表（见 [CurrencyRates.mergeRates]）；
+ * 记账金额换算仍为后续接入点（bills 金额保持整数分本位币），不参与任何记账/统计链路。
  */
 private val DEMO_RATES_VS_CNY: Map<String, Double> = mapOf(
     "CNY" to 1.00,
@@ -82,11 +85,12 @@ private val DEMO_RATES_VS_CNY: Map<String, Double> = mapOf(
 )
 
 /**
- * 多币种预实现页（独立路由 `multi-currency`，**该路由由主会话接线**）。
+ * 多币种页（独立路由 `multi-currency`）。
  *
- * 页面自包含：不依赖 ViewModel，本位币读写经 [settingsManager] 直连 DataStore
- * （键 `base_currency`，默认 CNY）；汇率为静态演示数据（见 [DEMO_RATES_VS_CNY]），
- * **不改 Room schema、不改记账链路，金额约定仍为整数分（Long）本位币**。
+ * 页面自包含：本位币读写经 [settingsManager] 直连 DataStore（键 `base_currency`，默认 CNY）；
+ * 汇率接服务端 `GET /api/rates`（Task 4.2，契约：每 1 单位该币种兑 CNY），失败/离线回落
+ * [DEMO_RATES_VS_CNY] 演示表（逐币种合并：服务端有的覆盖、缺的回落）；展示换算为交叉汇率
+ * （相对所选本位币），**不改 Room schema、不改记账链路，金额约定仍为整数分（Long）本位币**。
  *
  * 背景处理对齐 [com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen]：
  * 有自选照片时由 nav 层整窗铺满；无照片时本页自铺 [DefaultHazeBackground]
@@ -96,6 +100,7 @@ private val DEMO_RATES_VS_CNY: Map<String, Double> = mapOf(
  * @param backgroundUri 自选背景照片 URI；`null` 时本页自铺默认背景
  * @param hazeState 毛玻璃状态；可空——导航层按「有照片」条件传，无照片为 null 时本页自建兜底
  * @param settingsManager 设置存储（读写本位币键 `base_currency`）
+ * @param api 服务端 API（拉真汇率）；null 或请求失败一律回落演示表
  * @param onBack 返回上一页
  */
 @Composable
@@ -103,6 +108,7 @@ fun MultiCurrencyScreen(
     backgroundUri: String?,
     hazeState: HazeState?,
     settingsManager: SettingsManager,
+    api: ApiService? = null,
     onBack: () -> Unit
 ) {
     // 兜底 blur 源：导航层未透传 hazeState（无照片场景）时自建，避免 DefaultHazeBackground 拿不到状态。
@@ -111,6 +117,20 @@ fun MultiCurrencyScreen(
     // 本位币：DataStore 流；先按默认值渲染，DataStore 首次发射后自动校正
     val baseCurrency by settingsManager.baseCurrency
         .collectAsStateWithLifecycle(initialValue = SettingsManager.DEFAULT_BASE_CURRENCY)
+
+    // 汇率状态：先渲染演示表，异步拉服务端真汇率逐币种合并（失败/离线保留演示表，见合并函数）。
+    var ratesVsCny by remember { mutableStateOf(DEMO_RATES_VS_CNY) }
+    var ratesIsLive by remember { mutableStateOf(false) }
+    var ratesUpdatedAt by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val service = api ?: return@LaunchedEffect
+        val resp = runCatching { service.getRates() }.getOrNull() ?: return@LaunchedEffect
+        if (resp.rates.isNotEmpty()) {
+            ratesVsCny = CurrencyRates.mergeRates(resp.rates, DEMO_RATES_VS_CNY)
+            ratesIsLive = true
+            ratesUpdatedAt = resp.updatedAt
+        }
+    }
 
     val listState = rememberLazyListState()
     val topBarHeight = rememberRinklTopBarHeight()
@@ -155,23 +175,39 @@ fun MultiCurrencyScreen(
                 }
             }
 
-            // 汇率演示表：静态牌价（相对 CNY），本位币 CNY 自身不列（1 CNY ≈ 1 CNY 无意义）
-            item(key = "demo-rates") {
-                SettingsGroupCard(title = "参考汇率（演示）") {
-                    val quoted = SUPPORTED_CURRENCIES.filter { it.code != "CNY" }
-                    quoted.forEachIndexed { index, currency ->
-                        RateRow(currency = currency)
-                        if (index != quoted.lastIndex) {
-                            RinklDivider()
+            // 汇率表：服务端真汇率（失败回落演示表），展示换算为相对本位币的交叉汇率；
+            // 本位币自身行不列（1 base ≈ 1 base 无意义）
+            item(key = "rates") {
+                SettingsGroupCard(title = "参考汇率") {
+                    val quoted = SUPPORTED_CURRENCIES.filter { it.code != baseCurrency }
+                    if (quoted.isEmpty()) {
+                        // 本位币为清单外代码（理论上不发生）：退回相对 CNY 展示
+                        SUPPORTED_CURRENCIES.filter { it.code != "CNY" }.forEachIndexed { index, currency ->
+                            RateRow(currency = currency, rateVsBase = ratesVsCny[currency.code], baseCode = "CNY")
+                            if (index != SUPPORTED_CURRENCIES.size - 2) RinklDivider()
+                        }
+                    } else {
+                        quoted.forEachIndexed { index, currency ->
+                            RateRow(
+                                currency = currency,
+                                rateVsBase = CurrencyRates.rateVsBase(currency.code, baseCurrency, ratesVsCny),
+                                baseCode = baseCurrency
+                            )
+                            if (index != quoted.lastIndex) RinklDivider()
                         }
                     }
                 }
             }
 
-            // 页面脚注：明确演示数据边界（换算为后续接入点）
+            // 页面脚注：数据来源说明（实时 vs 演示回落）
             item(key = "footnote") {
                 Text(
-                    text = "演示数据：记账金额换算为后续接入点（bills 金额仍为整数分本位币）。",
+                    text = if (ratesIsLive) {
+                        "实时汇率（每 1 单位该币种兑 CNY，展示按本位币换算）" +
+                            (ratesUpdatedAt?.let { " · 更新于 ${it.take(10)}" } ?: "")
+                    } else {
+                        "演示数据：记账金额换算为后续接入点（bills 金额仍为整数分本位币）。"
+                    },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -236,10 +272,12 @@ private fun CurrencyRow(
     }
 }
 
-/** 汇率演示行：左「符号 + 中文名」，右「1 代码 ≈ x.xx CNY」。 */
+/**
+ * 汇率行：左「符号 + 中文名」，右「1 代码 ≈ x 本位币」。
+ * 牌价缺失（null）时右侧显示「—」，不编造换算值。
+ */
 @Composable
-private fun RateRow(currency: CurrencyDef) {
-    val rate = DEMO_RATES_VS_CNY[currency.code] ?: return
+private fun RateRow(currency: CurrencyDef, rateVsBase: Double?, baseCode: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -254,7 +292,8 @@ private fun RateRow(currency: CurrencyDef) {
             modifier = Modifier.weight(1f)
         )
         Text(
-            text = "1 ${currency.code} ≈ ${formatRate(rate)} CNY",
+            text = if (rateVsBase != null) "1 ${currency.code} ≈ ${formatRate(rateVsBase)} $baseCode"
+            else "—",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
