@@ -86,4 +86,16 @@ describe('buildMonthlyShareData 月度聚合', () => {
     expect(d.topCategories).toEqual([])
     expect(d.balanceMinor).toBe(6000)
   })
+  it('软删除墓碑不计入聚合（同步协议会把 deleted=true 下发到客户端缓存）', () => {
+    const bills = [
+      bill({ date: new Date(2026, 8, 3).getTime(), amountMinor: 2500 }),
+      bill({ date: new Date(2026, 8, 10).getTime(), amountMinor: 1200, deleted: true }),
+      bill({ date: new Date(2026, 8, 10).getTime(), amountMinor: 1200, deleted: true, billType: 'INCOME' }),
+    ]
+    const d = buildMonthlyShareData(bills, NOW, NOW)
+    expect(d.totalExpenseMinor).toBe(2500) // 墓碑不计入总支出
+    expect(d.totalIncomeMinor).toBe(0)
+    expect(d.topCategories).toHaveLength(1)
+    expect(d.topCategories[0].pct).toBe(100)
+  })
 })
