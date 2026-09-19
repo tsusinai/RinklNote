@@ -4,9 +4,7 @@ import { useRouter } from 'vue-router'
 import { useThemeStore } from '../stores/theme'
 import { useDataStore } from '../stores/data'
 import { useToast } from '../composables/useToast'
-import { toCsv } from '../utils/csv'
-import { minorToDecimal } from '../utils/money'
-import { fmtDateTime } from '../utils/date'
+import { toCsv, billCsvRows } from '../utils/csv'
 import { filterActions, nextIndex, type CommandAction } from '../utils/commands'
 import { isComposingKeyEvent } from '../utils/keyboard'
 import Icon from './ui/Icon.vue'
@@ -57,22 +55,17 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 /** 导出账单 CSV：与账单页导出同列同口径（整数分 → minorToDecimal 纯整数拆分），
- *  数据取控制台缓存全集；导出动作不碰账单页本身。 */
+ *  数据取控制台缓存全集，软删除墓碑由 billCsvRows 统一剔除（缓存里含同步下发的墓碑）。 */
 function exportCsv() {
   if (!data.bills.length) { toast.push('暂无账单可导出', 'err'); return }
-  const rows: (string | number)[][] = [['日期', '类型', '分类', '子分类', '金额', '备注', '来源']]
-  for (const b of data.bills) {
-    rows.push([
-      fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
-      b.subCategoryName || '', minorToDecimal(b.amountMinor), b.remark || '', b.source,
-    ])
-  }
+  const rows = billCsvRows(data.bills)
+  if (rows.length <= 1) { toast.push('暂无账单可导出', 'err'); return } // 全是墓碑
   const csv = '\uFEFF' + toCsv(rows)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'rinklnote.csv'; a.click()
   URL.revokeObjectURL(url)
-  toast.push(`已导出 ${data.bills.length} 笔账单`)
+  toast.push(`已导出 ${rows.length - 1} 笔账单`)
 }
 
 async function run(action: CommandAction) {

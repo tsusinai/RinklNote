@@ -3,9 +3,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useDataStore } from '../../stores/data'
 import { bills } from '../../api/bills'
 import { fmtDateTime } from '../../utils/date'
-import { formatMoney, minorToDecimal } from '../../utils/money'
+import { formatMoney } from '../../utils/money'
 import { categoryEmoji } from '../../utils/categoryIcon'
-import { toCsv } from '../../utils/csv'
+import { toCsv, billCsvRows } from '../../utils/csv'
 import { useToast } from '../../composables/useToast'
 import StatCard from '../../components/ui/StatCard.vue'
 import EmptyState from '../../components/ui/EmptyState.vue'
@@ -142,20 +142,15 @@ async function confirmRemove() {
 
 // CSV 导出：金额全程整数分，分→元的展示统一走 money.ts 的 minorToDecimal（纯整数拆分，
 // 不再使用破坏整数分契约的 minor / 100 浮点除法）；导出行与页面汇总同口径（同为当前筛选全集，
-// 搜索服务端化后按筛选条件翻页拉取，不再依赖全量内存列表）。
+// 搜索服务端化后按筛选条件翻页拉取，不再依赖全量内存列表），行构建与命令面板共用 billCsvRows。
 async function downloadCsv() {
-  const rows: (string | number)[][] = [['日期', '类型', '分类', '子分类', '金额', '备注', '来源']]
+  const all: Bill[] = []
   try {
     let exportPage = 1
     const exportPageSize = 200 // 导出用大页，减少请求数
-    while (rows.length < 100_000) { // 防御性上限，防止异常分页死循环
+    while (all.length < 100_000) { // 防御性上限，防止异常分页死循环
       const res = await bills.search({ ...currentParams(exportPage), pageSize: exportPageSize })
-      for (const b of res.bills) {
-        rows.push([
-          fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
-          b.subCategoryName || '', minorToDecimal(b.amountMinor), b.remark || '', b.source, // 金额列：分→纯小数，无浮点误差
-        ])
-      }
+      all.push(...res.bills)
       if (!res.bills.length || exportPage >= res.totalPages) break
       exportPage++
     }
@@ -163,7 +158,7 @@ async function downloadCsv() {
     toast.push(e?.message || '导出失败', 'err')
     return
   }
-  const csv = '\uFEFF' + toCsv(rows)
+  const csv = '\uFEFF' + toCsv(billCsvRows(all))
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'rinklnote.csv'; a.click()
