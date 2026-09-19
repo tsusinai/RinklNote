@@ -81,6 +81,8 @@ import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.aggregateAnnualStats
 import com.example.rinklnote.util.exportBillsToCsv
 import com.example.rinklnote.util.today
+import com.example.rinklnote.widget.RinklNoteAppWidget
+import androidx.glance.appwidget.updateAll
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -514,7 +516,12 @@ fun ProfileScreen(
             current = quickAmounts,
             onConfirm = { minors ->
                 showQuickAmountsEditor = false
-                coroutineScope.launch { settingsManager.setQuickAmounts(minors) }
+                coroutineScope.launch {
+                    settingsManager.setQuickAmounts(minors)
+                    // 快捷金额只存 DataStore，小组件仅在记账变更/系统更新时重绘；
+                    // 改完主动刷新，否则桌面 chip 停留旧金额直到下一笔记账才变。
+                    RinklNoteAppWidget().updateAll(context)
+                }
                 Toast.makeText(context, "小组件快捷金额已更新", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showQuickAmountsEditor = false }
