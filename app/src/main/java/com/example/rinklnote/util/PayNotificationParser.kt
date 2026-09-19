@@ -48,10 +48,16 @@ object PayNotificationParser {
             .joinToString(" ")
         if (body.isEmpty()) return PayNotification(matched = false)
 
+        // 每档先过 Money.isPlausibleParsedYuan：超界长数字（卡号/单号被误拼成金额位）视为解析
+        // 噪声落到下一档/放弃——直接放行会在下方 yuanToMinor 转分时溢出，崩掉监听服务进程。
         val yuan = labeledAmountRegex.find(body)?.groupValues?.get(1)?.toDoubleOrNull()
+            ?.takeIf { Money.isPlausibleParsedYuan(it) }
             ?: symbolAmountRegex.find(body)?.groupValues?.get(1)?.toDoubleOrNull()
+                ?.takeIf { Money.isPlausibleParsedYuan(it) }
             ?: unitAmountRegex.find(body)?.groupValues?.get(1)?.toDoubleOrNull()
-        val amountMinor = yuan?.let { Money.yuanToMinor(it) } ?: return PayNotification(matched = false)
+                ?.takeIf { Money.isPlausibleParsedYuan(it) }
+            ?: return PayNotification(matched = false)
+        val amountMinor = Money.yuanToMinor(yuan)
 
         val billType = if (incomeKeywords.any { body.contains(it) }) "INCOME" else "EXPENSE"
         val merchant = merchantRegex.find(body)?.groupValues?.get(1)

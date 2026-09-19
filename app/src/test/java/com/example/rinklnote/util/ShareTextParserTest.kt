@@ -114,4 +114,18 @@ class ShareTextParserTest {
         val r = ShareTextParser.parse(long)
         assertEquals(200, r.remark.length)
     }
+
+    @Test
+    fun `超大数字金额视为解析噪声不产金额`() {
+        // 调用方（ShareReceiveActivity）会把解析出的「元」经 Money.yuanToMinor 转分（longValueExact）：
+        // 17+ 位整数溢出 Long 抛 ArithmeticException，分享入口 onCreate 直接崩溃；
+        // 400 位数字 toDouble 为 Infinity 时 BigDecimal.valueOf 抛 NumberFormatException，同样崩溃。
+        // 因此超界数字必须按「未解析出金额」处理（本测试钉住该契约）。
+        assertNull(ShareTextParser.parse("金额: 99999999999999999999").amount)
+        assertNull(ShareTextParser.parse("¥99999999999999999999").amount)
+        assertNull(ShareTextParser.parse("共消费 99999999999999999999 元").amount)
+        assertNull(ShareTextParser.parse("金额: " + "9".repeat(400)).amount)
+        // 上限内的合法大额不受影响
+        assertEquals(99999999.99, ShareTextParser.parse("金额: 99999999.99").amount!!, 1e-6)
+    }
 }
