@@ -238,4 +238,22 @@ class BillOptimisticLockTest {
         val resp = put(1L, null)
         assertEquals(HttpStatusCode.OK, resp.status)
     }
+
+    @Test
+    fun `put with oversized legacy amount returns 400 not 500`() = runBlocking {
+        // amount=1e20 元（旧字段回退路径）→ Money.toMinor 溢出 ArithmeticException，
+        // 不属于 IAE 家族，PUT 必须自己兜住回 400，否则穿透成 500 + 误发管理员告警
+        val resp = client.put(baseUrl("/api/bills/1")) {
+            bearerAuth(token())
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"amount":1e20,"billType":"EXPENSE","categoryId":1,""" +
+                    """"categoryName":"三餐","accountId":1}"""
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        // 账单数据未被改动
+        val row = transaction { BillsTable.selectAll().where { BillsTable.id eq 1L }.single() }
+        assertEquals(1000L, row[BillsTable.amountMinor])
+    }
 }
