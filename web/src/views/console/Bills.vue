@@ -78,10 +78,15 @@ function currentParams(paramsPage: number) {
 }
 
 // 拉取服务端搜索结果；页码越界时收敛回最后一页（watcher 会以收敛后的页码再拉一次）
+// 竞态守卫：连续变更筛选时多个请求并行在途，乱序返回会让过期响应覆盖新结果——
+// 每次请求取递增序号，只有仍是最新序号的响应才允许落状态、报错与收 loading。
+let fetchSeq = 0
 async function fetchResults() {
+  const mySeq = ++fetchSeq
   loading.value = true
   try {
     const res = await bills.search(currentParams(page.value))
+    if (mySeq !== fetchSeq) return
     list.value = res.bills
     total.value = res.total
     totalPages.value = Math.max(1, res.totalPages)
@@ -92,8 +97,11 @@ async function fetchResults() {
       return
     }
   } catch (e: any) {
+    if (mySeq !== fetchSeq) return
     toast.push(e?.message || '搜索失败', 'err')
-  } finally { loading.value = false }
+  } finally {
+    if (mySeq === fetchSeq) loading.value = false
+  }
 }
 
 // 筛选变化（除搜索词外）立即刷新并回第一页
