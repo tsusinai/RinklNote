@@ -80,9 +80,18 @@ class NLUUpgradeTest {
         assertNull("四十三块=43 不是区间", FuzzyAmount.parse("四十三块"))
         assertNull("四十五块=45 不是区间", FuzzyAmount.parse("四十五块"))
         assertNull("普通文本", FuzzyAmount.parse("通勤月票"))
+        // 「几十」不带单位是非金额语境（几十天/几十次），不得当区间落账
+        assertNull("几十天没记账不是金额", FuzzyAmount.parse("几十天没记账了"))
+        assertNull("几十次", FuzzyAmount.parse("这周来几十次"))
         // 标注文案
         assertTrue(FuzzyAmount.note(30.0 to 40.0).contains("区间30~40元"))
         assertTrue(FuzzyAmount.note(30.0 to 40.0).contains("中值35"))
+    }
+
+    @Test
+    fun `非金额语境的几十不落账`() = runBlocking {
+        // 回归：「几十天没记账了」曾命中裸「几十」区间 → 中值 55 元 + 默认分类落账
+        assertNull(nlu.parse("几十天没记账了", 1L).amount)
     }
 
     @Test

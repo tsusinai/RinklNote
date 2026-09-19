@@ -25,8 +25,9 @@ internal object FuzzyAmount {
             val x = digit(m.groupValues[1][0])
             if (x != null) return (x * 10).toDouble() to (x * 10 + 9).toDouble()
         }
-        // 3) 「几十（块/元）」
-        if (Regex("几十\\s*[块元圆]?").containsMatchIn(text)) return 20.0 to 90.0
+        // 3) 「几十（块/元）」——**必须带单位**：裸「几十」会命中「几十天/几十次」这类
+        //    非金额语境，经路由落到记账分支后按中值 55 元 + 默认分类误落账
+        if (Regex("几十\\s*[块元圆]").containsMatchIn(text)) return 20.0 to 90.0
         // 4) 「一百多」
         Regex("([一二两三四五六七八九])百多\\s*[块元圆]?").find(text)?.let { m ->
             val x = digit(m.groupValues[1][0])
