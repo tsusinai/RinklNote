@@ -240,6 +240,34 @@ class BillOptimisticLockTest {
     }
 
     @Test
+    fun `put referencing another users account is rejected with 400`() = runBlocking {
+        // PUT 是全量替换：accountId 必须属于本人（与 createWebBill 同一校验口径）。
+        // 缺校验时可把账单挂到他人账户 id 上，造成跨用户脏引用（数据完整性）。
+        transaction {
+            AccountsTable.insert {
+                it[id] = 2L
+                it[userId] = OTHER_USER_ID
+                it[name] = "他人账户"
+                it[iconColor] = "#123456"
+                it[updatedAt] = 0L
+            }
+        }
+        val resp = client.put(baseUrl("/api/bills/1")) {
+            bearerAuth(token())
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"amountMinor":1500,"billType":"EXPENSE","categoryId":1,""" +
+                    """"categoryName":"三餐","accountId":2}"""
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        // 账单数据未被改动（ accountId 仍指向本人账户）
+        val row = transaction { BillsTable.selectAll().where { BillsTable.id eq 1L }.single() }
+        assertEquals(1000L, row[BillsTable.amountMinor])
+        assertEquals(1L, row[BillsTable.accountId])
+    }
+
+    @Test
     fun `put with oversized legacy amount returns 400 not 500`() = runBlocking {
         // amount=1e20 元（旧字段回退路径）→ Money.toMinor 溢出 ArithmeticException，
         // 不属于 IAE 家族，PUT 必须自己兜住回 400，否则穿透成 500 + 误发管理员告警

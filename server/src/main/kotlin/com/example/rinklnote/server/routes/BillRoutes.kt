@@ -212,6 +212,11 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 }
                 require(amountMinor > 0) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
+                // PUT 是全量替换：accountId 必须属于本人（与 createWebBill 同一校验口径），
+                // 否则可把账单挂到他人账户 id 上造成跨用户脏引用。
+                if (!billService.ownsAccount(userId, body.accountId)) {
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "账户不存在"))
+                }
 
                 // 条件 PUT（乐观锁）：版本条件随单条 UPDATE 生效，0 行命中再二次区分
                 // 404（不存在）/ 409（版本不匹配，响应体附当前最新 DTO 供客户端重取 base 重放）。
