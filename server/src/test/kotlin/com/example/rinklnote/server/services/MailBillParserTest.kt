@@ -100,6 +100,15 @@ class MailBillParserTest {
         assertTrue(svc.isWhitelisted("wxpaynotice@tencent.com", svc.config.senders))
         assertFalse(svc.isWhitelisted("evil@alipay.com.evil.example", svc.config.senders))
         assertFalse(svc.isWhitelisted("someone@example.com", svc.config.senders))
+        // RFC 5322 显示名 From：真实账单邮件普遍是「支付宝 <bill@mail.alipay.com>」形态，
+        // Jakarta 的 InternetAddress.toString() 原样带出 —— 白名单必须按 addr-spec 匹配
+        assertTrue("带引号显示名也命中", svc.isWhitelisted("\"支付宝\" <bill@mail.alipay.com>", svc.config.senders))
+        assertTrue("无引号显示名也命中", svc.isWhitelisted("支付宝 <bill@mail.alipay.com>", svc.config.senders))
+        // 显示名伪造：按 addr-spec 判定，不能被「显示名长得像白名单地址」骗过
+        assertFalse(
+            "显示名伪装不算命中",
+            svc.isWhitelisted("\"bill@mail.alipay.com\" <evil@evil.example>", svc.config.senders)
+        )
     }
 }
 
@@ -181,6 +190,17 @@ class MailIngestServicePollTest {
         // 已读标记：同一收件箱再轮询一遍不再入账
         assertEquals(1, inbox.markedRead.size)
         assertEquals(0, kotlinx.coroutines.runBlocking { svc.pollOnce() })
+    }
+
+    @Test
+    fun `带显示名的白名单邮件入账`() {
+        // 真实邮件 From 携带显示名（"支付宝" <bill@mail.alipay.com>）：入账 + 标已读，不静默跳过
+        val mail = alipayMail.copy(from = "\"支付宝\" <bill@mail.alipay.com>")
+        val inbox = FakeInbox(mutableListOf(mail))
+        val svc = service(inbox)
+        val booked = kotlinx.coroutines.runBlocking { svc.pollOnce() }
+        assertEquals(1, booked)
+        assertEquals(1, inbox.markedRead.size)
     }
 
     @Test
