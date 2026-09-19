@@ -56,6 +56,18 @@ class MailBillParserTest {
     // ── 纯文本与边界 ──
 
     @Test
+    fun `千分位金额按完整数值入账`() {
+        // 「1,234.56」不能在逗号处截断成 1.00 元（错账）
+        assertEquals(123456L, MailBillParser.parse("商户：老王包子铺\n金额：￥1,234.56")!!.amountMinor)
+        assertEquals(
+            1234567890L,
+            MailBillParser.parse("商户：老王包子铺\n金额：￥12,345,678.90")!!.amountMinor
+        )
+        // 无千分位的普通金额不受影响
+        assertEquals(3550L, MailBillParser.parse("商户：老王包子铺\n金额：￥35.50")!!.amountMinor)
+    }
+
+    @Test
     fun `纯文本邮件解析`() {
         val parsed = MailBillParser.parse("商户：老王包子铺\n支付时间：2026-09-18 08:00\n金额：￥8.00")!!
         assertEquals(800L, parsed.amountMinor)
