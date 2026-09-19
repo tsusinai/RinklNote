@@ -49,6 +49,12 @@ export function riskPct(predictedMinor: number, budgetMinor: number): number {
   return (predictedMinor / budgetMinor) * 100
 }
 
+/** 横幅展示取整：与 App BurnRiskBar 的 `pct.toInt()` 同为截断（floor）。
+ * 不能用 toFixed(0)——它会四舍五入（99.6% → 100%），与 App 同场景显示不一致。 */
+export function displayPct(pct: number): number {
+  return Math.floor(pct)
+}
+
 export interface BudgetRiskAssessment {
   level: RiskLevel
   pct: number

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   riskLevel, predictBurnMinor, riskPct, assessBudgetRisk, monthExpenseSoFar,
-  daysInMonth, daysElapsed,
+  daysInMonth, daysElapsed, displayPct,
 } from '../budgetRisk'
 import type { Bill } from '../../types'
 
@@ -80,5 +80,19 @@ describe('monthExpenseSoFar 本月已发生支出', () => {
       bill({ date: new Date(2026, 8, 6).getTime(), amountMinor: 5000, deleted: true }),
     ]
     expect(monthExpenseSoFar(bills, NOW)).toBe(1000)
+  })
+})
+
+describe('displayPct 横幅展示取整（与 App BurnRiskBar pct.toInt() 对齐）', () => {
+  it('截断取整：小数部分一律舍去，不四舍五入', () => {
+    expect(displayPct(85)).toBe(85)
+    expect(displayPct(99.9)).toBe(99) // toFixed(0) 会得 100，App 端 toInt 是 99
+    expect(displayPct(85.7)).toBe(85)
+    expect(displayPct(123.45)).toBe(123)
+  })
+  it('横幅仅在中/高风险展示（pct ≥ 85），截断不产生越界档位文案', () => {
+    // 99.99% 截断成 99% 仍是中风险语义；档位判定用未取整 pct，两者不冲突
+    expect(riskLevel(99.99)).toBe('mid')
+    expect(displayPct(99.99)).toBe(99)
   })
 })
