@@ -2,7 +2,7 @@
 
 本文件为 AI 编码代理（Codex / Claude Code / WorkBuddy 等）提供本仓库的工作指引。**动手改代码前请先通读。**
 
-> 最后校正：2026-09-17（核对实际目录、路由、构建配置与 Git 提交/工作树；补记个人资料页、Web 404 兜底及当前 Git 工作流）。
+> 最后校正：2026-09-19（全端优化 Wave0-4 + 三线 bug 审查落地后：Room v18、乐观锁/迁移兜底/时区/废弃端点收口、新增 coach/memory/rates/mail 服务、启动必需 env）。
 
 ## 项目
 
@@ -51,6 +51,8 @@ RinklNote/
 ./gradlew :server:test         # JVM 单测（H2）
 ./gradlew :server:test --tests "com.example.rinklnote.server.MoneyTest"   # 跑单个测试类
 ```
+
+- **启动必需 env**：`JWT_SECRET`（强随机，默认值会被启动校验拒绝）、`DEEPSEEK_API_KEY`；本地/测试库再加 `DATABASE_URL`（H2 用 `jdbc:h2:file:...`）+ `DATABASE_USER` / `DATABASE_PASSWORD`（可空）。邮件入账、ASR、各 Bot 通道缺 env 时仅跳过对应功能不阻断启动。
 
 - `settings.gradle.kts` 已 `include(":server")`，可直接用 Gradle 构建（README 若与此冲突，以本文件为准）。
 - 模块用 `kotlin("jvm")` + `application` 插件，`mainClass = com.example.rinklnote.server.ApplicationKt`，**JVM target 17**（与 app 的 11 不同）。
@@ -138,7 +140,7 @@ Compose UI（collectAsStateWithLifecycle）
 - **更多抽屉二级页**：搜索账单是**本地查询** —— `BillSearchViewModel`（就在 `screen/search/` 包里）拿 `observeAllBills()` 全量 Room Flow 内存过滤，无服务端搜索，结果行跳 `bill-edit`。多币种页 `base_currency` 存 DataStore（默认 CNY），汇率是 `DEMO_RATES_VS_CNY` **演示表** —— 不动 Room、不动整数分约定，接真汇率时只换表。地图用 osmdroid + `BillMapScreen` 私有 `AmapTileSource`（高德 webrd 瓦片、**无 key**，因 OSM MAPNIK 屏 osmdroid 默认 UA）；**UA 与缓存路径必须在首个 `MapView` 前设置**（缓存在 `context.cacheDir/osmdroid`）；金额直接合成进标记位图，InfoWindow 已移除。内嵌网页一律走 `web-view` 路由（`WebViewScreen`），**别再开外部浏览器 Intent**。
 - **图表**：`ChartBox` 用单个 `Canvas` 手绘折线/柱状，无第三方图表库；`Animatable` 用 `snapTo(0f)` → `animateTo(1f)`。**缩放用的 `maxVal` 必须取目标 `expenseData.max()`，不能用动画中的值**，否则动画比例会漂移。
 
-**数据库**：`rinklnote.db`，**Room version 16**，8 张表 —— `bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`、`challenges`；bills 外键指向 categories / accounts。`exportSchema = true`，schema 落在 `app/schemas`。首次启动 `seedIfNeeded()` 幂等填充 25 个主分类（含子分类）与 **仅 1 个「无账户」账户**（微信 / 支付宝不再预置，用户自建；v14 起带 `icon_key`）。**`MIGRATION_1_2` … `MIGRATION_15_16` 全链路都在**：v12 给 bills 加 `sort_order`（同日拖动重排，NULL = 按 `COALESCE(sort_order, created_at)` 兜底），v13 重建四张含金额的表把 REAL 换成 INTEGER 分（**重建顺序有讲究**：bills 外键引用 accounts，必须先搬走 bills 数据再重建 accounts，顺序错会撞外键约束），v14 给 accounts 加 `icon_key`，v15 建 `challenges` 表（`server_id` 唯一索引），v16 给 bills 加 `latitude/longitude REAL`。但 `buildDatabase()` 末尾仍挂着 `fallbackToDestructiveMigration()` 兜底 —— 没覆盖到的路径会直接清库。
+**数据库**：`rinklnote.db`，**Room version 18**，9 张表 —— `bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`、`challenges`、`places`；bills 外键指向 categories / accounts。`exportSchema = true`，schema 落在 `app/schemas`。首次启动 `seedIfNeeded()` 幂等填充 25 个主分类（含子分类）与 **仅 1 个「无账户」账户**（微信 / 支付宝不再预置，用户自建；v14 起带 `icon_key`）。**`MIGRATION_1_2` … `MIGRATION_17_18` 全链路都在，且 `fallbackToDestructiveMigration()` 兜底已摘除（2026-09-19）**：v12 给 bills 加 `sort_order`（同日拖动重排，NULL = 按 `COALESCE(sort_order, created_at)` 兜底），v13 重建四张含金额的表把 REAL 换成 INTEGER 分（**重建顺序有讲究**：bills 外键引用 accounts，必须先搬走 bills 数据再重建 accounts，顺序错会撞外键约束），v14 给 accounts 加 `icon_key`，v15 建 `challenges` 表（`server_id` 唯一索引），v16 给 bills 加 `latitude/longitude REAL`，v17 建 `places` 常去地点表（记账时智能建议），v18 给 bills 加 `(deleted, date)` 复合索引。
 
 **金额与时间**：金额存储与传输统一**整数分**（App `amountMinor: Long` / 服务端 `amount_minor BIGINT` / Web `amountMinor`）；API 对旧端保留 `amount`（元，Double）兼容字段，序列化时必须 `@EncodeDefault(EncodeDefault.Mode.ALWAYS)`，否则 kotlinx-serialization 会把恒等于默认值的兼容字段整个省略导致旧客户端解析失败。业务时区统一 `Asia/Shanghai`（`DateUtil.bookkeepingZone()`）；`Bill.date` 只存「当日 0 点」作为天分组键。
 
@@ -147,11 +149,11 @@ Compose UI（collectAsStateWithLifecycle）
 ### Server —— Ktor + Exposed
 
 - `Application.kt` 组装插件与路由；`plugins/` 放 `Database`（含自动迁移 + `seedIfNeeded`）、`Security`（JWT）、`Serialization`、`ErrorHandling`。
-- `routes/`：认证、账单、账户、预算、模板、挑战（GET/PUT `/api/challenges`）、洞察、纠正、关键词、AI 助手、ASR 转写、多通道 Bot（QQ / 飞书 / 企微 / 订阅号的 webhook 回调 + `/api/{qq,feishu,wecom}-bot/*` 三通道同构管理面；旧 `/api/qq/webhook` 共享密钥协议已废弃但保留运行）。
-- `services/`：`nlu/`（规则 + LLM 双引擎）、`insight/`、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`FeishuBotService` / `WecomBotService` / `MpBotService`（三通道收发与 bot_config KV，配置走 Web 管理页非 env）、`BotCommands`（多通道共享指令常量：推送开关 / 登录码正则 / source 词表）、`wx/WxCryptUtil`（微信系 SHA1 验签 + AES-256-CBC/PKCS7 + 手写 XML，零依赖）、`PushScheduler`（分通道 send，目标通道 飞书>企微>QQ）、`Money`。
+- `routes/`：认证、账单（含 `GET /api/bills/search` 服务端分页搜索，`GET /api/rates` 真汇率）、账户、预算、模板、挑战（GET/PUT `/api/challenges`）、洞察、纠正、关键词、AI 助手、ASR 转写、邮件账单入账、多通道 Bot（QQ / 飞书 / 企微 / 订阅号的 webhook 回调 + `/api/{qq,feishu,wecom}-bot/*` 三通道同构管理面；旧 `/api/qq/webhook` 共享密钥协议与 `/qq-login` 登录码端点已于 2026-09-19 物理删除）。
+- `services/`：`nlu/`（规则 + LLM 双引擎：模糊金额区间 / 上下文指代 / 品牌归类）、`insight/`、`coach/`（账单教练 + 小盘人格化文案）、`asr/`、QQ Bot（HTTP webhook Ed25519 验签 + WebSocket 网关长连接）、`FeishuBotService` / `WecomBotService` / `MpBotService`（三通道收发与 bot_config KV，配置走 Web 管理页非 env）、`BotCommands`、`wx/WxCryptUtil`（微信系 SHA1 验签 + AES-256-CBC/PKCS7 + 手写 XML，零依赖）、`BotCorrectService`（Bot 多轮修正：改金额/改分类/删上一笔/撤销）、`UserMemoryService`（聚合画像 KV，只存商家+次数+分类票数，隐私红线内）、`RateService`（每日拉公开汇率源，失败回落）、`MailIngestService`（IMAP 邮件账单，默认关闭走 env）、`PushScheduler`（分通道 send + 失败重试队列，目标通道 飞书>企微>QQ）、`AlertNotifier`（未捕获异常告警主账号，同路径同异常 1 分钟限流）、`Money`。
 - `tables/`：Exposed 表定义（users / bills / budgets / bot_config / push_log …）。`users` 的多通道 bot 身份列（均可空 + 唯一索引）：`qq_openid`、`feishu_open_id`、`wechat_openid`（订阅号）、`wecom_userid`（企业微信）。
 - 分类种子：`BillService.seedCategories()` 启动时**无条件幂等回填**；其清单**必须与 App `BillRepositoryImpl.seedCategories()` 逐字同序、只增不改**（id 按列表顺序续编），改分类种子两侧要同步改。默认账户两侧均**仅预置「无账户」**（`ensureDefaultAccounts` / App `seedAccounts` 已同步收敛，勿再预置微信 / 支付宝）。
-- 认证：JWT 保护除健康检查外的业务接口；限流见 `InMemoryRateLimiter`。身份 = 手机号或邮箱（`users.email` 可空唯一，register/login 请求体可选 `email`，非空走邮箱身份；`/qq-login` 登录码端点已从三端 UI 移除但保留运行）。**新设定密码规则 = ≥6 位且必须含大小写字母**（服务端 `PasswordPolicy` + App `util/PasswordRules` + Web 预校验三处一致，只约束新设定、存量密码不受影响）；个人资料（昵称/签名/生日/头像/展示徽章）走 `PUT /api/auth/profile` + `POST /api/auth/avatar`（`uploads/avatars/`，经 `/uploads/*` 静态暴露）。
+- 认证：JWT 保护除健康检查外的业务接口，启动时强校验 `JWT_SECRET`；限流见 `InMemoryRateLimiter`。身份 = 手机号或邮箱（`users.email` 可空唯一，register/login 请求体可选 `email`，非空走邮箱身份；`/qq-login` 登录码端点已删除）。**新设定密码规则 = ≥6 位且必须含大小写字母**（服务端 `PasswordPolicy` + App `util/PasswordRules` + Web 预校验三处一致，只约束新设定、存量密码不受影响）；QQ 无密码用户改密走「首次设密」分支。个人资料（昵称/签名/生日/头像/展示徽章）走 `PUT /api/auth/profile` + `POST /api/auth/avatar`（`uploads/avatars/`，经 `/uploads/*` 静态暴露）。
 
 ### Web —— Vue 3 SPA
 
@@ -168,10 +170,8 @@ Compose UI（collectAsStateWithLifecycle）
 ## 已知债务 / 待办（改动相关区域时留意）
 
 - 金额整数分迁移**收尾未做**：观察 1~2 个发布周期后要删三端的旧浮点列（`amount` REAL 等）与 API 兼容字段；删之前兼容字段必须保持 `@EncodeDefault(EncodeDefault.Mode.ALWAYS)`。
-- `fallbackToDestructiveMigration` 兜底仍会清库。
-- 服务端 `BillRoutes` 条件 PUT 的乐观锁仍是「先读后写」（比较 `baseUpdatedAt` 后 UPDATE 不带版本条件）→ 并发可丢更新。
-- QQ 用户改密码时对 `password_hash == null` 会异常。
-- 设备时区显示：部分日期仍用 `LocalDate.now()`（系统时区），未统一到业务时区。
+- App 内小组件 2×2 预算进度条 `monthExpense / budget` 无 budget=0 防护（`RinklNoteAppWidget`，2026-09-19 审查发现，范围外未修）；邮件账单幂等仅靠 IMAP SEEN 标记，无 Message-ID 台账（at-least-once）。
+- ~~条件 PUT 乐观锁~~（2026-09-19 已改为带版本条件 UPDATE）、~~QQ 无密码改密崩溃~~（已修）、~~时区未统一~~（已统一 `TimeUtil`/`DateUtil`）、~~`fallbackToDestructiveMigration`~~（已摘除）。
 - ViewModel Factory 样板重复（可选引入 DI）。
 - 完整清单见 `README.md`「已知债务 / 待办」与 `FEATURES.md`。
 
