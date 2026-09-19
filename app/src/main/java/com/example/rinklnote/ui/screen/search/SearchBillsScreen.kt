@@ -69,6 +69,7 @@ import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklDatePickerDialog
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklTopBarContentHeight
@@ -76,6 +77,7 @@ import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
@@ -152,23 +154,23 @@ fun SearchBillsScreen(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
-//            item(key = "category-filter") {
-//                CategoryFilterRow(
-//                    categories = state.categories,
-//                    selected = state.filter.categoryName,
-//                    onSelect = { name ->
-//                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
-//                        viewModel.onEvent(
-//                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
-//                        )
-//                    }
-//                )
-//            }
-
             item(key = "search-field") {
                 SearchField(
                     query = state.query,
                     onQueryChanged = { viewModel.onEvent(BillSearchEvent.QueryChanged(it)) }
+                )
+            }
+
+            item(key = "category-filter") {
+                CategoryFilterRow(
+                    categories = state.categories,
+                    selected = state.filter.categoryName,
+                    onSelect = { name ->
+                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
+                        viewModel.onEvent(
+                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
+                        )
+                    }
                 )
             }
 
@@ -230,7 +232,7 @@ fun SearchBillsScreen(
     }
 
     if (showDayPicker) {
-        SearchDatePickerDialog(
+        RinklDatePickerDialog(
             initialDate = state.filter.day ?: today,
             onConfirm = {
                 viewModel.onEvent(BillSearchEvent.DayChanged(it))
@@ -240,7 +242,7 @@ fun SearchBillsScreen(
         )
     }
     if (showStartPicker) {
-        SearchDatePickerDialog(
+        RinklDatePickerDialog(
             initialDate = state.filter.rangeStart ?: today,
             onConfirm = {
                 viewModel.onEvent(
@@ -252,7 +254,7 @@ fun SearchBillsScreen(
         )
     }
     if (showEndPicker) {
-        SearchDatePickerDialog(
+        RinklDatePickerDialog(
             initialDate = state.filter.rangeEnd ?: today,
             onConfirm = {
                 viewModel.onEvent(
@@ -527,28 +529,51 @@ private fun CategoryBox(label: String, selected: Boolean, onClick: () -> Unit) {
 // 筛选行
 // ---------------------------------------------------------------------------
 
-/** 种类三段 toggle：全部 / 支出 / 收入。 */
+/** 种类三段 toggle：全部 / 支出 / 收入（行首「类型」小标签消歧义）。 */
 @Composable
 private fun TypeSegmentRow(selected: SearchTypeFilter, onSelect: (SearchTypeFilter) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterPill("全部", selected == SearchTypeFilter.ALL) { onSelect(SearchTypeFilter.ALL) }
-        FilterPill("支出", selected == SearchTypeFilter.EXPENSE) { onSelect(SearchTypeFilter.EXPENSE) }
-        FilterPill("收入", selected == SearchTypeFilter.INCOME) { onSelect(SearchTypeFilter.INCOME) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RowLabel("类型")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterPill("全部", selected == SearchTypeFilter.ALL) { onSelect(SearchTypeFilter.ALL) }
+            FilterPill("支出", selected == SearchTypeFilter.EXPENSE) { onSelect(SearchTypeFilter.EXPENSE) }
+            FilterPill("收入", selected == SearchTypeFilter.INCOME) { onSelect(SearchTypeFilter.INCOME) }
+        }
     }
 }
 
-/** 日期模式切换：全部 / 按天 / 按月 / 自定义（窄屏可横向滚动）。 */
+/** 日期模式切换：不限 / 按天 / 按月 / 自定义（行首「日期」小标签；窄屏横向滚动）。 */
 @Composable
 private fun DateModeSegmentRow(selected: SearchDateMode, onSelect: (SearchDateMode) -> Unit) {
     Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        FilterPill("全部", selected == SearchDateMode.ALL) { onSelect(SearchDateMode.ALL) }
-        FilterPill("按天", selected == SearchDateMode.DAY) { onSelect(SearchDateMode.DAY) }
-        FilterPill("按月", selected == SearchDateMode.MONTH) { onSelect(SearchDateMode.MONTH) }
-        FilterPill("自定义起止", selected == SearchDateMode.RANGE) { onSelect(SearchDateMode.RANGE) }
+        RowLabel("日期")
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterPill("不限", selected == SearchDateMode.ALL) { onSelect(SearchDateMode.ALL) }
+            FilterPill("按天", selected == SearchDateMode.DAY) { onSelect(SearchDateMode.DAY) }
+            FilterPill("按月", selected == SearchDateMode.MONTH) { onSelect(SearchDateMode.MONTH) }
+            FilterPill("自定义", selected == SearchDateMode.RANGE) { onSelect(SearchDateMode.RANGE) }
+        }
     }
+}
+
+/** 筛选行行首小标签：11sp 次要字，固定宽对齐两行。 */
+@Composable
+private fun RowLabel(text: String) {
+    Text(
+        text = text,
+        fontSize = 11.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.width(32.dp)
+    )
 }
 
 /** 筛选胶囊：选中 = 主色浅底 + 主色字，未选 = surfaceVariant 半透明底 + 次要字。 */
@@ -668,51 +693,87 @@ private fun DatePickEntryRow(
 // 汇总条 / 空态 / 结果卡片
 // ---------------------------------------------------------------------------
 
-/** 汇总条：「共 N 笔 · 支出 ¥x · 收入 ¥y」，12sp。金额展示统一走 Money.format（¥+千分位）。 */
+/**
+ * 汇总卡：15dp 卡片链三段式——笔数 / 支出 / 收入。
+ * 数字 16sp Medium（金额走 Money.format ¥+千分位，支出 tertiary、收入绿色令牌），标签 11sp 次要字，
+ * 段间发丝分割线。与首页/月度明细同一卡片语言。
+ */
 @Composable
 private fun SummaryBar(totalCount: Int, expenseTotal: Long, incomeTotal: Long) {
+    val rinkl = LocalRinklColors.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .rinkShadow(SearchCardShape)
+            .clip(SearchCardShape)
+            .then(applyCardGlass(SearchCardShape))
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        SummarySegment("笔数", "$totalCount", MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(28.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+        )
+        SummarySegment("支出", Money.format(expenseTotal), MaterialTheme.colorScheme.tertiary, modifier = Modifier.weight(1.2f))
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(28.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f))
+        )
+        SummarySegment("收入", Money.format(incomeTotal), rinkl.incomeColor, modifier = Modifier.weight(1.2f))
+    }
+}
+
+/** 汇总卡单段：标签 11sp 在上，数值 16sp Medium 在下，居中。 */
+@Composable
+private fun SummarySegment(label: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Text(
-            text = "共 $totalCount 笔",
-            fontSize = 12.sp,
+            text = label,
+            fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(text = "·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = "支出 ${Money.format(expenseTotal)}",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.tertiary
-        )
-        Text(text = "·", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            text = "收入 ${Money.format(incomeTotal)}",
-            fontSize = 12.sp,
-            color = LocalRinklColors.current.incomeColor
+            text = value,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium,
+            color = valueColor,
+            maxLines = 1
         )
     }
 }
 
-/** 空态：无匹配账单 + 换条件的轻提示。 */
+/** 空态：搜索图标 + 主提示 + 换条件轻提示，居中。 */
 @Composable
 private fun EmptyResult() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 48.dp),
+            .padding(top = 72.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("无匹配账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(6.dp))
+        Icon(
+            painter = painterResource(R.drawable.ic_search),
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("无匹配账单", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "换个关键词或放宽筛选试试",
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
     }
 }
@@ -759,45 +820,57 @@ private fun DayGroupCard(
 }
 
 /**
- * 单笔账单行：7dp 收支圆点 + 名称 16sp + 日期 14sp 次要字 + 金额 16sp Medium（支出 tertiary / 收入绿）。
- * 排版对齐月度明细 [com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay] 的账单行。
+ * 单笔账单行：40dp 分类图标圆底 + 主行（备注/子分类/分类）+ 副行（分类 · 子分类）
+ * + 右侧金额 16sp Medium（支出 tertiary / 收入绿）。组头已有日期，行内不再重复。
  */
 @Composable
 private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
     val isExpense = bill.billType == BillType.EXPENSE
-    val localDate = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
+    val primary = bill.remark ?: bill.subCategoryName ?: bill.categoryName
+    val secondary = listOfNotNull(
+        bill.categoryName,
+        bill.subCategoryName?.takeIf { it != bill.categoryName }
+    ).joinToString(" · ")
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEditBill(bill) }
             .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor)
+            Icon(
+                painter = painterResource(categoryIconRes(bill.categoryName)),
+                contentDescription = bill.categoryName,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = bill.remark ?: (bill.subCategoryName ?: bill.categoryName),
-                fontSize = 16.sp,
+                text = primary,
+                fontSize = 15.sp,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "${localDate.monthValue}月${localDate.dayOfMonth}日",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (secondary.isNotEmpty() && secondary != primary) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = secondary,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -808,53 +881,6 @@ private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
         )
     }
 }
-
-// ---------------------------------------------------------------------------
-// 日期选择（material3 DatePickerDialog，转换逻辑对齐 BillEditOverlay：picker 一律走 UTC）
-// ---------------------------------------------------------------------------
-
-/** 单日期选择弹窗：确定/取消 + DatePicker（关闭年月切换折叠，观感更简）。 */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SearchDatePickerDialog(
-    initialDate: LocalDate,
-    onConfirm: (LocalDate) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val pickerState = rememberDatePickerState(
-        initialSelectedDateMillis = initialDate.toPickerMillis()
-    )
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    pickerState.selectedDateMillis?.let { onConfirm(it.toPickerLocalDate()) }
-                }
-            ) {
-                Text("确定")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    ) {
-        DatePicker(
-            state = pickerState,
-            showModeToggle = false
-        )
-    }
-}
-
-/** LocalDate → DatePicker 选值毫秒（UTC 当日 0 点，对齐 BillEditOverlay 的换算约定）。 */
-private fun LocalDate.toPickerMillis(): Long =
-    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-
-/** DatePicker 选值毫秒 → LocalDate（UTC 解回本地日期）。 */
-private fun Long.toPickerLocalDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 
 // ---------------------------------------------------------------------------
 // 日期文案

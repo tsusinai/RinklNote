@@ -33,7 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material3.AlertDialog
+import com.example.rinklnote.ui.component.AlertDialog
+import com.example.rinklnote.ui.component.RinklDatePickerDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -301,7 +302,7 @@ fun BillEditOverlay(
         }
 
         if (showDatePicker) {
-            BillDatePickerDialog(
+            RinklDatePickerDialog(
                 initialDate = selectedDate,
                 onConfirm = {
                     selectedDate = it
@@ -772,41 +773,6 @@ private fun SectionHeader(title: String, hint: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BillDatePickerDialog(
-    initialDate: LocalDate,
-    onConfirm: (LocalDate) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val state = rememberDatePickerState(
-        initialSelectedDateMillis = initialDate.toPickerMillis()
-    )
-
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    state.selectedDateMillis?.let { onConfirm(it.toPickerLocalDate()) }
-                }
-            ) {
-                Text("确定")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    ) {
-        DatePicker(
-            state = state,
-            showModeToggle = false
-        )
-    }
-}
-
 @Composable
 private fun DeleteBillDialog(
     onConfirm: () -> Unit,
@@ -860,9 +826,3 @@ private fun Bill.toLocationTag(): Pair<Double, Double>? =
 
 private fun LocalDate.toBillTimestamp(): Long =
     atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
-
-private fun LocalDate.toPickerMillis(): Long =
-    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-
-private fun Long.toPickerLocalDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
