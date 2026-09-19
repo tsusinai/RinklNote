@@ -41,9 +41,22 @@ object Money {
      * 元（Double）→ 分，四舍五入保留 2 位（HALF_UP）。
      * 仅用于「金额已是 Double」的外部边界（如语音解析结果、第三方接口），
      * 内部输入一律走 [parseMinor] 以免二次引入浮点误差。
+     * 调用前应先用 [isPlausibleParsedYuan] 过滤：本函数对超 Long 的值抛 ArithmeticException、
+     * 对 Infinity/NaN 抛 NumberFormatException（longValueExact / BigDecimal.valueOf 的硬约束）。
      */
     fun yuanToMinor(yuan: Double): Long =
         BigDecimal.valueOf(yuan).setScale(2, RoundingMode.HALF_UP).movePointRight(2).longValueExact()
+
+    /**
+     * 外部文本（分享 / 小票 OCR / 支付通知）解析金额的可信上限（元）：约 100 亿。
+     * 真实支付/小票远低于此；正则从长数字串里捞出的天文数字只可能是
+     * 订单号/条码之类的解析噪声——放行会在转分时溢出崩溃（见 [yuanToMinor] 注释）。
+     */
+    const val MAX_PARSED_YUAN = 9_999_999_999.0
+
+    /** 外部文本解析出的「元」金额是否可信可用：非 null、有限、为正、不超 [MAX_PARSED_YUAN]。 */
+    fun isPlausibleParsedYuan(yuan: Double?): Boolean =
+        yuan != null && yuan.isFinite() && yuan > 0.0 && yuan <= MAX_PARSED_YUAN
 
     /** 分 → 两位小数的「元」字符串（带千分位，不含货币符号），如 123456 → "1,234.56"、-1230 → "-12.30"。 */
     fun formatPlain(minor: Long): String =

@@ -48,6 +48,18 @@ class ReceiptOcrParserTest {
         assertTrue(ReceiptOcrParser.extract("欢迎光临").amounts.isEmpty())
     }
 
+    @Test
+    fun `超大数字金额不进候选`() {
+        // 金额候选在弹窗里经 Money.yuanToMinor 转分：17+ 位整数溢出 Long 抛 ArithmeticException、
+        // 400 位数字转 Double 为 Infinity 再转 BigDecimal 抛 NumberFormatException——点 chip 即崩溃。
+        // 超界数字（条码/会员号误拼等解析噪声）必须被丢弃，不进候选。
+        val r = ReceiptOcrParser.extract("合计 99999999999999999999\n¥99999999999999999999\n单价 99999999999999999999元")
+        assertTrue(r.amounts.isEmpty())
+        // 同票内上限内的金额不受牵连
+        val mixed = ReceiptOcrParser.extract("合计 99999999999999999999\n可乐 3.50元")
+        assertEquals(listOf(3.50), mixed.amounts)
+    }
+
     // ── 日期 ──
 
     @Test

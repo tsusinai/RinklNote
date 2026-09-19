@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.quickadd
 
+import com.example.rinklnote.util.Money
 import java.time.LocalDate
 import java.time.MonthDay
 import java.time.Year
@@ -77,10 +78,12 @@ object ReceiptOcrParser {
     }
 
     private fun addIfNew(target: MutableList<Double>, value: Double?) {
-        if (value == null || value <= 0.0) return
+        // 超界数字（订单号/条码被误拼进金额位等解析噪声）直接丢弃：
+        // 弹窗点选会把「元」转分（Money.yuanToMinor），溢出/Infinity 会崩。
+        val v = value?.takeIf { Money.isPlausibleParsedYuan(it) } ?: return
         // 以两位小数量化做去重键，避免 0.1+0.2 类浮点尾差产生「同值不同键」
-        val key = Math.round(value * 100.0)
-        if (target.none { Math.round(it * 100.0) == key }) target.add(value)
+        val key = Math.round(v * 100.0)
+        if (target.none { Math.round(it * 100.0) == key }) target.add(v)
     }
 
     // ── 日期 ──

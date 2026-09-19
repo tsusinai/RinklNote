@@ -68,12 +68,17 @@ object ShareTextParser {
         return ShareParseResult(amount, categoryName, remark, merchant)
     }
 
-    /** 按文档顺序逐规则尝试；全部未命中返回 null（不做裸数字兜底）。 */
+    /** 按文档顺序逐规则尝试；每档先过 [Money.isPlausibleParsedYuan]（超界数字=解析噪声，
+     *  放行会在调用方转分时溢出崩溃），未命中则落到下一档；全部未命中返回 null（不做裸数字兜底）。 */
     private fun extractAmount(text: String): Double? {
-        labeledAmountRegex.find(text)?.let { return it.groupValues[1].toDoubleOrNull() }
-        symbolAmountRegex.find(text)?.let { return it.groupValues[1].toDoubleOrNull() }
-        unitAmountRegex.find(text)?.let { return it.groupValues[1].toDoubleOrNull() }
-        cnUnitAmountRegex.find(text)?.let { return VoiceParser.cnNumToDouble(it.groupValues[1]) }
+        labeledAmountRegex.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+            ?.takeIf { Money.isPlausibleParsedYuan(it) }?.let { return it }
+        symbolAmountRegex.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+            ?.takeIf { Money.isPlausibleParsedYuan(it) }?.let { return it }
+        unitAmountRegex.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+            ?.takeIf { Money.isPlausibleParsedYuan(it) }?.let { return it }
+        cnUnitAmountRegex.find(text)?.groupValues?.get(1)?.let { VoiceParser.cnNumToDouble(it) }
+            ?.takeIf { Money.isPlausibleParsedYuan(it) }?.let { return it }
         return null
     }
 }

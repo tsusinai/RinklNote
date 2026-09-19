@@ -78,6 +78,20 @@ class PayNotificationParserTest {
         assertFalse(r.matched)
     }
 
+    @Test
+    fun `超大金额不崩溃且按未解析处理`() {
+        // parse 内部就把「元」经 Money.yuanToMinor 转分（longValueExact）：17+ 位整数溢出 Long 抛
+        // ArithmeticException，会让 PayNotifyListenerService.onNotificationPosted 所在进程崩溃；
+        // 400 位数字转 Double 为 Infinity 时 BigDecimal.valueOf 抛 NumberFormatException。超界
+        // 金额必须按「解析不出金额」处理（发通用入口、不带预填）。
+        val overflow = PayNotificationParser.parse("微信支付凭证", "￥99999999999999999999")
+        assertFalse(overflow.matched)
+        assertNull(overflow.amountMinor)
+        val infinity = PayNotificationParser.parse("支付宝", "金额 " + "9".repeat(400) + " 元")
+        assertFalse(infinity.matched)
+        assertNull(infinity.amountMinor)
+    }
+
     // ── 商家 ──
 
     @Test
