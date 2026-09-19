@@ -118,6 +118,16 @@ class BotCorrectServiceTest {
         assertTrue(reply.contains("没看懂"))
     }
 
+    @Test
+    fun `改金额过小或超大时提示格式而非静默异常`() {
+        // 0.001 元 → 换整数分为 0 分（require(amountMinor>0) 会抛 IAE）；
+        // 超长数字 → toMinor 的 longValueExact 溢出 ArithmeticException。
+        // 两者都必须回到「没看懂」引导文案，绝不静默吞掉不回执。
+        bill(2000L)
+        assertTrue(BotCorrectService.handle("改金额0.001", 1L, billService)!!.contains("没看懂"))
+        assertTrue(BotCorrectService.handle("改金额9999999999999999999", 1L, billService)!!.contains("没看懂"))
+    }
+
     // ── 改分类 ──
 
     @Test

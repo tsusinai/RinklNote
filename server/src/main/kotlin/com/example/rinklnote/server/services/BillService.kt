@@ -195,6 +195,13 @@ class BillService {
         )
     }
 
+    /** accountId 是否为该用户名下账户（createWebBill 与 PUT 全量替换共用的归属校验口径）。 */
+    fun ownsAccount(userId: Long, accountId: Long): Boolean = transaction {
+        AccountsTable.selectAll()
+            .where { (AccountsTable.id eq accountId) and (AccountsTable.userId eq userId) }
+            .any()
+    }
+
     fun createWebBill(
         userId: Long,
         amountMinor: Long,
@@ -211,12 +218,7 @@ class BillService {
     ): BillDTO {
         require(amountMinor > 0) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
-        val ownsAccount = transaction {
-            AccountsTable.selectAll()
-                .where { (AccountsTable.id eq accountId) and (AccountsTable.userId eq userId) }
-                .any()
-        }
-        require(ownsAccount) { "账户不存在" }
+        require(ownsAccount(userId, accountId)) { "账户不存在" }
         val now = System.currentTimeMillis()
         val billDate = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))

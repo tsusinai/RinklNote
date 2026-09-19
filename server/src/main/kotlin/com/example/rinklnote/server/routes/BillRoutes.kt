@@ -53,6 +53,15 @@ private fun parseDayEndMillis(day: String): Long =
     LocalDate.parse(day).plusDays(1).atStartOfDay(TimeUtil.BOOKKEEPING_ZONE)
         .toInstant().toEpochMilli() - 1
 
+/**
+ * min/max 金额查询参数（元）→ 整数分；无法换出合法分值返回 null。
+ * 「NaN/Infinity」（BigDecimal.valueOf 抛 NumberFormatException）与「1e20 级超大值」
+ * （toMinor 的 longValueExact 抛 ArithmeticException）都必须在这里兜住——穿透到
+ * StatusPages 的 catch-all 会变 500，还会经 AlertNotifier 误发管理员告警。
+ */
+private fun amountParamToMinor(raw: String): Long? =
+    raw.toDoubleOrNull()?.let { runCatching { Money.toMinor(it) }.getOrNull() }
+
 fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
     // Public endpoints — reference data, no auth required
     get("/api/bills/categories") {
@@ -84,12 +93,21 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 if (toParam != null && parseDayStartMillis(toParam) == null) {
                     return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "to 日期格式应为 yyyy-MM-dd"))
                 }
+                // min/max 换不出合法分值（非数字/NaN/溢出）→ 400，与日期参数同口径
+                val minMinor = call.request.queryParameters["min"]?.let { amountParamToMinor(it) }
+                if (call.request.queryParameters["min"] != null && minMinor == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "min 金额参数不合法"))
+                }
+                val maxMinor = call.request.queryParameters["max"]?.let { amountParamToMinor(it) }
+                if (call.request.queryParameters["max"] != null && maxMinor == null) {
+                    return@get call.respond(HttpStatusCode.BadRequest, mapOf("message" to "max 金额参数不合法"))
+                }
 
                 val response = billService.searchBills(
                     userId = userId,
                     q = call.request.queryParameters["q"],
-                    minMinor = call.request.queryParameters["min"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
-                    maxMinor = call.request.queryParameters["max"]?.toDoubleOrNull()?.let { Money.toMinor(it) },
+                    minMinor = minMinor,
+                    maxMinor = maxMinor,
                     categoryId = call.request.queryParameters["categoryId"]?.toLongOrNull(),
                     fromDayStart = fromParam?.let { parseDayStartMillis(it) },
                     toDayEnd = toParam?.let { parseDayEndMillis(it) },
@@ -168,6 +186,10 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     call.respond(HttpStatusCode.Created, bill)
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "请求不合法")))
+                } catch (e: ArithmeticException) {
+                    // 超大旧字段 amount（如 1e20 元）在 Money.toMinor 溢出：ArithmeticException
+                    // 不属于 IAE 家族，不在这里兜住会穿透 StatusPages 变 500 + 误发管理员告警。
+                    call.respond(HttpStatusCode.BadRequest, mapOf("message" to "金额超出可表示范围"))
                 }
             }
 
@@ -184,9 +206,17 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                     Money.resolveAmountMinor(body.amountMinor, body.amount)
                 } catch (e: IllegalArgumentException) {
                     return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to (e.message ?: "金额不合法")))
+                } catch (e: ArithmeticException) {
+                    // 超大旧字段 amount（如 1e20 元）在 Money.toMinor 溢出：回 400 而非 500。
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "金额超出可表示范围"))
                 }
                 require(amountMinor > 0) { "金额必须大于0" }
                 require(body.billType == "EXPENSE" || body.billType == "INCOME") { "账单类型不合法" }
+                // PUT 是全量替换：accountId 必须属于本人（与 createWebBill 同一校验口径），
+                // 否则可把账单挂到他人账户 id 上造成跨用户脏引用。
+                if (!billService.ownsAccount(userId, body.accountId)) {
+                    return@put call.respond(HttpStatusCode.BadRequest, mapOf("message" to "账户不存在"))
+                }
 
                 // 条件 PUT（乐观锁）：版本条件随单条 UPDATE 生效，0 行命中再二次区分
                 // 404（不存在）/ 409（版本不匹配，响应体附当前最新 DTO 供客户端重取 base 重放）。

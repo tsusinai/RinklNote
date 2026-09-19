@@ -23,7 +23,11 @@ object MailBillParser {
     /** 解析结果（金额整数分）。 */
     data class ParsedBill(val amountMinor: Long, val merchant: String, val paidAtMillis: Long?)
 
-    private val AMOUNT = Regex("""[¥￥]\s*([0-9]{1,10}(?:\.[0-9]{1,2})?)""")
+    // 金额数字部分：允许千分位「1,234.56」（逗号分组必须 3 位），也兼容普通「1234.56」；
+    // 不带千分位分组时放宽到 10 位，且后面不能再跟数字（(?![0-9])）——否则「17 位超大金额」
+    // 会被静默截成前 10 位错账，而不是走解析失败路径。
+    private val AMOUNT_NUMBER = Regex("""(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,10}(?![0-9]))(?:\.[0-9]{1,2})?""")
+    private val AMOUNT = Regex("""[¥￥]\s*(${AMOUNT_NUMBER.pattern})""")
     private val KEY_INLINE = Regex("""(?:商户|收款方|商品说明|商品)\s*[：:]\s*([^\n¥￥]{2,40})""")
     private val KEY_LINES = setOf("商户", "收款方", "商品说明", "商品")
     private val DATE = Regex("""((?:19|20)\d{2})[-/年.](\d{1,2})[-/月.](\d{1,2})""")
@@ -49,8 +53,13 @@ object MailBillParser {
      */
     fun parse(raw: String): ParsedBill? {
         val text = if (raw.contains('<') && raw.contains('>')) stripHtml(raw) else raw
-        val amount = AMOUNT.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
-            ?.let { Money.toMinor(it) }
+        val amount = AMOUNT.find(text)?.groupValues?.get(1)
+            ?.replace(",", "") // 千分位「1,234.56」→「1234.56」，防逗号截断错账
+            ?.toDoubleOrNull()
+            // ≥19 位数（1e17 元级）会令 toMinor 的 longValueExact 溢出抛 ArithmeticException：
+            // 必须当「解析失败」返回 null（标已读+限流告警），否则异常穿出 pollOnce 会让
+            // 该邮件永远未读、整条轮询循环被这一封邮件永久卡死。
+            ?.let { runCatching { Money.toMinor(it) }.getOrNull() }
             ?: return null
         val merchant = extractMerchant(text) ?: return null
         return ParsedBill(amountMinor = amount, merchant = merchant, paidAtMillis = extractDate(text))

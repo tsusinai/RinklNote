@@ -96,11 +96,24 @@ class MailIngestService(
 
     /** 发件人白名单匹配：条目为完整地址或 `@domain` 后缀。纯函数，可单测。 */
     internal fun isWhitelisted(from: String, senders: List<String>): Boolean {
-        val f = from.trim().lowercase()
+        val f = extractAddrSpec(from.trim()).lowercase()
         return senders.any { rule ->
             val r = rule.trim().lowercase()
             r.isNotEmpty() && (f.endsWith(r) || f == r)
         }
+    }
+
+    /**
+     * RFC 5322 From 串 → addr-spec：「"支付宝" <bill@mail.alipay.com>」→「bill@mail.alipay.com」。
+     * Jakarta 的 InternetAddress.toString() 会把显示名一起带出（以 `>` 结尾），白名单若直接对
+     * 原串做后缀匹配会永不命中（真实账单邮件普遍带显示名）。无 angle-addr 时原样返回；
+     * 按 addr-spec 匹配也杜绝「显示名伪装成白名单地址」的绕过。
+     */
+    internal fun extractAddrSpec(raw: String): String {
+        val lt = raw.lastIndexOf('<')
+        val gt = raw.lastIndexOf('>')
+        if (lt < 0 || gt <= lt) return raw
+        return raw.substring(lt + 1, gt).trim().ifEmpty { raw }
     }
 
     /** 商家 → 分类：只走本地规则（品牌映射），**绝不把商家名送 LLM**（隐私红线）。无命中 → null（落默认分类）。 */

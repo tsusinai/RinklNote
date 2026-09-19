@@ -30,6 +30,7 @@ import kotlinx.serialization.json.long
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
@@ -192,6 +193,20 @@ class BillSearchApiTest {
         seedBill(6L, OTHER_USER_ID, 99_900, 1L, "三餐", "EXPENSE", "他人的早餐豆浆", day(2))
     }
 
+    @Test
+    fun `创建账单超大金额返回400而不是500`() = runBlocking {
+        // amount=1e20 元（旧字段回退路径）：resolveAmountMinor → Money.toMinor 溢出
+        // ArithmeticException，不属于 IAE 家族，路由必须自己兜住回 400
+        val resp = client.post(baseUrl("/api/bills")) {
+            bearerAuth(token())
+            contentType(ContentType.Application.Json)
+            setBody("""{"amount":1e20,"billType":"EXPENSE","categoryId":1,"categoryName":"三餐","accountId":1}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        // 库里不得真的落账
+        assertEquals(6L, transaction { BillsTable.selectAll().count() })
+    }
+
     private suspend fun search(query: String, userId: Long = USER_ID): JsonObjectPair {
         val resp = client.get(baseUrl("/api/bills/search$query")) { bearerAuth(token(userId)) }
         assertEquals(HttpStatusCode.OK, resp.status)
@@ -216,6 +231,17 @@ class BillSearchApiTest {
         // 他人账单同名备注不出现（用户隔离）
         val mine = search("?q=%E8%B1%86%E6%B5%86").ids // 豆浆
         assertEquals(listOf(1L), mine)
+    }
+
+    @Test
+    fun `min max 超大或非法数字返回400而不是500`() = runBlocking {
+        // max=1e20 元：Money.toMinor 的 longValueExact 溢出抛 ArithmeticException，
+        // 不在路由层兜住会穿透成 500（生产上还会经 AlertNotifier 误发管理员告警）
+        val huge = client.get(baseUrl("/api/bills/search?max=99999999999999999999")) { bearerAuth(token()) }
+        assertEquals(HttpStatusCode.BadRequest, huge.status)
+        // min=NaN：BigDecimal.valueOf(NaN) 抛 NumberFormatException，同样必须 400
+        val nan = client.get(baseUrl("/api/bills/search?min=NaN")) { bearerAuth(token()) }
+        assertEquals(HttpStatusCode.BadRequest, nan.status)
     }
 
     @Test
