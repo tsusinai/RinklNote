@@ -13,6 +13,15 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
+ * 目标是否处于 IME 组合输入期：组合期间的 Enter（提交候选词）/ Esc（取消组合）/
+ * 方向键（选候选词）都是输入法自身的按键，全局快捷键与直输逻辑一律不得拦截。
+ * 双通道识别：标准 isComposing + Safari 等旧口径的 keyCode 229。
+ */
+export function isComposingKeyEvent(e: { isComposing?: boolean; keyCode?: number }): boolean {
+  return e.isComposing === true || e.keyCode === 229
+}
+
+/**
  * 记账页金额直输：把「按键」合入当前金额字符串。
  * - 数字 0-9：追加；整数部分 ≤8 位、小数 ≤2 位（与 parseMoneyToMinor 契约对齐，超限返回 null）
  * - 小数点：无小数点时追加（空串补全为 "0."）

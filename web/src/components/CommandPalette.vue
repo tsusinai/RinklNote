@@ -8,6 +8,7 @@ import { toCsv } from '../utils/csv'
 import { minorToDecimal } from '../utils/money'
 import { fmtDateTime } from '../utils/date'
 import { filterActions, nextIndex, type CommandAction } from '../utils/commands'
+import { isComposingKeyEvent } from '../utils/keyboard'
 import Icon from './ui/Icon.vue'
 
 /* Ctrl+K 命令面板（Task 3.4）：路由跳转 + 常用动作。
@@ -44,6 +45,8 @@ function move(delta: number) {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // IME 组合期（中文输入候选未上屏）：Enter/Esc/方向键属于输入法，不触发面板行为
+  if (isComposingKeyEvent(e)) return
   if (e.key === 'Escape') { e.preventDefault(); emit('close'); return }
   if (e.key === 'ArrowDown') { e.preventDefault(); move(1); return }
   if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); return }

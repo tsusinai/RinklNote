@@ -5,7 +5,7 @@ import { bills } from '../../api/bills'
 import { useToast } from '../../composables/useToast'
 import { parseMoneyToMinor } from '../../utils/money'
 import { categoryEmoji } from '../../utils/categoryIcon'
-import { isEditableTarget, appendAmountKey } from '../../utils/keyboard'
+import { isEditableTarget, appendAmountKey, isComposingKeyEvent } from '../../utils/keyboard'
 import Card from '../../components/ui/Card.vue'
 import Btn from '../../components/ui/Btn.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
@@ -84,6 +84,8 @@ function clearEntry() {
 
 function onGlobalKey(e: KeyboardEvent) {
   if (loading.value || e.ctrlKey || e.metaKey || e.altKey) return
+  // IME 组合期（候选未上屏）：Enter/Esc 属于输入法自身按键，不触发确认/清空
+  if (isComposingKeyEvent(e)) return
   if (isEditableTarget(e.target)) {
     // 焦点在金额输入框内：Enter 确认、Esc 清空；其余输入框/下拉走原生行为
     if (e.target === amountInputRef.value) {

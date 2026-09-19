@@ -82,4 +82,49 @@ describe('CommandPalette 命令面板', () => {
     expect(items[1].classList.contains('on')).toBe(true)
     wrapper.unmount()
   })
+
+  it('IME 组合期（isComposing）Enter 提交的是候选词，不得执行命令也不得关闭面板', async () => {
+    const { wrapper, router } = mountPalette()
+    await flushPromises()
+    await router.push({ name: 'bookkeeping' })
+    // 取最后一个挂载的面板（失败用例遗留 DOM 时避免误投递到旧元素）
+    const palette = [...document.querySelectorAll('.palette')].pop()!
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    Object.defineProperty(ev, 'isComposing', { value: true }) // jsdom 构造器不支持该字段
+    palette.dispatchEvent(ev)
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('bookkeeping') // 未跳转
+    expect(wrapper.emitted('close')).toBeFalsy() // 面板未关
+    wrapper.unmount()
+  })
+
+  it('IME 组合期（keyCode 229，Safari 口径）Enter/Esc 均不触发面板行为', async () => {
+    const { wrapper, router } = mountPalette()
+    await flushPromises()
+    await router.push({ name: 'bookkeeping' })
+    const palette = [...document.querySelectorAll('.palette')].pop()!
+    const enter229 = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    Object.defineProperty(enter229, 'keyCode', { value: 229 })
+    palette.dispatchEvent(enter229)
+    const esc229 = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    Object.defineProperty(esc229, 'keyCode', { value: 229 })
+    palette.dispatchEvent(esc229)
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('bookkeeping')
+    expect(wrapper.emitted('close')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('IME 组合期 ArrowUp/Down 在候选词间移动，不移动面板游标', async () => {
+    const { wrapper } = mountPalette()
+    await flushPromises()
+    const palette = [...document.querySelectorAll('.palette')].pop()!
+    const ev = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
+    Object.defineProperty(ev, 'isComposing', { value: true })
+    palette.dispatchEvent(ev)
+    await flushPromises()
+    const items = palette.querySelectorAll('.palette-item')
+    expect(items[0].classList.contains('on')).toBe(true) // 游标仍在首项
+    wrapper.unmount()
+  })
 })
