@@ -273,20 +273,25 @@ private fun DrawerContent(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 位置打点：默认不采集，点 chip 取当前位置；再点取消（见 LocationChipRow）
-            LocationChipRow(
-                location = state.location,
-                onResolved = { lat, lng ->
-                    viewModel.onEvent(QuickAddEvent.LocationResolved(lat, lng))
-                },
-                onCleared = { viewModel.onEvent(QuickAddEvent.ClearLocation) }
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // 小票 OCR：拍照 / 相册选图 → 端上识别 → 金额/日期/商家候选 chips 点选预填
+            // 位置 + 小票 OCR：一行等宽双 chip（与账户卡片同宽对齐）
             var showOcrFlow by remember { mutableStateOf(false) }
-            OcrChipRow(onClick = { showOcrFlow = true })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LocationChipRow(
+                    location = state.location,
+                    onResolved = { lat, lng ->
+                        viewModel.onEvent(QuickAddEvent.LocationResolved(lat, lng))
+                    },
+                    onCleared = { viewModel.onEvent(QuickAddEvent.ClearLocation) },
+                    modifier = Modifier.weight(1f)
+                )
+                OcrChipRow(
+                    onClick = { showOcrFlow = true },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             if (showOcrFlow) {
                 ReceiptOcrDialog(
                     onDismiss = { showOcrFlow = false },
@@ -757,15 +762,16 @@ private fun CountBefore(
  * 识别全程端上（ML Kit 中文模型），图片不上传；候选点选经事件回填抽屉状态。
  */
 @Composable
-private fun OcrChipRow(onClick: () -> Unit) {
+private fun OcrChipRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
     val rinkl = LocalRinklColors.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
             .then(applyCardGlass(RoundedCornerShape(14.dp)))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -776,7 +782,7 @@ private fun OcrChipRow(onClick: () -> Unit) {
         )
         Spacer(modifier = Modifier.width(5.dp))
         Text(
-            text = "拍小票记一笔",
+            text = "拍小票",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -793,7 +799,8 @@ private fun OcrChipRow(onClick: () -> Unit) {
 private fun LocationChipRow(
     location: QuickAddState.LocationTag?,
     onResolved: (Double, Double) -> Unit,
-    onCleared: () -> Unit
+    onCleared: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -801,7 +808,7 @@ private fun LocationChipRow(
     val rinkl = LocalRinklColors.current
     val located = location != null
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(
                 if (located) {
@@ -828,6 +835,7 @@ private fun LocationChipRow(
                 }
             }
             .padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
