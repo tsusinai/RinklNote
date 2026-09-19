@@ -127,4 +127,26 @@ describe('CommandPalette 命令面板', () => {
     expect(items[0].classList.contains('on')).toBe(true) // 游标仍在首项
     wrapper.unmount()
   })
+
+  it('打开后焦点守卫：焦点被移出面板（点击非可聚焦区落到 body）时拉回过滤框', async () => {
+    // 生产路径是 open:false → true 切换触发 watch 聚焦，这里同样用切换复现
+    const router = makeRouter()
+    const wrapper = mount(CommandPalette, {
+      props: { open: false },
+      global: { plugins: [createPinia(), router] },
+      attachTo: document.body,
+    })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    const input = document.querySelector<HTMLInputElement>('.palette-input')!
+    expect(document.activeElement).toBe(input) // 打开即聚焦
+
+    // 模拟点击面板内非可聚焦区域（面板头/底注）→ 焦点落到 body
+    input.blur()
+    await flushPromises()
+    // 焦点必须被拉回过滤框：否则数字键/Enter/Esc 会穿透到底下的路由页
+    // （记账页数字直输改金额、Enter 直接提交账单），Esc 也不再能关面板
+    expect(document.activeElement).toBe(input)
+    wrapper.unmount()
+  })
 })

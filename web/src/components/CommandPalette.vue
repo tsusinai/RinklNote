@@ -42,6 +42,19 @@ function move(delta: number) {
   selected.value = nextIndex(safeSelected.value, delta, results.value.length)
 }
 
+/** 焦点守卫：打开期间焦点被移出面板（点击面板内非可聚焦区落到 body、Tab 移出等）
+ * 时拉回过滤框。否则按键会穿透到底下的路由页——记账页数字直输会暗中改金额、
+ * Enter 会直接提交账单、Esc 也不再能关闭面板。焦点回到输入框后，
+ * 全部按键自然落在面板自身的 @keydown 处理里，无需逐键拦截。 */
+function onFocusout(e: FocusEvent) {
+  if (!props.open) return
+  const root = e.currentTarget as HTMLElement | null
+  if (root && e.relatedTarget instanceof Node && root.contains(e.relatedTarget)) return // 仍在面板内
+  // Safari 在 blur 处理器内同步 focus 可能不生效：同步 + 下一拍双写
+  inputRef.value?.focus()
+  setTimeout(() => { if (props.open) inputRef.value?.focus() }, 0)
+}
+
 function onKeydown(e: KeyboardEvent) {
   // IME 组合期（中文输入候选未上屏）：Enter/Esc/方向键属于输入法，不触发面板行为
   if (isComposingKeyEvent(e)) return
@@ -90,7 +103,7 @@ function hintOf(a: CommandAction): string {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="palette-overlay" @click.self="emit('close')">
+    <div v-if="open" class="palette-overlay" @click.self="emit('close')" @focusout="onFocusout">
       <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板" @keydown="onKeydown">
         <div class="palette-head">
           <Icon name="search" :size="16" />
