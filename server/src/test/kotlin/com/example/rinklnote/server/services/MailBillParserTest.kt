@@ -56,6 +56,15 @@ class MailBillParserTest {
     // ── 纯文本与边界 ──
 
     @Test
+    fun `超大金额解析为null而不是抛异常`() {
+        // ≥19 位数（1e17 元级）→ Money.toMinor 的 longValueExact 溢出抛 ArithmeticException。
+        // parse 必须按「解析失败」返回 null（走标已读+限流告警的既有路径）；若让异常穿出去，
+        // pollOnce 整轮中止且该邮件永远未读，轮询循环被这封邮件永久卡死（后续邮件全部饿死）。
+        assertNull(MailBillParser.parse("商户：老王包子铺\n金额：￥999,999,999,999,999,999.99"))
+        assertNull(MailBillParser.parse("商户：老王包子铺\n金额：￥99999999999999999"))
+    }
+
+    @Test
     fun `千分位金额按完整数值入账`() {
         // 「1,234.56」不能在逗号处截断成 1.00 元（错账）
         assertEquals(123456L, MailBillParser.parse("商户：老王包子铺\n金额：￥1,234.56")!!.amountMinor)
