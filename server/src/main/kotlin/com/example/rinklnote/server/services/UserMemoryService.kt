@@ -1,5 +1,6 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.nlu.DefaultNLUService
 import com.example.rinklnote.server.tables.UserMemoryTable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,17 +50,21 @@ object UserMemoryService {
     }
 
     /**
-     * 从备注/原文提取「商家词」：先去日期（9/18、2026-09-18、2026年9月18日，第二段可省）、
-     * 再去金额（阿拉伯数字+元/圆/块）、最后去空白，取前 4 字（中文商家名多为 2~4 字，
-     * 截 4 字能让「瑞幸咖啡拿铁」与「瑞幸咖啡」聚到同一词）；不足 2 字视为提取不出
-     * （返回 null，跳过累计）。纯函数，可单测。
+     * 从备注/原文提取「商家词」：先剥上下文指代词（跟上次一样/老样子/照旧…）、
+     * 再去日期（9/18、2026-09-18、2026年9月18日，第二段可省）、去金额（阿拉伯数字+元/圆/块）、
+     * 最后去空白与常见标点，取前 4 字（中文商家名多为 2~4 字，截 4 字能让「瑞幸咖啡拿铁」
+     * 与「瑞幸咖啡」聚到同一词）；不足 2 字视为提取不出（返回 null，跳过累计）。纯函数，可单测。
      */
     internal fun extractMerchantToken(remark: String?): String? {
         if (remark.isNullOrBlank()) return null
+        // 先剥上下文指代词（跟上次一样/老样子/照旧…，与 DefaultNLUService.REFERENCE 同源）：
+        // 指代语命中显式分类走规则记账时备注是整句原文，不剥会把「跟上次一」「老样子」
+        // 这类垃圾词当商家累计进画像，甚至成为 top 商家被指代解析引用。
         val cleaned = remark
+            .replace(DefaultNLUService.REFERENCE, "")
             .replace(Regex("""[0-9]{1,4}[-/年.][0-9]{1,2}(?:[-/月.][0-9]{1,4})?日?"""), "")
             .replace(Regex("""\d+\.?\d*\s*[元圆块]?"""), "")
-            .replace(Regex("""[-/年月.日\s]"""), "")
+            .replace(Regex("""[-/年月.日\s，。、；：！？,!?;:]"""), "")
         val token = cleaned.take(4)
         return token.takeIf { it.length >= 2 }
     }

@@ -75,6 +75,22 @@ class UserMemoryServiceTest {
     }
 
     @Test
+    fun `指代语境的整句备注不产生垃圾商家词`() {
+        // 「跟上次一样/老样子」命中显式分类（打车/地铁）走规则记账时，落库备注是整句原文。
+        // 指代词必须先剥掉，否则「跟上次一」「老样子」这类垃圾词会被当商家累计进画像，
+        // 甚至成为 top 商家被 resolveReference 的「跟哪家一样」追问引用。
+        UserMemoryService.recordBill(1L, "跟上次一样打车20元", "交通")
+        UserMemoryService.recordBill(1L, "老样子，地铁上班6块", "交通")
+        val names = UserMemoryService.topMerchants(1L).map { it.name }
+        assertFalse(
+            "指代词前缀不得成为商家词: $names",
+            names.any { it.startsWith("跟上次") || it.startsWith("老样子") }
+        )
+        // 剥掉指代词/金额/标点后取前 4 字：「打车」「地铁上班」
+        assertEquals(listOf("地铁上班", "打车"), names)
+    }
+
+    @Test
     fun `无分类时归入其他`() {
         UserMemoryService.recordBill(1L, "某某商家", null)
         assertEquals("其他", UserMemoryService.topMerchants(1L)[0].topCategory)
