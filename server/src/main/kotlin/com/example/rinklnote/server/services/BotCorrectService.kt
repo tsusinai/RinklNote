@@ -30,13 +30,19 @@ object BotCorrectService {
 
     private fun editAmount(content: String, userId: Long, billService: BillService): String {
         val yuan = BotCommands.EDIT_AMOUNT.find(content)?.groupValues?.get(1)?.toDoubleOrNull()
-        if (yuan == null || yuan <= 0) {
+        // 「元 → 分」可能失败：过小（0.001 元 → 0 分）、超大（longValueExact 溢出）。
+        // 必须在这里兜住回引导文案 —— 让 IAE/ArithmeticException 穿出去只会被处理器
+        // 的 catch-all 吞掉，用户收不到任何回复。
+        val targetMinor = if (yuan != null && yuan > 0) {
+            runCatching { Money.toMinor(yuan) }.getOrNull()
+        } else null
+        if (targetMinor == null || targetMinor <= 0) {
             return "没看懂要改成多少～ 说「改金额30」或「金额改成25.5」就行"
         }
         val target = billService.latestBill(userId)
             ?: return "还没有账单可以修正，先记一笔吧～"
         val before = target.amountMinor
-        val updated = billService.updateBillAmount(target.id, userId, Money.toMinor(yuan))
+        val updated = billService.updateBillAmount(target.id, userId, targetMinor)
             ?: return "最近一单刚被删掉了，没有可修正的账单～"
         return "已修改：${target.categoryName} ¥${Money.format(before)} → ¥${Money.format(updated.amountMinor)}"
     }
