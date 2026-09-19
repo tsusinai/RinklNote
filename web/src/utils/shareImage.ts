@@ -41,17 +41,20 @@ export function buildMonthlyShareData(bills: Bill[], monthTs: number, now = Date
   const d = new Date(monthTs)
   const monthStart = periodStart('month', monthTs)
   const effectiveNow = Math.min(now, nextMonthStart(monthTs) - 1)
+  // 软删除墓碑剔除：服务端同步会把 deleted=true 下发到客户端缓存（LWW 需要），
+  // 不剔除会把已删除账单计入分享图（与 budgetRisk.monthExpenseSoFar 同守卫）
+  const alive = bills.filter((b) => !b.deleted)
 
   let totalExpenseMinor = 0
   let totalIncomeMinor = 0
-  for (const b of bills) {
+  for (const b of alive) {
     if (b.date < monthStart || b.date > effectiveNow) continue
     if (b.billType === 'EXPENSE') totalExpenseMinor += b.amountMinor
     else if (b.billType === 'INCOME') totalIncomeMinor += b.amountMinor
   }
 
   // 分类占比：复用图表页的 expenseByCategory（同为整数分聚合）
-  const cats = expenseByCategory(bills, 'month', effectiveNow)
+  const cats = expenseByCategory(alive, 'month', effectiveNow)
     .sort((a, b) => b.value - a.value)
     .slice(0, 5)
     .map((c) => ({
@@ -61,7 +64,7 @@ export function buildMonthlyShareData(bills: Bill[], monthTs: number, now = Date
     }))
 
   // 逐日支出：复用 dailyExpense 的逐日分桶（含无账单日补 0）
-  const daily = dailyExpense(bills, 'month', effectiveNow)
+  const daily = dailyExpense(alive, 'month', effectiveNow)
 
   return {
     monthLabel: `${d.getFullYear()}年${d.getMonth() + 1}月`,

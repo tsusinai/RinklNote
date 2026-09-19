@@ -124,6 +124,14 @@ function tick(ts: number): void {
 function applySize(): void {
   viewW = window.innerWidth
   viewH = window.innerHeight
+  // 可见画布位图必须跟随视口（DPR 无关，1 位图 px = 1 CSS px）：
+  // 不设置会停留在默认 300×150，renderFrame 的 drawImage 目标矩形（viewW×viewH）
+  // 被裁剪到左上角一角，再被 CSS 拉伸 —— 画面只剩墨场左上角且比例失真
+  const canvas = canvasRef.value
+  if (canvas) {
+    canvas.width = viewW
+    canvas.height = viewH
+  }
   rebuildBuffer()
   if (reduced) renderFrame()
 }

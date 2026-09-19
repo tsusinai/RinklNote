@@ -6,7 +6,7 @@ import { useThemeStore } from '../../stores/theme'
 import { insights } from '../../api/insights'
 import { budgets } from '../../api/budgets'
 import { toMonthStr, fmtDate, monthStart } from '../../utils/date'
-import { assessBudgetRisk, monthExpenseSoFar, type BudgetRiskAssessment } from '../../utils/budgetRisk'
+import { assessBudgetRisk, monthExpenseSoFar, displayPct, type BudgetRiskAssessment } from '../../utils/budgetRisk'
 import { dailyExpense, monthlyTrend, expenseByCategory, inPeriod, type ChartPeriod } from '../../utils/chartData'
 import { CHART_ANIMATION, readChartPalette, readChartAxisColor, readExpenseIncomeColors, readChartLineColor } from '../../utils/echartsTheme'
 import { formatMoney } from '../../utils/money'
@@ -242,7 +242,7 @@ watch(revMonth, loadReview)
     <div v-if="risk && risk.level !== 'low'" :class="['risk-banner', risk.level]" role="status">
       <span class="risk-badge">{{ risk.level === 'high' ? '高风险' : '中风险' }}</span>
       <span class="risk-text">
-        按当前节奏，本月预算预计烧到 <b>{{ risk.pct.toFixed(0) }}%</b>（预测支出 {{ formatMoney(risk.predictedMinor) }} / 预算 {{ formatMoney(risk.budgetMinor) }}）——
+        按当前节奏，本月预算预计烧到 <b>{{ displayPct(risk.pct) }}%</b>（预测支出 {{ formatMoney(risk.predictedMinor) }} / 预算 {{ formatMoney(risk.budgetMinor) }}）——
         {{ risk.level === 'high' ? '小盘先替你捂住钱包，控制一下呀！' : '小盘帮你盯着呢，稳住！' }}
       </span>
     </div>

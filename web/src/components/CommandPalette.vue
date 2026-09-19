@@ -4,10 +4,9 @@ import { useRouter } from 'vue-router'
 import { useThemeStore } from '../stores/theme'
 import { useDataStore } from '../stores/data'
 import { useToast } from '../composables/useToast'
-import { toCsv } from '../utils/csv'
-import { minorToDecimal } from '../utils/money'
-import { fmtDateTime } from '../utils/date'
+import { toCsv, billCsvRows } from '../utils/csv'
 import { filterActions, nextIndex, type CommandAction } from '../utils/commands'
+import { isComposingKeyEvent } from '../utils/keyboard'
 import Icon from './ui/Icon.vue'
 
 /* Ctrl+K 命令面板（Task 3.4）：路由跳转 + 常用动作。
@@ -43,7 +42,22 @@ function move(delta: number) {
   selected.value = nextIndex(safeSelected.value, delta, results.value.length)
 }
 
+/** 焦点守卫：打开期间焦点被移出面板（点击面板内非可聚焦区落到 body、Tab 移出等）
+ * 时拉回过滤框。否则按键会穿透到底下的路由页——记账页数字直输会暗中改金额、
+ * Enter 会直接提交账单、Esc 也不再能关闭面板。焦点回到输入框后，
+ * 全部按键自然落在面板自身的 @keydown 处理里，无需逐键拦截。 */
+function onFocusout(e: FocusEvent) {
+  if (!props.open) return
+  const root = e.currentTarget as HTMLElement | null
+  if (root && e.relatedTarget instanceof Node && root.contains(e.relatedTarget)) return // 仍在面板内
+  // Safari 在 blur 处理器内同步 focus 可能不生效：同步 + 下一拍双写
+  inputRef.value?.focus()
+  setTimeout(() => { if (props.open) inputRef.value?.focus() }, 0)
+}
+
 function onKeydown(e: KeyboardEvent) {
+  // IME 组合期（中文输入候选未上屏）：Enter/Esc/方向键属于输入法，不触发面板行为
+  if (isComposingKeyEvent(e)) return
   if (e.key === 'Escape') { e.preventDefault(); emit('close'); return }
   if (e.key === 'ArrowDown') { e.preventDefault(); move(1); return }
   if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); return }
@@ -54,22 +68,17 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 /** 导出账单 CSV：与账单页导出同列同口径（整数分 → minorToDecimal 纯整数拆分），
- *  数据取控制台缓存全集；导出动作不碰账单页本身。 */
+ *  数据取控制台缓存全集，软删除墓碑由 billCsvRows 统一剔除（缓存里含同步下发的墓碑）。 */
 function exportCsv() {
   if (!data.bills.length) { toast.push('暂无账单可导出', 'err'); return }
-  const rows: (string | number)[][] = [['日期', '类型', '分类', '子分类', '金额', '备注', '来源']]
-  for (const b of data.bills) {
-    rows.push([
-      fmtDateTime(b.date), b.billType === 'EXPENSE' ? '支出' : '收入', b.categoryName,
-      b.subCategoryName || '', minorToDecimal(b.amountMinor), b.remark || '', b.source,
-    ])
-  }
+  const rows = billCsvRows(data.bills)
+  if (rows.length <= 1) { toast.push('暂无账单可导出', 'err'); return } // 全是墓碑
   const csv = '\uFEFF' + toCsv(rows)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'rinklnote.csv'; a.click()
   URL.revokeObjectURL(url)
-  toast.push(`已导出 ${data.bills.length} 笔账单`)
+  toast.push(`已导出 ${rows.length - 1} 笔账单`)
 }
 
 async function run(action: CommandAction) {
@@ -94,7 +103,7 @@ function hintOf(a: CommandAction): string {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="palette-overlay" @click.self="emit('close')">
+    <div v-if="open" class="palette-overlay" @click.self="emit('close')" @focusout="onFocusout">
       <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板" @keydown="onKeydown">
         <div class="palette-head">
           <Icon name="search" :size="16" />

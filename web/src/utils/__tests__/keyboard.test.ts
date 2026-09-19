@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { isEditableTarget, appendAmountKey } from '../keyboard'
+import { isEditableTarget, appendAmountKey, isComposingKeyEvent } from '../keyboard'
 
-/* 键盘流纯函数单测（Task 3.4）：可编辑元素守卫 + 金额直输合键规则。 */
+/* 键盘流纯函数单测（Task 3.4）：可编辑元素守卫 + 金额直输合键规则 + IME 组合期识别。 */
+
+describe('isComposingKeyEvent IME 组合期识别', () => {
+  it('isComposing=true（Chrome/标准口径）识别为组合期按键', () => {
+    expect(isComposingKeyEvent({ isComposing: true })).toBe(true)
+  })
+  it('keyCode=229（Safari/旧口径）识别为组合期按键', () => {
+    expect(isComposingKeyEvent({ keyCode: 229 })).toBe(true)
+  })
+  it('普通按键（含 Enter/Esc/数字）不误判', () => {
+    expect(isComposingKeyEvent({ isComposing: false, keyCode: 13 })).toBe(false)
+    expect(isComposingKeyEvent({})).toBe(false)
+    expect(isComposingKeyEvent({ keyCode: 69 })).toBe(false)
+  })
+})
 
 describe('isEditableTarget 可编辑元素守卫', () => {
   it('input / textarea / select 视为可编辑', () => {
