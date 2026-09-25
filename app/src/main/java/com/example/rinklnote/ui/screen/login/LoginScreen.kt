@@ -1,12 +1,14 @@
 package com.example.rinklnote.ui.screen.login
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -19,12 +21,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -34,9 +38,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,6 +54,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.PasswordBox
 import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthMode
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
@@ -160,21 +167,24 @@ fun LoginPage(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            // 顶栏：返回 + 标题（statusBarsPadding 避让状态栏，勿删）
-            Row(
+            // 顶栏：返回 + 居中标题（statusBarsPadding 避让状态栏，勿删）——对齐全应用居中标题顶栏
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 4.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 4.dp, vertical = 8.dp)
             ) {
-                IconButton(onClick = onDismiss) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.CenterStart)
+                ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                 }
                 Text(
-                    text = "登录/注册",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium
+                    text = "登录 / 注册",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.align(Alignment.Center)
                 )
             }
 
@@ -222,26 +232,18 @@ fun LoginPage(
                         translationX = shakeProgress.value * 10.dp.toPx()
                     }
                 ) {
-                    // 第一输入行：随身份模式切换 手机号 / 邮箱
+                    // 第一输入行：随身份模式切换 手机号 / 邮箱（材质与 PasswordBox 同构）
                     if (state.authMode == AuthMode.PHONE) {
-                        OutlinedTextField(
+                        IdentityField(
+                            label = "手机号",
                             value = state.phone,
                             onValueChange = {
                                 identityError = null // 重新输入即清除本字段错误
                                 viewModel.onEvent(AuthEvent.PhoneChanged(it))
                             },
-                            label = { Text("手机号") },
-                            singleLine = true,
+                            placeholder = "11 位手机号",
                             isError = identityError != null,
-                            supportingText = {
-                                if (identityError != null) {
-                                    Text(
-                                        text = identityError!!,
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            },
+                            errorText = identityError,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Phone,
                                 imeAction = ImeAction.Next
@@ -249,37 +251,26 @@ fun LoginPage(
                             keyboardActions = KeyboardActions(
                                 // 键盘「下一项」：焦点落到密码框
                                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                            )
                         )
                     } else {
-                        OutlinedTextField(
+                        IdentityField(
+                            label = "邮箱",
                             value = state.email,
                             onValueChange = {
                                 identityError = null
                                 viewModel.onEvent(AuthEvent.EmailChanged(it))
                             },
-                            label = { Text("邮箱") },
-                            placeholder = { Text("name@example.com") },
-                            singleLine = true,
+                            placeholder = "name@example.com",
                             isError = identityError != null,
-                            supportingText = {
-                                if (identityError != null) {
-                                    Text(
-                                        text = identityError!!,
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            },
+                            errorText = identityError,
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Email,
                                 imeAction = ImeAction.Next
                             ),
                             keyboardActions = KeyboardActions(
                                 onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                            )
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -378,6 +369,88 @@ fun LoginPage(
                 TextButton(onClick = { showForgotDialog = false }) { Text("确定") }
             }
         )
+    }
+}
+
+/**
+ * 身份输入行（手机号 / 邮箱）：与 [com.example.rinklnote.ui.component.PasswordBox] 同构——
+ * 框外 12sp 小标签 + surfaceVariant 灰底 14dp 圆角，聚焦/错误才描边（默认无边框基调）。
+ * 此前为 M3 OutlinedTextField（白底描边+浮动标签），与下方密码框材质割裂。
+ */
+@Composable
+private fun IdentityField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    isError: Boolean,
+    errorText: String?,
+    keyboardOptions: KeyboardOptions,
+    keyboardActions: KeyboardActions
+) {
+    var focused by remember { mutableStateOf(false) }
+    val rinkl = LocalRinklColors.current
+    // 描边色：错误 > 聚焦（主题色） > 未聚焦（透明 = 无边框，与 App「默认不描边」基调一致）
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            isError -> MaterialTheme.colorScheme.error
+            focused -> rinkl.themeColor
+            else -> Color.Transparent
+        },
+        animationSpec = Motion.SelectColor,
+        label = "identityBorder"
+    )
+    Column {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                .border(width = 1.5.dp, color = borderColor, shape = RoundedCornerShape(14.dp))
+                .heightIn(min = 54.dp)
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    keyboardOptions = keyboardOptions,
+                    keyboardActions = keyboardActions,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focused = it.isFocused }
+                )
+            }
+        }
+        if (isError && errorText != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = errorText,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 

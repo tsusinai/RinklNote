@@ -760,6 +760,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenMultiCurrency = { navController.navigate("multi-currency") },
                         onOpenSearch = { navController.navigate("bill-search") },
                         onOpenChallenges = { navController.navigate("challenges") },
+                        onOpenLogin = { showLogin = true },
                         onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") }
                     )
 

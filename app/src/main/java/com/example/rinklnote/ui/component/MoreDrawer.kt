@@ -85,6 +85,7 @@ fun MoreDrawer(
     profileLoggedIn: Boolean,
     onDismiss: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    onOpenLogin: () -> Unit = {},
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -148,6 +149,7 @@ fun MoreDrawer(
                     profileLoggedIn = profileLoggedIn,
                     onDismiss = onDismiss,
                     onOpenSearch = onOpenSearch,
+                    onOpenLogin = onOpenLogin,
                     onOpenBillMap = onOpenBillMap,
                     onOpenImport = onOpenImport,
                     onOpenMultiCurrency = onOpenMultiCurrency,
@@ -170,6 +172,7 @@ private fun DrawerContent(
     profileLoggedIn: Boolean,
     onDismiss: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenLogin: () -> Unit,
     onOpenBillMap: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenMultiCurrency: () -> Unit,
@@ -197,7 +200,19 @@ private fun DrawerContent(
                 .fillMaxWidth()
                 // 顶部间距统一交给内容列（状态栏避让 + 12dp 呼吸），行内不再留 top；
                 // 左右 4dp 叠加内容列 12dp = 头像区距面板缘 16dp，行内 CenterVertically 垂直居中
-                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
+                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
+                // 未登录时头部即登录入口（与「登录后可云端同步账单」文案承诺一致）；
+                // 沿用功能行约定：先关闭抽屉再触发回调
+                .then(
+                    if (profileLoggedIn) {
+                        Modifier
+                    } else {
+                        Modifier.clickable {
+                            onDismiss()
+                            onOpenLogin()
+                        }
+                    }
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AvatarBadge(

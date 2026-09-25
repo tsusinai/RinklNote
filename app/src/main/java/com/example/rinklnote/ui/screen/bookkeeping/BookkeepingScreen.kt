@@ -106,6 +106,8 @@ fun BookkeepingScreen(
     onOpenMultiCurrency: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenChallenges: () -> Unit = {},
+    // 未登录时「更多」抽屉头部即登录入口（路由 showLogin 浮层由主会话接线）
+    onOpenLogin: () -> Unit = {},
     // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
     // 默认空实现防接线前编译断。dayStart = 当日 0 点 epoch millis，业务时区）
     onOpenDay: (Long) -> Unit = {}
@@ -360,6 +362,7 @@ fun BookkeepingScreen(
             onOpenMultiCurrency = onOpenMultiCurrency,
             onOpenSearch = onOpenSearch,
             onOpenChallenges = onOpenChallenges,
+            onOpenLogin = onOpenLogin,
             onOpenSettings = onMoreClick,
             onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页
             hazeState = hazeState,
