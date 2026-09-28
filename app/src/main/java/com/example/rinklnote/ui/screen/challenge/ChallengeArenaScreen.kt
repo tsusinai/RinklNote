@@ -117,7 +117,7 @@ fun ChallengeArenaScreen(
                 item(key = "arena-title") {
                     Text(
                         text = "三张挑战券，任你押注",
-                        fontSize = 15.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(top = 4.dp)
@@ -172,7 +172,7 @@ private fun ArenaCardItem(
                 )
                 Text(
                     text = card.progressLabel,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = pair.ink.copy(alpha = 0.8f)
                 )
@@ -440,7 +440,7 @@ private fun NoSpendProgress(state: ChallengeState, pairs: PosterPairs, onEvent: 
     PosterCard(pair = pairs.paper, modifier = Modifier.fillMaxWidth().posterBounceEnter(1)) {
         Text(
             text = "本月打卡墙",
-            fontSize = 15.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Black,
             color = pairs.paper.ink
         )
@@ -476,7 +476,7 @@ private fun NoSpendProgress(state: ChallengeState, pairs: PosterPairs, onEvent: 
         }
         Text(
             text = "记一笔（哪怕只记收入）零花钱日就能打卡",
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = pairs.paper.ink.copy(alpha = 0.6f)
         )
     }
@@ -490,14 +490,14 @@ private fun StreakProgress(state: ChallengeState, pairs: PosterPairs, onEvent: (
     PosterCard(pair = pairs.paper, modifier = Modifier.fillMaxWidth().posterBounceEnter(1)) {
         Text(
             text = if (active) "换押注档位" else "选档开押",
-            fontSize = 15.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Black,
             color = pairs.paper.ink
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "从今天连续记满就达成（只记收入也算），断一天就出局",
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = pairs.paper.ink.copy(alpha = 0.6f)
         )
         Spacer(modifier = Modifier.height(10.dp))
@@ -551,7 +551,7 @@ private fun WeeklyProgress(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "本周 7 日火力",
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
                 color = pairs.paper.ink,
                 modifier = Modifier.weight(1f)
@@ -591,7 +591,7 @@ private fun WeeklyProgress(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "一二三四五六日"[index].toString(),
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         color = pairs.paper.ink.copy(alpha = 0.6f)
                     )
                 }
@@ -604,7 +604,7 @@ private fun WeeklyProgress(
             } else {
                 "还没装本周上限：默认按月预算 ÷ 天数折算，也可手输"
             },
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = pairs.paper.ink.copy(alpha = 0.6f)
         )
     }
@@ -630,7 +630,7 @@ private fun RelatedBillsCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "相关真实账单",
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
                 color = pair.ink,
                 modifier = Modifier.weight(1f)
@@ -640,14 +640,14 @@ private fun RelatedBillsCard(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = caption,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = pair.ink.copy(alpha = 0.6f)
         )
         Spacer(modifier = Modifier.height(8.dp))
         if (bills.isEmpty()) {
             Text(
                 text = "这段周期还没有账单",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = pair.ink.copy(alpha = 0.5f),
                 modifier = Modifier.padding(vertical = 12.dp)
             )
@@ -671,7 +671,7 @@ private fun RelatedBillsCard(
             if (bills.size > 30) {
                 Text(
                     text = "只展示最近 30 笔，共 ${bills.size} 笔",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = pair.ink.copy(alpha = 0.5f),
                     modifier = Modifier.padding(top = 6.dp)
                 )

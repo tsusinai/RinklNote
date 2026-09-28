@@ -133,7 +133,7 @@ internal fun deriveHubCards(state: ChallengeState): List<HubCardState> {
             emoji = "🔮",
             title = "结余预测器",
             subtitle = if (state.forecastBalanceMinor == null) {
-                "设个总额预算开始预测"
+                "设预算即可预测"
             } else if (state.forecastOverBudget) {
                 "按这个花法月底要超支啦"
             } else {
@@ -148,7 +148,7 @@ internal fun deriveHubCards(state: ChallengeState): List<HubCardState> {
             subtitle = if ((state.weeklyChallenge?.goal ?: 0L) > 0) {
                 "本周已花 ${Money.format(state.weekExpenseMinor)}"
             } else {
-                "还没设本周上限，装一个？"
+                "还没设本周上限"
             },
             badge = envelopeBadge,
         ),

@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklDivider
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.Money
@@ -118,7 +119,7 @@ fun ImportBillsScreen(
             }
         }
 
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(modifier = Modifier.fillMaxSize()) {
             ImportTopBar(
                 hasBackground = backgroundUri != null,
                 onBack = {
@@ -210,14 +211,13 @@ fun ImportBillsScreen(
 // 顶栏
 // ---------------------------------------------------------------------------
 
-/** 悬浮顶栏：ArrowBack + 居中标题「导入账单」（20sp Medium），配色与「自定义主题」页一致。 */
+/** 悬浮顶栏：ArrowBack + 居中标题「导入账单」（20sp Medium），规范走 RinklTopBar 容器。 */
 @Composable
 private fun ImportTopBar(hasBackground: Boolean, onBack: () -> Unit) {
     val textColor = if (hasBackground) Color.White else LocalRinklColors.current.topBarTitleColor
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+    RinklTopBar(
+        scrimAlpha = if (hasBackground) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
         IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
             Icon(
@@ -259,7 +259,7 @@ private fun IntroCard() {
 private fun IntroLine(text: String) {
     Text(
         text = text,
-        fontSize = 13.sp,
+        fontSize = 14.sp,
         lineHeight = 20.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(vertical = 4.dp)
@@ -453,7 +453,7 @@ private fun ErrorCard(message: String) {
     ) {
         Text(
             text = message,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onErrorContainer
         )
     }

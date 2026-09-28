@@ -91,7 +91,7 @@ fun SavingsPredictorScreen(onBack: () -> Unit) {
                     ) {
                         Text(
                             text = if (predictor.balanceMinor != null) "月末预测结余" else "月末预测支出",
-                            fontSize = 15.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = pairs.mint.ink.copy(alpha = 0.72f)
                         )
@@ -113,7 +113,7 @@ fun SavingsPredictorScreen(onBack: () -> Unit) {
                             } else {
                                 "已花 ${Money.format(predictor.spentMinor)}（设个总额预算可预测结余）"
                             },
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = pairs.mint.ink.copy(alpha = 0.65f)
                         )
                     }
@@ -148,7 +148,7 @@ fun SavingsPredictorScreen(onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "本月进度",
-                                fontSize = 15.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Black,
                                 color = pairs.electric.ink,
                                 modifier = Modifier.weight(1f)
@@ -216,7 +216,7 @@ private fun LessBuyCard(
     PosterCard(pair = pairs.tomato, modifier = Modifier.fillMaxWidth().posterBounceEnter(4)) {
         Text(
             text = "少买一点",
-            fontSize = 15.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Black,
             color = pairs.tomato.ink
         )
@@ -239,7 +239,7 @@ private fun LessBuyCard(
                     val selected = category.categoryName == predictor.lessBuyCategory
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(15.dp))
                             .background(if (selected) Color.Black else pairs.tomato.ink.copy(alpha = 0.15f))
                             .clickable {
                                 viewModel.onEvent(
@@ -285,7 +285,7 @@ private fun LessBuyCard(
                     } else {
                         "选个分类试试"
                     },
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = pairs.tomato.ink
                 )

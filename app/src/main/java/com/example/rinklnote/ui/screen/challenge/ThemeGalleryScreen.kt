@@ -119,14 +119,14 @@ fun ThemeGalleryScreen(
                     ) {
                         Text(
                             text = "挑战成就解锁限定皮肤",
-                            fontSize = 17.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
                             color = pairs.paper.ink
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "达成挑战条件即解锁，点「换上」整套应用（主题色 / 边框 / 图标 / 字体 / 顶栏五槽）",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = pairs.paper.ink.copy(alpha = 0.6f)
                         )
                     }
@@ -180,7 +180,7 @@ fun ThemeGalleryScreen(
                                 )
                                 Text(
                                     text = "十个颜色槽随心改，去自定义主题页",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     color = pairs.electric.ink.copy(alpha = 0.75f)
                                 )
                             }
@@ -230,7 +230,7 @@ private fun ThemeCard(
                 )
                 Text(
                     text = card.condition,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = if (card.unlocked) Color.Black.copy(alpha = 0.6f) else Color(0xFF9E9E9E)
                 )
             }

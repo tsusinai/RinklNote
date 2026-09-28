@@ -154,7 +154,7 @@ private val ShadowFlatten: androidx.compose.animation.core.FiniteAnimationSpec<D
 fun PosterCard(
     pair: PosterPair,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 14.dp,
+    cornerRadius: Dp = 15.dp,
     shadowDepth: Dp = 6.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,

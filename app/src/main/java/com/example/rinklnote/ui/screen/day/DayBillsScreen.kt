@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -179,6 +180,7 @@ fun DayBillsScreen(
                 // 状态栏内边距必须由列表自己垫：悬浮顶栏（statusBarsPadding + 46dp）浮在其上，
                 // 漏掉这层会让 contentPadding 只按 46dp 计算 → 顶栏标题压住汇总卡（重叠 bug）。
                 .statusBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(
                 // 顶部垫高 = 统一顶栏高度 + 起始留白（对齐搜索账单/月度明细页）
                 top = RinklTopBarContentHeight + 8.dp,
@@ -273,7 +275,7 @@ private fun DaySummaryCard(
             .rinkShadow(DayCardShape)
             .clip(DayCardShape)
             .then(applyCardGlass(DayCardShape))
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -285,7 +287,7 @@ private fun DaySummaryCard(
             Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = "共 $count 笔",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -309,7 +311,7 @@ private fun RowScope.StatColumn(label: String, value: String, valueColor: Color,
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
-            fontSize = 17.sp,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = valueColor,
             maxLines = 1
@@ -328,7 +330,7 @@ private fun RowScope.StatColumn(label: String, value: String, valueColor: Color,
 private fun DayBillListCard(bills: List<Bill>, onEditBill: (Long) -> Unit) {
     Column(
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp)
             .fillMaxWidth()
             .rinkShadow(DayCardShape)
             .clip(DayCardShape)

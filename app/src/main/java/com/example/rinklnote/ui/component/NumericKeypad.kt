@@ -190,7 +190,7 @@ private fun AmountDisplay(
     isExpense: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = modifier
             .height(38.dp)
@@ -212,7 +212,7 @@ private fun TypeToggle(
     isExpense: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = Modifier
             .width(64.dp)
@@ -264,7 +264,7 @@ private fun ContextChip(item: KeypadContextItem) {
         )
         Text(
             text = item.label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -277,7 +277,7 @@ private fun InlineRemarkField(
     remark: String,
     onRemarkChange: (String) -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     val keyboard = LocalSoftwareKeyboardController.current
 
     BasicTextField(
@@ -321,7 +321,7 @@ private fun KeyButton(
     textSize: Int = 20,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = Modifier
             .width(85.dp)
@@ -348,7 +348,7 @@ private fun ConfirmButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = Modifier
             .width(85.dp)

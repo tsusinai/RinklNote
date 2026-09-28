@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.example.rinklnote.ui.component.AlertDialog
+import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -319,11 +320,9 @@ private fun ThemeTopBar(
     var showConfirm by remember { mutableStateOf(false) }
     // 与其他页顶栏一致：有照片背景时用白字（靠照片/遮罩衬托），否则用自定义的顶栏标题色。
     val textColor = if (hasBackground) Color.White else LocalRinklColors.current.topBarTitleColor
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+    RinklTopBar(
+        scrimAlpha = if (hasBackground) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
         IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
             Icon(
@@ -580,7 +579,7 @@ private fun ColorPickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
@@ -617,8 +616,8 @@ private fun ColorPickerSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, DefaultCardBorder, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(15.dp))
+                        .border(1.dp, DefaultCardBorder, RoundedCornerShape(15.dp))
                         .clickable {
                             transparent = true
                             onPick(Color.Transparent)
@@ -750,7 +749,7 @@ private fun SaturationValuePicker(
         modifier = Modifier
             .fillMaxWidth()
             .height(160.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(15.dp))
             .pointerInput(Unit) {
                 detectDragGestures { change, _ ->
                     change.consume()
@@ -797,7 +796,7 @@ private fun HueSlider(hue: Float, onChange: (Float) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(24.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(15.dp))
             .pointerInput(Unit) {
                 detectDragGestures { change, _ ->
                     change.consume()

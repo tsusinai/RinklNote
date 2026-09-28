@@ -344,7 +344,7 @@ fun BookkeepingScreen(
                         billType = dragged.billType.value,
                         remark = dragged.remark,
                         modifier = Modifier
-                            .then(applyCardGlass(RoundedCornerShape(12.dp)))
+                            .then(applyCardGlass(RoundedCornerShape(15.dp)))
                             .padding(horizontal = 16.dp)
                     )
                 }

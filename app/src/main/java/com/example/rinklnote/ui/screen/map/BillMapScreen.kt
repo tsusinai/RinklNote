@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +70,7 @@ import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -705,22 +707,19 @@ private fun MapContent(
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
-        // 顶部悬浮返回：ArrowBack 图章钮 + 20sp Medium 标题，配色对齐其他页顶栏；
-        // 地图瓦片深浅不定，给 surface 圆底兜底可读性
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // 顶部悬浮顶栏：标准 RinklTopBar 容器 + 磨砂返回钮与标题
+        RinklTopBar(
+            scrimAlpha = 0.8f,
+            horizontalPadding = 14.dp
         ) {
             Box(
                 modifier = Modifier
-                    .rinkShadow(CircleShape)
+                    .align(Alignment.CenterStart)
                     .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .then(applyCardGlass(CircleShape))
+                    .rinkShadow(RoundedCornerShape(15.dp))
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.90f))
+                    .then(applyCardGlass(RoundedCornerShape(15.dp)))
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center
             ) {
@@ -731,17 +730,24 @@ private fun MapContent(
                     modifier = Modifier.size(24.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "账单地图",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = LocalRinklColors.current.topBarTitleColor,
+
+            Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
+                    .align(Alignment.Center)
+                    .rinkShadow(RoundedCornerShape(15.dp))
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.90f))
+                    .then(applyCardGlass(RoundedCornerShape(15.dp)))
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "账单地图",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = LocalRinklColors.current.topBarTitleColor
+                )
+            }
         }
 
         // 空态：还没有任何带位置账单时，地图中央半透明提示卡（文案中文、≥12sp、令牌配色）
@@ -847,21 +853,11 @@ private fun MapContent(
 @Composable
 private fun MapPageTopBar(hasBackground: Boolean, onBack: () -> Unit) {
     val textColor = if (hasBackground) Color.White else LocalRinklColors.current.topBarTitleColor
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+    RinklTopBar(
+        scrimAlpha = if (hasBackground) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onBack
-                )
-                .padding(8.dp)
-        ) {
+        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
@@ -904,7 +900,7 @@ private fun GeoRankingPanel(cells: List<SpendGeoProfile.CellRank>) {
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = "仅统计主动打点的支出账单 · 约 1km 片区聚合",
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))

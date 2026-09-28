@@ -66,6 +66,7 @@ import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.KeypadContextItem
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.accountColor
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -259,7 +260,6 @@ private fun CreateAccountContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .imePadding()
     ) {
         AccountEditorTopBar(title = "新建账户", onBack = onBack)
@@ -268,8 +268,8 @@ private fun CreateAccountContent(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             AccountPreviewCard(
                 name = name.trim().ifEmpty { "新账户" },
@@ -349,7 +349,7 @@ private fun CreateAccountContent(
                 .padding(horizontal = 16.dp, vertical = 10.dp)
                 .height(50.dp)
                 .pressScale(createInteraction),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(15.dp)
         ) {
             Text("创建账户", fontSize = 16.sp, fontWeight = FontWeight.Medium)
         }
@@ -363,7 +363,7 @@ private fun AccountNameField(
     error: String?,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(15.dp)
     val borderColor = if (error != null) {
         MaterialTheme.colorScheme.error
     } else {
@@ -429,9 +429,7 @@ private fun EditBalanceContent(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
+        modifier = Modifier.fillMaxSize()
     ) {
         AccountEditorTopBar(title = "编辑余额", onBack = onBack)
 
@@ -439,8 +437,8 @@ private fun EditBalanceContent(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             AccountPreviewCard(
                 name = account.name,
@@ -632,10 +630,9 @@ private fun AccountEditorTopBar(
     title: String,
     onBack: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+    RinklTopBar(
+        scrimAlpha = 0f,
+        horizontalPadding = 8.dp
     ) {
         IconButton(
             onClick = onBack,
@@ -644,8 +641,7 @@ private fun AccountEditorTopBar(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "返回",
-                tint = LocalRinklColors.current.iconButtonColor
-                    ?: MaterialTheme.colorScheme.onSurface,
+                tint = LocalRinklColors.current.topBarTitleColor,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -653,7 +649,7 @@ private fun AccountEditorTopBar(
             text = title,
             fontSize = 20.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = LocalRinklColors.current.topBarTitleColor,
             modifier = Modifier.align(Alignment.Center)
         )
     }
@@ -662,9 +658,7 @@ private fun AccountEditorTopBar(
 @Composable
 private fun AccountEditorError(onBack: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
+        modifier = Modifier.fillMaxSize()
     ) {
         AccountEditorTopBar(title = "账户编辑", onBack = onBack)
         Column(

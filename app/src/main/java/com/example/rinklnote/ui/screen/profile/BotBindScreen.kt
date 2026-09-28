@@ -109,7 +109,7 @@ fun BotBindPage(
             // 通道选择：QQ / 飞书 / 企业微信 三选一（全中文标签）
             Text(
                 text = "选择要绑定的通道",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -136,7 +136,7 @@ fun BotBindPage(
             // 引导文案：三通道一致——机器人收到「登录」即回复 6 位绑定码（5 分钟内有效）
             Text(
                 text = "在${state.bindChannel.guideApp}里向机器人发送「登录」，即可获取 6 位绑定码",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             )

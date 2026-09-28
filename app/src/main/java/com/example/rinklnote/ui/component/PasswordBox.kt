@@ -89,11 +89,11 @@ fun PasswordBox(
     val rinkl = LocalRinklColors.current
 
     Column(modifier = modifier) {
-        // 小标签：与 Web 登录页 field-label 同构（12sp 半粗、弱化色）
+        // 小标签：与 Web 登录页 field-label 同构（12sp 中粗、弱化色）
         Text(
             text = label,
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(6.dp))
@@ -112,9 +112,9 @@ fun PasswordBox(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                .border(width = 1.5.dp, color = borderColor, shape = RoundedCornerShape(14.dp))
+                .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(15.dp))
                 .heightIn(min = 54.dp)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -144,7 +144,7 @@ fun PasswordBox(
                         if (value.isEmpty()) {
                             Text(
                                 text = placeholder,
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
                         }
@@ -313,7 +313,7 @@ private fun StrengthMeter(password: String) {
                     .background(if (index < level) barColor else barColor.copy(alpha = 0.16f))
             )
         }
-        Text(text = label, fontSize = 11.sp, color = barColor)
-        Text(text = "强度", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+        Text(text = label, fontSize = 12.sp, color = barColor)
+        Text(text = "强度", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
     }
 }

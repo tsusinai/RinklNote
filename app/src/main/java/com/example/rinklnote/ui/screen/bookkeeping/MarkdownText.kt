@@ -55,9 +55,9 @@ private fun isOrdered(line: String): Boolean =
 
 private fun AnnotatedString.Builder.heading(content: String, level: Int) {
     val size = when (level) {
-        1 -> 15.sp
+        1 -> 16.sp
         2 -> 14.sp
-        else -> 13.sp
+        else -> 12.sp
     }
     withStyle(SpanStyle(fontSize = size, fontWeight = FontWeight.Bold)) {
         appendInline(content)

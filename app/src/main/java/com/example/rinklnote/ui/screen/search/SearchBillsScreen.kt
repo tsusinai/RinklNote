@@ -91,7 +91,7 @@ import java.time.ZoneOffset
 private val SearchCardShape = RoundedCornerShape(15.dp)
 
 /** 搜索框圆角：任务指定的 14dp。 */
-private val SearchFieldShape = RoundedCornerShape(14.dp)
+private val SearchFieldShape = RoundedCornerShape(15.dp)
 
 /**
  * 「搜索账单」整页（路由 `bill-search` 由主会话接线，非 tab 路由 → 底栏自动隐藏）。
@@ -332,7 +332,7 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
             if (query.isEmpty()) {
                 Text(
                     text = "搜分类 / 备注 / 金额…",
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
@@ -423,13 +423,13 @@ private fun CategoryFilterRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "全部",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(
                         text = "▾",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.rotate(chevronRotation)
                     )
@@ -514,7 +514,7 @@ private fun CategoryBox(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = if (selected) {
                 MaterialTheme.colorScheme.primary
@@ -565,14 +565,14 @@ private fun DateModeSegmentRow(selected: SearchDateMode, onSelect: (SearchDateMo
     }
 }
 
-/** 筛选行行首小标签：11sp 次要字，固定宽对齐两行。 */
+/** 筛选行行首小标签：12sp 次要字，固定宽对齐两行。 */
 @Composable
 private fun RowLabel(text: String) {
     Text(
         text = text,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.width(32.dp)
+        modifier = Modifier.width(34.dp)
     )
 }
 
@@ -641,7 +641,7 @@ private fun DatePickEntryRow(
                 }
                 Text(
                     text = "${month.year}年${month.monthValue}月",
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -738,7 +738,7 @@ private fun SummarySegment(label: String, value: String, valueColor: Color, modi
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(2.dp))
@@ -768,7 +768,7 @@ private fun EmptyResult() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
         )
         Spacer(modifier = Modifier.height(12.dp))
-        Text("无匹配账单", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("无匹配账单", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "换个关键词或放宽筛选试试",
@@ -856,7 +856,7 @@ private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = primary,
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

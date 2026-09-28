@@ -113,7 +113,7 @@ fun SettingsRow(
             modifier = Modifier.weight(1f)
         )
         if (value != null) {
-            Text(value, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(8.dp))
         }
         if (trailing != null) {

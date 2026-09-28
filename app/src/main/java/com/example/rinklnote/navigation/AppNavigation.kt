@@ -1055,7 +1055,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         ) {
                             Text(
                                 text = voiceConfirm ?: "",
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -1134,9 +1134,9 @@ private fun QqBotGuideDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("绑定步骤：", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("1. 在 QQ 中给机器人发送任意消息，机器人会回复 6 位绑定码；", fontSize = 13.sp)
-                Text("2. 打开网页并登录同一账号；", fontSize = 13.sp)
-                Text("3. 在网页「账号绑定」中输入绑定码完成绑定。", fontSize = 13.sp)
+                Text("1. 在 QQ 中给机器人发送任意消息，机器人会回复 6 位绑定码；", fontSize = 14.sp)
+                Text("2. 打开网页并登录同一账号；", fontSize = 14.sp)
+                Text("3. 在网页「账号绑定」中输入绑定码完成绑定。", fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "绑定后即可通过 QQ 给机器人发消息记账，账单会自动同步。",

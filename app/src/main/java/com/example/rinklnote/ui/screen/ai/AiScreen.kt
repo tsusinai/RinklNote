@@ -43,7 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.ui.component.RinklTopBarContentHeight
+import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
@@ -81,16 +81,11 @@ fun AiScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        // 标题栏：左侧返回键 + 居中标题（与搜索账单/自定义主题等二级页一致）。
-        // 高度收敛为全局顶栏 46dp：此前 vertical 8dp padding + 48dp IconButton 撑出 64dp，
-        // 顶部留白明显大于其它二级页（顶部 padding 过大的根因）。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(RinklTopBarContentHeight)
-                .padding(horizontal = 8.dp),
-            contentAlignment = Alignment.Center
+    Column(modifier = Modifier.fillMaxSize()) {
+        // 标题栏：标准 RinklTopBar 统一高度 46dp + 状态栏避让 + 居中标题
+        RinklTopBar(
+            scrimAlpha = 0f,
+            horizontalPadding = 8.dp
         ) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
                 Icon(
@@ -104,7 +99,8 @@ fun AiScreen(
                 "AI 助手",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
-                color = LocalRinklColors.current.topBarTitleColor
+                color = LocalRinklColors.current.topBarTitleColor,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
         if (!isLoggedIn) {
@@ -112,7 +108,7 @@ fun AiScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(15.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
@@ -280,7 +276,7 @@ private fun QuickAskChip(text: String, modifier: Modifier = Modifier, onClick: (
             .padding(horizontal = 14.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, fontSize = 13.sp, color = rinkl.fontColor, maxLines = 1)
+        Text(text = text, fontSize = 12.sp, color = rinkl.fontColor, maxLines = 1)
     }
 }
 

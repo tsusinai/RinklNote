@@ -360,7 +360,7 @@ private fun SuggestionSection(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.weight(1f)
         )
@@ -719,8 +719,8 @@ private fun CountBefore(
                 .padding(horizontal = 4.dp)
                 .height(36.dp)
                 .pressScale(amountInteraction)
-                .clip(RoundedCornerShape(14.dp))
-                .then(applyCardGlass(RoundedCornerShape(14.dp)))
+                .clip(RoundedCornerShape(15.dp))
+                .then(applyCardGlass(RoundedCornerShape(15.dp)))
                 .combinedClickable(
                     interactionSource = amountInteraction,
                     indication = null,
@@ -766,9 +766,9 @@ private fun OcrChipRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
     val rinkl = LocalRinklColors.current
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
-            .then(applyCardGlass(RoundedCornerShape(14.dp)))
+            .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.Center,
@@ -809,7 +809,7 @@ private fun LocationChipRow(
     val located = location != null
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(15.dp))
             .background(
                 if (located) {
                     MaterialTheme.colorScheme.primaryContainer
@@ -817,7 +817,7 @@ private fun LocationChipRow(
                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
                 }
             )
-            .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(14.dp)))
+            .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(15.dp)))
             .clickable {
                 if (located) {
                     onCleared()

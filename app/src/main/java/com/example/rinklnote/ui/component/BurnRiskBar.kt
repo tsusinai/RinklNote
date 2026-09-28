@@ -43,7 +43,7 @@ fun BurnRiskBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(15.dp))
             .background(bg)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {

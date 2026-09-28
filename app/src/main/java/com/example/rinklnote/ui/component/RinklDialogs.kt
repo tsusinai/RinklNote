@@ -97,7 +97,7 @@ fun AlertDialog(
                 }
                 title?.let {
                     ProvideTextStyle(
-                        TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                        TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Medium)
                     ) {
                         Box(
                             modifier = Modifier.padding(

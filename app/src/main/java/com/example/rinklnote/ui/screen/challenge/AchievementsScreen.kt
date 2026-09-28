@@ -120,7 +120,7 @@ fun AchievementsScreen(onBack: () -> Unit) {
                     ) {
                         Text(
                             text = "徽章点亮进度",
-                            fontSize = 15.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = pairs.lemon.ink.copy(alpha = 0.72f)
                         )
@@ -131,7 +131,7 @@ fun AchievementsScreen(onBack: () -> Unit) {
                         )
                         Text(
                             text = "每一枚都由真实账单算出，删账单会实时回退——真本事才亮得住",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = pairs.lemon.ink.copy(alpha = 0.6f)
                         )
                     }

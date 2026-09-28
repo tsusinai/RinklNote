@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.example.rinklnote.ui.component.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -120,7 +120,7 @@ internal fun ReceiptOcrDialog(
                     processing -> {
                         Text(
                             "识别中…（图片仅在本机识别，不会上传）",
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Box(
@@ -218,7 +218,7 @@ private fun OcrCandidateGroup(
     Column {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -231,7 +231,7 @@ private fun OcrCandidateGroup(
                 val selected = picked == chip
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(15.dp))
                         .background(
                             if (selected) MaterialTheme.colorScheme.primaryContainer
                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -241,7 +241,7 @@ private fun OcrCandidateGroup(
                 ) {
                     Text(
                         text = chip,
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onSurface
                     )

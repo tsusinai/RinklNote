@@ -208,7 +208,7 @@ private fun HeroPoster(hero: ChallengeHeroState, pair: PosterPair, order: Int) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "本月已省",
-                    fontSize = 15.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = pair.ink.copy(alpha = 0.72f)
                 )
@@ -223,7 +223,7 @@ private fun HeroPoster(hero: ChallengeHeroState, pair: PosterPair, order: Int) {
                 )
                 Text(
                     text = "${hero.noSpendDays} 个无消费日 × 日均 ${Money.format(hero.spendDayAvgMinor)}",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = pair.ink.copy(alpha = 0.6f)
                 )
             }
@@ -272,14 +272,14 @@ private fun HubCardItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = card.title,
-                    fontSize = 17.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Black,
                     color = pair.ink,
                     maxLines = 1
                 )
                 Text(
                     text = card.subtitle,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = pair.ink.copy(alpha = 0.72f),
                     maxLines = 2
                 )
@@ -350,7 +350,7 @@ private fun EmptyGuide(onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "记下第一笔，省钱挑战与成就就会开始",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = pairs.paper.ink.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center
                 )

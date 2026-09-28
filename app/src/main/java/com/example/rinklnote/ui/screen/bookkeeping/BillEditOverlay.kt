@@ -32,13 +32,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.LocationOn
 import com.example.rinklnote.ui.component.AlertDialog
 import com.example.rinklnote.ui.component.RinklDatePickerDialog
+import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -226,21 +229,61 @@ fun BillEditOverlay(
 
     BackHandler(onBack = ::requestCancel)
 
+    val topBarTextColor = if (hasCustomBackground) Color.White else LocalRinklColors.current.topBarTitleColor
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-            EditTopBar(
-                canSave = canSave,
-                onBack = ::requestCancel,
-                onDelete = { showDeleteConfirm = true },
-                onSave = { if (canSave) onConfirm(editedBill) }
-            )
+        Column(modifier = Modifier.fillMaxSize()) {
+            RinklTopBar(
+                scrimAlpha = if (hasCustomBackground) 1f else 0f,
+                horizontalPadding = 8.dp
+            ) {
+                IconButton(
+                    onClick = ::requestCancel,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .semantics { contentDescription = "返回" }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = topBarTextColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Text(
+                    text = "编辑账单",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = topBarTextColor,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+
+                Row(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { showDeleteConfirm = true }) {
+                        Text("删除", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                    }
+                    TextButton(enabled = canSave, onClick = { if (canSave) onConfirm(editedBill) }) {
+                        Text(
+                            text = "保存",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (canSave) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        )
+                    }
+                }
+            }
 
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 10.dp)
+                    .padding(horizontal = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CategoryEditor(
                     categories = visibleCategories,
@@ -251,28 +294,25 @@ fun BillEditOverlay(
                     onCategoryClick = ::selectCategory,
                     onSubCategoryClick = { selectedSubCategory = it }
                 )
-                Spacer(modifier = Modifier.height(6.dp))
                 DateEditor(
                     selectedDate = selectedDate,
                     hasCustomBackground = hasCustomBackground,
                     onDateClick = { showDatePicker = true },
                     onQuickDateClick = { selectedDate = it }
                 )
-                Spacer(modifier = Modifier.height(6.dp))
                 LocationEditor(
                     location = location,
                     locating = locating,
                     hasCustomBackground = hasCustomBackground,
                     onToggle = ::toggleLocation
                 )
-                Spacer(modifier = Modifier.height(6.dp))
                 AccountEditor(
                     accounts = accounts,
                     selectedAccount = selectedAccount,
                     hasCustomBackground = hasCustomBackground,
                     onAccountClick = { selectedAccount = it }
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -330,43 +370,6 @@ fun BillEditOverlay(
                 },
                 onDismiss = { showDiscardConfirm = false }
             )
-        }
-    }
-}
-
-@Composable
-private fun EditTopBar(
-    canSave: Boolean,
-    onBack: () -> Unit,
-    onDelete: () -> Unit,
-    onSave: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TextButton(
-            onClick = onBack,
-            modifier = Modifier.semantics { contentDescription = "返回" }
-        ) {
-            Text("返回", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-
-        Text(
-            text = "编辑账单",
-            modifier = Modifier.weight(1f),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-
-        TextButton(onClick = onDelete) {
-            Text("删除", color = MaterialTheme.colorScheme.error)
-        }
-        TextButton(enabled = canSave, onClick = onSave) {
-            Text("保存")
         }
     }
 }
@@ -452,7 +455,7 @@ private fun PrimaryCategoryChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(15.dp)
     // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
     val chipColor by animateColorAsState(
         targetValue = if (selected) {
@@ -500,7 +503,7 @@ private fun SecondaryCategoryChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(15.dp)
     // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
     val chipColor by animateColorAsState(
         targetValue = if (selected) {
@@ -522,7 +525,7 @@ private fun SecondaryCategoryChip(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
         )
     }
@@ -550,7 +553,7 @@ private fun DateEditor(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
                 .clickable(onClick = onDateClick)
                 .padding(horizontal = 11.dp, vertical = 7.dp),
@@ -604,7 +607,7 @@ private fun LocationEditor(
         Spacer(modifier = Modifier.height(4.dp))
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(
                     if (located) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -612,7 +615,7 @@ private fun LocationEditor(
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
                     }
                 )
-                .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(10.dp)))
+                .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(15.dp)))
                 .clickable(onClick = onToggle)
                 .padding(horizontal = 11.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -673,7 +676,7 @@ private fun AccountEditor(
         ) {
             accounts.forEach { account ->
                 val selected = selectedAccount?.id == account.id
-                val shape = RoundedCornerShape(10.dp)
+                val shape = RoundedCornerShape(15.dp)
                 // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
                 val chipColor by animateColorAsState(
                     targetValue = if (selected) {

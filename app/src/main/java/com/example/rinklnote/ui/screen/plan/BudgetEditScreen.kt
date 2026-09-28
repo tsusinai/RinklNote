@@ -19,12 +19,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.example.rinklnote.ui.component.AlertDialog
+import com.example.rinklnote.ui.component.RinklTopBar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -105,12 +111,12 @@ fun BudgetEditScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
             BudgetEditTopBar(
                 title = if (existing == null) "设置预算" else "编辑预算",
                 showDelete = existing != null,
+                hasCustomBackground = hasCustomBackground,
                 onBack = onCancel,
                 onDelete = { showDeleteConfirm = true }
             )
@@ -256,33 +262,43 @@ private fun dimensionLabel(target: BudgetEditTarget): String = when (target) {
 private fun BudgetEditTopBar(
     title: String,
     showDelete: Boolean,
+    hasCustomBackground: Boolean,
     onBack: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val textColor = if (hasCustomBackground) Color.White else LocalRinklColors.current.topBarTitleColor
+    RinklTopBar(
+        scrimAlpha = if (hasCustomBackground) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
-        TextButton(
+        IconButton(
             onClick = onBack,
-            modifier = Modifier.semantics { contentDescription = "返回" }
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .semantics { contentDescription = "返回" }
         ) {
-            Text("返回", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = textColor,
+                modifier = Modifier.size(24.dp)
+            )
         }
 
         Text(
             text = title,
-            modifier = Modifier.weight(1f),
             fontSize = 20.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = textColor,
+            modifier = Modifier.align(Alignment.Center)
         )
 
         if (showDelete) {
-            TextButton(onClick = onDelete) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
+            TextButton(
+                onClick = onDelete,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                Text("删除", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
             }
         }
     }

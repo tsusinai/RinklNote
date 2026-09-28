@@ -25,7 +25,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.example.rinklnote.ui.component.AlertDialog
+import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -501,7 +502,7 @@ private fun ShowcaseBadgesCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = achievementBadgeName(badge.id),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
@@ -527,16 +528,14 @@ private fun ShowcaseBadgesCard(
 // 顶栏
 // ---------------------------------------------------------------------------
 
-/** 资料页顶栏：返回 + 居中标题，风格与自定义主题页一致。 */
+/** 资料页顶栏：返回 + 居中标题，风格与全局 RinklTopBar 一致。 */
 @Composable
 private fun ProfilePageTopBar(hasBackground: Boolean, onBack: () -> Unit) {
     // 有照片背景时用白字（靠照片/遮罩衬托），否则用自定义主题「顶栏标题色」。
     val textColor = if (hasBackground) Color.White else LocalRinklColors.current.topBarTitleColor
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+    RinklTopBar(
+        scrimAlpha = if (hasBackground) 1f else 0f,
+        horizontalPadding = 8.dp
     ) {
         IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
             Icon(

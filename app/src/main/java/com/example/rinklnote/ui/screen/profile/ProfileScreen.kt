@@ -29,7 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.example.rinklnote.ui.component.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -553,7 +553,7 @@ private fun QuickAmountsEditorDialog(
             Column {
                 Text(
                     text = "桌面小组件上会显示两个金额 chip，点按直接预填记账（最多 2 个）。",
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(12.dp))

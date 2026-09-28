@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.ui.component.PasswordBox
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
@@ -167,23 +168,26 @@ fun LoginPage(
                 .fillMaxSize()
                 .imePadding()
         ) {
-            // 顶栏：返回 + 居中标题（statusBarsPadding 避让状态栏，勿删）——对齐全应用居中标题顶栏
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 4.dp, vertical = 8.dp)
+            // 顶栏：返回 + 居中标题——对齐全应用居中标题标准顶栏
+            RinklTopBar(
+                scrimAlpha = 0f,
+                horizontalPadding = 8.dp
             ) {
                 IconButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = LocalRinklColors.current.topBarTitleColor
+                    )
                 }
                 Text(
                     text = "登录 / 注册",
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
+                    color = LocalRinklColors.current.topBarTitleColor,
                     modifier = Modifier.align(Alignment.Center)
                 )
             }
@@ -201,10 +205,10 @@ fun LoginPage(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Spacer(modifier = Modifier.height(32.dp))
-                // 品牌区：主标题 28sp Bold primary + 副标语 14sp
+                // 品牌区：主标题 30sp Bold primary + 副标语 14sp
                 Text(
                     text = "RinklNote",
-                    fontSize = 28.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -404,16 +408,16 @@ private fun IdentityField(
         Text(
             text = label,
             fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(6.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-                .border(width = 1.5.dp, color = borderColor, shape = RoundedCornerShape(14.dp))
+                .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(15.dp))
                 .heightIn(min = 54.dp)
                 .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -422,7 +426,7 @@ private fun IdentityField(
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
@@ -471,7 +475,7 @@ private fun IdentitySwitch(mode: AuthMode, onChange: (AuthMode) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
         ) {
             // 滑块：四周留 4dp 呼吸，宽度 = 半宽 - 8dp
@@ -480,7 +484,7 @@ private fun IdentitySwitch(mode: AuthMode, onChange: (AuthMode) -> Unit) {
                     .offset(x = thumbX + 4.dp, y = 4.dp)
                     .width(segmentWidth - 8.dp)
                     .height(32.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .clip(RoundedCornerShape(11.dp))
                     .background(LocalRinklColors.current.themeColor)
             )
             Row(modifier = Modifier.fillMaxSize()) {
@@ -511,7 +515,7 @@ private fun IdentityTab(text: String, selected: Boolean, onClick: () -> Unit, mo
         Text(
             text = text,
             fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }

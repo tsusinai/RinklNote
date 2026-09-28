@@ -161,7 +161,7 @@ private fun PiePage(
 ) {
     if (slices.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("本月暂无支出", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("本月暂无支出", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
     }

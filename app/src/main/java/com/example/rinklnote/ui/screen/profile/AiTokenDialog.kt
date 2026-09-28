@@ -84,7 +84,7 @@ fun AiTokenDialog(
                     Text(
                         text = err,
                         color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp
+                        fontSize = 14.sp
                     )
                 }
 
@@ -135,13 +135,13 @@ fun AiTokenDialog(
 private fun UsageCard() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(15.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = "使用方式",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -188,7 +188,7 @@ private fun GeneratedTokenCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(15.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         )
@@ -196,7 +196,7 @@ private fun GeneratedTokenCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = "新令牌已生成（仅此一次）",
-                fontSize = 13.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
@@ -207,7 +207,7 @@ private fun GeneratedTokenCard(
             ) {
                 Text(
                     text = token.token,
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Start
@@ -231,7 +231,7 @@ private fun GeneratedTokenCard(
             }
             Text(
                 text = "请立即复制并保存，关闭后将无法再次查看此令牌。",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )
         }
@@ -245,7 +245,7 @@ private fun TokenRow(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(15.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (item.revoked)
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -282,7 +282,7 @@ private fun TokenRow(
                         contentColor = MaterialTheme.colorScheme.error
                     )
                 ) {
-                    Text("作废", fontSize = 13.sp)
+                    Text("作废", fontSize = 14.sp)
                 }
             }
         }
