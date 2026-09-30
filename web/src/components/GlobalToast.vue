@@ -18,6 +18,8 @@ const { toasts, close } = useToast()
 .toast { padding: 10px 18px; border-radius: 12px; background: var(--card); color: var(--text); box-shadow: var(--shadow); cursor: pointer; font-size: 14px; }
 .toast.ok { border-left: 3px solid var(--income, #04A433); }
 .toast.err { border-left: 3px solid var(--expense, #CA3032); }
+/* warn：部分成功 / 需留意的中性提醒（橙，走图表暖橙令牌） */
+.toast.warn { border-left: 3px solid var(--chart-2, #F97D1D); }
 .toast-enter-active, .toast-leave-active { transition: all var(--dur-expand) var(--ease); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

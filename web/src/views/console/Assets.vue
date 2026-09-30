@@ -45,7 +45,13 @@ function renderTotal() {
 }
 watch([total, reveal], () => nextTick(renderTotal))
 
-async function sync() { await data.loadData(); toast.push('同步完成') }
+/* 同步 = 从云端刷新；失败时如实提示并保留本地数据，不再一律报「同步完成」 */
+async function sync() {
+  const r = await data.loadData()
+  if (r.status === 'success') toast.push('同步完成')
+  else if (r.status === 'partial') toast.push(`部分内容未刷新：${r.message}（其余内容已更新）`, 'warn', 4000)
+  else toast.push(`同步失败：${r.message ?? '请稍后重试'}，本地数据仍可用`, 'err', 4000)
+}
 
 /* ── 新建 / 编辑账户：Modal 表单（替换原 window.prompt），校验文案全中文 ── */
 const formOpen = ref(false)

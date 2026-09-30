@@ -78,3 +78,64 @@ describe('getToken', () => {
     expect(getToken()).toBeNull()
   })
 })
+
+describe('错误类型映射（Task 4：502/503/504/网络异常 → 稳定中文错误类型）', () => {
+  // 独立于上面 describe 的 beforeEach：清掉可能残留的 token，避免 401 用例走跳转分支
+  beforeEach(() => { localStorage.clear(); clearToken() })
+
+  it.each([502, 503, 504])('HTTP %i → badGateway：保留原始状态码，文案稳定不随报文漂移', async (status) => {
+    // 网关错误常见 HTML 报文，body.message 不存在也不影响 userMessage 稳定
+    globalThis.fetch = mockFetch(status, '<html>Bad Gateway</html>') as any
+    await expect(api('/api/x')).rejects.toMatchObject({
+      statusCode: status,
+      kind: 'badGateway',
+      userMessage: '服务暂时不可用，请稍后重试',
+    })
+  })
+
+  it('HTTP 500 → server', async () => {
+    globalThis.fetch = mockFetch(500, {}) as any
+    await expect(api('/api/x')).rejects.toMatchObject({
+      statusCode: 500,
+      kind: 'server',
+      userMessage: '服务出错了，请稍后重试',
+    })
+  })
+
+  it('HTTP 404 → http（未特判的常规 HTTP 错误）', async () => {
+    globalThis.fetch = mockFetch(404, {}) as any
+    await expect(api('/api/x')).rejects.toMatchObject({ statusCode: 404, kind: 'http' })
+  })
+
+  it('fetch 直接失败（断网/超时中断）→ network，statusCode=0', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as any
+    await expect(api('/api/x')).rejects.toMatchObject({
+      statusCode: 0,
+      kind: 'network',
+      userMessage: '网络不可用，请检查网络后重试',
+    })
+  })
+
+  it('409 → conflict：userMessage 稳定，message 保留原始信息（供冲突处理逻辑使用）', async () => {
+    globalThis.fetch = mockFetch(409, { message: 'conflict' }) as any
+    try {
+      await api('/api/bills/1', { method: 'PUT' })
+      expect.unreachable('应当抛出 HttpError')
+    } catch (e: any) {
+      expect(e.kind).toBe('conflict')
+      expect(e.statusCode).toBe(409)
+      expect(e.userMessage).toBe('数据已被其他设备修改，请刷新后再试')
+      expect(e.message).toBe('并发冲突') // 409 分支的历史行为：message 为固定中文，body 挂在 data 上
+    }
+  })
+
+  it('401 → unauthorized：userMessage 为「重新登录」行动文案', async () => {
+    globalThis.fetch = mockFetch(401, {}) as any
+    // 无 token 时 401 不触发跳转，直接抛 HttpError
+    await expect(api('/api/x')).rejects.toMatchObject({
+      statusCode: 401,
+      kind: 'unauthorized',
+      userMessage: '登录已过期，请重新登录',
+    })
+  })
+})

@@ -70,7 +70,7 @@ function toggleTheme() { theme.toggle() }
 function logout() {
   store.logout()
   // 清空控制台缓存，避免下个账号看到上个账号的数据
-  data.bills = []; data.cats = []; data.accts = []; data.keywords = []; data.lastSync = 0
+  data.bills = []; data.cats = []; data.accts = []; data.keywords = []; data.resetSyncState()
   router.push('/login')
 }
 </script>

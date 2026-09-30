@@ -64,7 +64,7 @@ function doLogout() {
   localStorage.removeItem('rkl_token')
   localStorage.removeItem('rkl_theme')
   // 清空控制台缓存
-  data.bills = []; data.cats = []; data.accts = []; data.keywords = []; data.lastSync = 0
+  data.bills = []; data.cats = []; data.accts = []; data.keywords = []; data.resetSyncState()
   router.push('/login')
 }
 </script>
