@@ -2,6 +2,20 @@ package com.example.rinklnote.server.services.nlu
 
 import com.example.rinklnote.server.services.UserKeyword
 
+/**
+ * 关键词命中明细（2026-10-01 Task 3 建议可信度）：
+ * 供 NLU 标注建议来源（历史统计 / 规则）与生成简短中文解释。
+ */
+data class KeywordMatch(
+    val categoryName: String,
+    /** 实际命中的关键词（如「午餐」「瑞幸」）。 */
+    val keyword: String,
+    /** 是否来自用户词表（true=用户自定义/历史学习；false=系统规则词表）。 */
+    val fromUser: Boolean,
+    /** 用户词表优先级（仅 fromUser=true 时有意义：≥10 为手动添加，<10 为历史学习沉淀）。 */
+    val priority: Int = 0
+)
+
 class RuleBasedParser {
     companion object {
         val SYSTEM_KEYWORDS = mapOf(
@@ -48,25 +62,32 @@ class RuleBasedParser {
     }
 
     /**
-     * Try to match a category name from the input text.
-     * User keywords (sorted by priority DESC) take precedence over system keywords.
-     * Returns the matched category name, or null if nothing matched.
+     * 与 [parse] 完全同一匹配顺序（用户词表优先 → 系统词表），但额外返回命中明细，
+     * 供建议可信度标注来源与解释；未命中返回 null。
      */
-    fun parse(text: String, userKeywords: List<UserKeyword>): String? {
+    fun parseMatch(text: String, userKeywords: List<UserKeyword>): KeywordMatch? {
         // Step 1: user custom keywords (already sorted by priority descending)
         for (uk in userKeywords) {
             if (text.contains(uk.keyword)) {
-                return uk.categoryName
+                return KeywordMatch(uk.categoryName, uk.keyword, fromUser = true, priority = uk.priority)
             }
         }
 
         // Step 2: system default keywords
         for ((keyword, category) in SYSTEM_KEYWORDS) {
             if (text.contains(keyword)) {
-                return category
+                return KeywordMatch(category, keyword, fromUser = false)
             }
         }
 
         return null
     }
+
+    /**
+     * Try to match a category name from the input text.
+     * User keywords (sorted by priority descending) take precedence over system keywords.
+     * Returns the matched category name, or null if nothing matched.
+     */
+    fun parse(text: String, userKeywords: List<UserKeyword>): String? =
+        parseMatch(text, userKeywords)?.categoryName
 }

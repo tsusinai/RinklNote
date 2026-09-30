@@ -13,6 +13,8 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -39,6 +41,45 @@ data class CreateBillRequest(
 
 @Serializable
 data class ParseRequest(val text: String)
+
+/**
+ * POST /api/bills/parse 响应（2026-10-01 Task 3 建议可信度）。
+ *
+ * 兼容约定：既有字段（amount/categoryName/remark/subCategoryName/message）字段名与语义**保持不变**；
+ * 全部字段加 @EncodeDefault(ALWAYS) 恒序列化 —— 即使取默认值也输出键，避免 kotlinx-serialization
+ * 默认省略默认值导致新客户端读不到（老客户端 ignoreUnknownKeys 直接忽略新增键）。
+ * nullable 的新增字段显式输出 null（不碰老字段，老字段恒为非空字符串）。
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ParseSuggestionResponse(
+    // ── 既有字段（老客户端契约）──
+    // 识别金额（元，字符串）；空串 = 无法识别金额（看 message）。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amount: String = "",
+    // 推荐分类名（识别失败时服务端兜底「三餐」）。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val categoryName: String = "",
+    // 备注（原话或 AI 提取的描述）。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val remark: String = "",
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val subCategoryName: String = "",
+    // 无法识别金额时的提示文案；成功时为空串。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val message: String = "",
+    // ── Task 3 新增：建议可信度 ──
+    // 置信度："HIGH"=可一键记入；"MEDIUM"=有依据但需过目；"LOW"=AI 归类/无分类，必须检查后记入。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val confidence: String = "LOW",
+    // 是否需要用户确认后才能记入（与 confidence 严格联动：= confidence != HIGH；模糊金额恒为 true）。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val needsConfirmation: Boolean = true,
+    // 分类推荐来源："HISTORY"（历史统计：用户词表/记忆层）| "RULE"（规则词表）| "LLM"（AI 归类）；null = 无分类推荐。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val categorySource: String? = null,
+    // 账户推荐来源；服务端暂不做账户推荐，恒为 null（保留字段，App 端可按本地历史自行推荐）。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val accountSource: String? = null,
+    // 简短中文解释（建议依据），如「规则词「午餐」归类；模糊金额「三四十」（区间30~40元，按中值35元记）」；null = 无。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val explanation: String? = null,
+    // 是否命中模糊金额词（三四十/几十块等）；true 时 amount 是区间中值而非精确金额。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val fuzzyAmount: Boolean = false,
+    // 模糊区间下界/上界（整数分，Money.toMinor 换算）；仅 fuzzyAmount=true 时非 null。
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amountMinMinor: Long? = null,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val amountMaxMinor: Long? = null
+)
 
 /** yyyy-MM-dd → 业务时区（Asia/Shanghai）当天 0 点的 epoch 毫秒；解析失败返回 null。 */
 private fun parseDayStartMillis(day: String): Long? =
@@ -148,16 +189,33 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                 val body = call.receive<ParseRequest>()
                 val result = nlu.parse(body.text, userId)
                 if (result.amount == null || result.amount <= 0) {
-                    return@post call.respond(mapOf(
-                        "amount" to "", "categoryName" to "", "remark" to body.text, "subCategoryName" to "",
-                        "message" to "无法识别金额，请说如'午餐20元'"
+                    return@post call.respond(ParseSuggestionResponse(
+                        amount = "",
+                        categoryName = "",
+                        remark = body.text,
+                        subCategoryName = "",
+                        message = "无法识别金额，请说如'午餐20元'",
+                        confidence = result.confidence.name,
+                        needsConfirmation = result.needsConfirmation,
+                        categorySource = result.categorySource?.name,
+                        accountSource = result.accountSource?.name,
+                        explanation = result.explanation
                     ))
                 }
-                call.respond(mapOf(
-                    "amount" to result.amount.toString(),
-                    "categoryName" to (result.categoryName ?: "三餐"),
-                    "remark" to (result.remark ?: body.text),
-                    "subCategoryName" to ""
+                call.respond(ParseSuggestionResponse(
+                    amount = result.amount.toString(),
+                    categoryName = (result.categoryName ?: "三餐"),
+                    remark = (result.remark ?: body.text),
+                    subCategoryName = "",
+                    message = "",
+                    confidence = result.confidence.name,
+                    needsConfirmation = result.needsConfirmation,
+                    categorySource = result.categorySource?.name,
+                    accountSource = result.accountSource?.name,
+                    explanation = result.explanation,
+                    fuzzyAmount = result.fuzzyAmount,
+                    amountMinMinor = result.amountRangeMinMinor,
+                    amountMaxMinor = result.amountRangeMaxMinor
                 ))
             }
 

@@ -88,8 +88,18 @@ class PhoneIntentRouter(
             UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
             // 小盘人格化（Task 1.5）：回执统一走 MascotVoice（锚点「已记录」由指南锁定）
             val base = MascotVoice.bookkeepingReceipt(bill.categoryName, bill.amountMinor)
-            // 模糊金额区间（Task 1.3）：回执标注「区间30~40元，按中值35元记」。
-            return result.amountNote?.let { "$base（$it）" } ?: base
+            // Task 3 建议可信度：回执附注（多条用「；」连接，单条时保持原有单括号格式）——
+            // 1) 模糊金额区间（Task 1.3）：必须保留「区间30~40元，按中值35元记」，不把模糊金额说成精确金额；
+            // 2) LLM 低置信度归类：追加「AI 归类，建议核对」，明确这是机器猜测而非确定结论。
+            val notes = buildList {
+                result.amountNote?.let { add(it) }
+                if (result.confidence == SuggestionConfidence.LOW &&
+                    result.categorySource == SuggestionSource.LLM
+                ) {
+                    add("AI 归类，建议核对")
+                }
+            }
+            return if (notes.isEmpty()) base else "$base（${notes.joinToString("；")}）"
         }
 
         // G. A category was recognised but no amount — keep the bookkeeping UX alive.

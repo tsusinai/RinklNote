@@ -10,6 +10,7 @@ import com.example.rinklnote.server.tables.BillsTable
 import com.example.rinklnote.server.tables.BudgetsTable
 import com.example.rinklnote.server.tables.CategoriesTable
 import com.example.rinklnote.server.tables.SubCategoriesTable
+import com.example.rinklnote.server.tables.UserMemoryTable
 import com.example.rinklnote.server.tables.UsersTable
 import com.example.rinklnote.server.tables.VoiceKeywordsTable
 import kotlinx.coroutines.runBlocking
@@ -48,9 +49,11 @@ class PhoneIntentRouterTest {
         TestDatabase.connect("qqrouter")
         transaction {
             SchemaUtils.create(
-                UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, BudgetsTable, VoiceKeywordsTable
+                UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable,
+                BudgetsTable, VoiceKeywordsTable, UserMemoryTable
             )
             VoiceKeywordsTable.deleteAll()
+            UserMemoryTable.deleteAll()
             BillsTable.deleteAll()
             BudgetsTable.deleteAll()
             SubCategoriesTable.deleteAll()
@@ -234,5 +237,33 @@ class PhoneIntentRouterTest {
             BillsTable.selectAll().where { BillsTable.userId eq 1L }.single()[BillsTable.billSource]
         }
         assertEquals("AI", source)
+    }
+
+    // ── 2026-10-01 Task 3：模糊金额回执与建议可信度 ──
+
+    @Test
+    fun `模糊金额回执保留按中值记账说明`() = runBlocking {
+        val reply = router.route("打车三四十块", 1L)
+        assertTrue("reply=$reply", reply.contains("已记录"))
+        // 不得把模糊金额说成精确金额：必须保留区间与中值说明
+        assertTrue("reply=$reply", reply.contains("区间30~40元"))
+        assertTrue("reply=$reply", reply.contains("按中值35元记"))
+        // 落库金额 = 区间中值 35 元（整数分）
+        val bill = transaction { BillsTable.selectAll().where { BillsTable.userId eq 1L }.single() }
+        assertEquals(Money.toMinor(35.0), bill[BillsTable.amountMinor])
+    }
+
+    @Test
+    fun `高置信度历史指代记账回执附依据`() = runBlocking {
+        // 「跟上次一样」命中唯一记忆商家（历史统计 → 高置信度）：路由层仍直接落账（Bot 会话语义不变），
+        // 回执带「按上次记」依据。
+        UserMemoryService.recordBill(1L, "瑞幸咖啡9.9元", "饮品")
+        UserMemoryService.recordBill(1L, "瑞幸咖啡12元", "饮品")
+        val reply = router.route("跟上次一样20元", 1L)
+        assertTrue("reply=$reply", reply.contains("已记录"))
+        assertTrue("reply=$reply", reply.contains("饮品"))
+        assertTrue("reply=$reply", reply.contains("按上次「瑞幸咖啡」记"))
+        val count = transaction { BillsTable.selectAll().where { BillsTable.userId eq 1L }.count() }
+        assertEquals(1L, count)
     }
 }
