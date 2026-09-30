@@ -44,6 +44,15 @@ interface BillRepository {
     suspend fun addBill(bill: Bill): Long
     suspend fun updateBill(bill: Bill)
     suspend fun deleteBill(bill: Bill)
+    /**
+     * 删除撤销（体验优化 Task 2）：恢复此前软删除的账单——deleted=0、dirty=1，
+     * 下次推送按既有 PUT 语义把「未删除」写回服务端；绝不物理删除已同步数据。
+     *
+     * @param snapshot 删除前的账单快照（含本地 id；删除方负责在删除时留存）。
+     * @return true = 已恢复（或本就处于未删除态）；false = 恢复失败（如快照重插时
+     *         分类/账户外键缺失等），删除状态保留，调用方应给出可重试的错误反馈。
+     */
+    suspend fun undoDeleteBill(snapshot: Bill): Boolean = false
     /** 拖动重排：同日新序整批落库（VM 已统一盖章 dirty/updatedAt/sortOrder）。 */
     suspend fun reorderBills(bills: List<Bill>)
 

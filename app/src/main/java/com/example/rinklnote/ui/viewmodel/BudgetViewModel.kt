@@ -128,6 +128,18 @@ data class BudgetState(
             val today = LocalDate.now(bookkeepingZone())
             return budgetBurnRisk(monthExpenseMinor, budget.amountMinor, today.dayOfMonth, today.lengthOfMonth())
         }
+
+    /**
+     * 今日额度建议（计划首页解释区，Task 5）：与预算编辑页「日均可花」共用
+     * [deriveDailyBudgetAdvice] 单一口径（剩余预算 ÷ 剩余天数），避免两套计算。
+     * totalBudget 为 null 与金额为 0 分别对应「未设预算 / 预算为零」两种状态。
+     */
+    val dailyAdvice: DailyBudgetAdvice
+        get() = deriveDailyBudgetAdvice(
+            budgetMinor = totalBudget?.amountMinor,
+            spentMinor = monthExpenseMinor,
+            remainingDays = remainingDays
+        )
 }
 
 /** 预算编辑目标：总额 / 一级分类 / 子分类（点击行时构造，独立编辑页按维度取数与落库）。 */
@@ -149,6 +161,67 @@ data class DailySpend(val day: Int, val amountMinor: Long)
 /** 构成占比条目（总额维度=一级分类构成；分类维度=子分类构成）。 */
 @androidx.compose.runtime.Immutable
 data class SubBreakdown(val name: String, val amountMinor: Long)
+
+/** 今日建议额度状态：正常 / 超支 / 预算为零 / 未设预算 / 周期结束（见 [deriveDailyBudgetAdvice]）。 */
+enum class DailyBudgetStatus { OK, OVER, ZERO_BUDGET, NO_BUDGET, PERIOD_ENDED }
+
+/**
+ * 日额度派生结果 —— 计划首页「今日建议额度」与预算编辑页「日均可花」共用的**单一口径**：
+ * 剩余预算 ÷ 剩余天数（整数分整除）。UI 按 [status] 分支展示，非 OK 状态一律不出现正数额度。
+ */
+@androidx.compose.runtime.Immutable
+data class DailyBudgetAdvice(
+    val status: DailyBudgetStatus,
+    /** 本月预算（分）；未设预算时为 0。 */
+    val budgetMinor: Long,
+    /** 本月已用（分）。 */
+    val spentMinor: Long,
+    /** 剩余可用（分）= 预算 − 已用；超支时为负数（是否展示由 UI 决定）。 */
+    val remainingMinor: Long,
+    /** 超支金额（分）；未超支恒为 0。 */
+    val overMinor: Long,
+    /** 剩余天数（含今天）；调用方无法给出时为 0。 */
+    val remainingDays: Int,
+    /** 今日建议额度（分）= 剩余预算 ÷ 剩余天数；仅 [DailyBudgetStatus.OK] 时可能 > 0，其余状态恒为 0。 */
+    val dailyAllowanceMinor: Long
+)
+
+/**
+ * 纯函数：预算金额 + 已用 + 剩余天数 → 日额度建议（独立可测）。
+ *
+ * 状态判定优先级（前者覆盖后者）：
+ * - `budgetMinor == null` → [DailyBudgetStatus.NO_BUDGET]（未设预算）；
+ * - 预算 ≤ 0 → [DailyBudgetStatus.ZERO_BUDGET]（预算为零；即使已有支出也按预算为零提示，
+ *   不冒充「超支」误导）；
+ * - 已用 > 预算 → [DailyBudgetStatus.OVER]（超支优先于周期结束：两者同时成立时超支更可行动）；
+ * - 剩余天数 ≤ 0 → [DailyBudgetStatus.PERIOD_ENDED]（周期结束，兼作除零保护）；
+ * - 否则 [DailyBudgetStatus.OK]，日额度 = 剩余预算 ÷ 剩余天数（与预算编辑页整除口径一致）。
+ */
+internal fun deriveDailyBudgetAdvice(
+    budgetMinor: Long?,
+    spentMinor: Long,
+    remainingDays: Int
+): DailyBudgetAdvice {
+    val budget = budgetMinor ?: 0L
+    val status = when {
+        budgetMinor == null -> DailyBudgetStatus.NO_BUDGET
+        budget <= 0L -> DailyBudgetStatus.ZERO_BUDGET
+        spentMinor > budget -> DailyBudgetStatus.OVER
+        remainingDays <= 0 -> DailyBudgetStatus.PERIOD_ENDED
+        else -> DailyBudgetStatus.OK
+    }
+    return DailyBudgetAdvice(
+        status = status,
+        budgetMinor = budget,
+        spentMinor = spentMinor,
+        remainingMinor = budget - spentMinor,
+        // 超支额仅在 OVER 态给出（未设预算/预算为零不冒充超支，与状态判定一致）。
+        overMinor = if (status == DailyBudgetStatus.OVER) spentMinor - budget else 0L,
+        remainingDays = remainingDays,
+        // 仅正常状态派生日额度（此时 remainingDays 必 > 0，无除零）；其余状态恒 0，不出现误导正数。
+        dailyAllowanceMinor = if (status == DailyBudgetStatus.OK) (budget - spentMinor) / remainingDays else 0L
+    )
+}
 
 /**
  * 预算编辑页状态（与月度派生状态 [BudgetState] 分离，避免预算 Flow 每次发射牵动编辑页重组）。

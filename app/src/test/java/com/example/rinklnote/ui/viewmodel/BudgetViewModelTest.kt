@@ -606,6 +606,104 @@ class BudgetViewModelTest {
         assertTrue(edit.subBreakdown.isEmpty())
     }
 
+    // ---------- 日额度派生（deriveDailyBudgetAdvice，Task 5 计划页决策反馈） ----------
+
+    @Test
+    fun `daily advice without budget stays neutral and never positive`() {
+        // 无预算：不产生正数额度，也不冒充超支（状态中立，UI 引导去设置预算）。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = null, spentMinor = 5000L, remainingDays = 10)
+        assertEquals(DailyBudgetStatus.NO_BUDGET, advice.status)
+        assertEquals(0L, advice.budgetMinor)
+        assertEquals(0L, advice.dailyAllowanceMinor)
+        assertEquals(0L, advice.overMinor)
+    }
+
+    @Test
+    fun `daily advice zero budget returns zero allowance even with expense`() {
+        // 预算为零：即使已有支出也按「预算为零」提示，不冒充超支、不出现正数额度。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = 0L, spentMinor = 5000L, remainingDays = 10)
+        assertEquals(DailyBudgetStatus.ZERO_BUDGET, advice.status)
+        assertEquals(0L, advice.dailyAllowanceMinor)
+        assertEquals(0L, advice.overMinor)
+    }
+
+    @Test
+    fun `daily advice over budget hides allowance and reports over amount`() {
+        // 超支：额度恒 0（不出现误导正数），超支金额与负的剩余可用如实给出。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = 10000L, spentMinor = 12500L, remainingDays = 5)
+        assertEquals(DailyBudgetStatus.OVER, advice.status)
+        assertEquals(2500L, advice.overMinor)
+        assertEquals(-2500L, advice.remainingMinor)
+        assertEquals(0L, advice.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `daily advice over budget boundary equality is still ok with zero allowance`() {
+        // 恰好用完（已用 == 预算）不算超支：额度为 0 但状态正常（与编辑页 remain >= 0 口径一致）。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = 10000L, spentMinor = 10000L, remainingDays = 5)
+        assertEquals(DailyBudgetStatus.OK, advice.status)
+        assertEquals(0L, advice.overMinor)
+        assertEquals(0L, advice.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `daily advice at month start spreads remainder across all remaining days`() {
+        // 月初边界（剩余天数 == 当月总天数）：日额度 = 剩余预算 ÷ 剩余天数整除。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = 31000L, spentMinor = 1000L, remainingDays = 31)
+        assertEquals(DailyBudgetStatus.OK, advice.status)
+        assertEquals(31000L, advice.budgetMinor)
+        assertEquals(30000L / 31, advice.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `daily advice at month end concentrates remainder on last day`() {
+        // 月末边界（剩余 1 天）：今日建议额度 == 全部剩余可用，不平摊丢失。
+        val advice = deriveDailyBudgetAdvice(budgetMinor = 31000L, spentMinor = 3100L, remainingDays = 1)
+        assertEquals(DailyBudgetStatus.OK, advice.status)
+        assertEquals(27900L, advice.remainingMinor)
+        assertEquals(27900L, advice.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `daily advice guards non positive remaining days as period ended`() {
+        // 除零保护：剩余天数 ≤ 0 → 周期结束，额度恒 0（不抛 ArithmeticException、不给正数）。
+        val zeroDays = deriveDailyBudgetAdvice(10000L, 0L, 0)
+        val negativeDays = deriveDailyBudgetAdvice(10000L, 0L, -3)
+        assertEquals(DailyBudgetStatus.PERIOD_ENDED, zeroDays.status)
+        assertEquals(DailyBudgetStatus.PERIOD_ENDED, negativeDays.status)
+        assertEquals(0L, zeroDays.dailyAllowanceMinor)
+        assertEquals(0L, negativeDays.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `vm daily advice tracks total budget and month expense with shared formula`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 1000.0))
+        billRepo.bills.value = listOf(bill(1, 100.0, 1, "三餐"))
+        val vm = newVM()
+
+        val advice = vm.state.value.dailyAdvice
+        assertEquals(DailyBudgetStatus.OK, advice.status)
+        assertEquals(100000L, advice.budgetMinor)
+        assertEquals(10000L, advice.spentMinor)
+        assertEquals(90000L, advice.remainingMinor)
+        // 口径钉死：日额度 == 剩余预算 ÷ 剩余天数（remainingDays 与 BudgetState 同源派生）。
+        assertEquals(advice.remainingMinor / vm.state.value.remainingDays, advice.dailyAllowanceMinor)
+    }
+
+    @Test
+    fun `vm daily advice reports over budget without allowance`() = runTest(dispatcher) {
+        billRepo.expenseCategories.value = expenseCategories()
+        budgetRepo.budgets.value = listOf(budgetRow(amount = 100.0))
+        billRepo.bills.value = listOf(bill(1, 120.0, 1, "三餐"))
+        val vm = newVM()
+
+        val advice = vm.state.value.dailyAdvice
+        assertEquals(DailyBudgetStatus.OVER, advice.status)
+        assertEquals(2000L, advice.overMinor)
+        assertEquals(0L, advice.dailyAllowanceMinor)
+    }
+
     // ---------- fakes ----------
 
     private class FakeBillRepository : BillRepository {

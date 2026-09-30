@@ -77,12 +77,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
+import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.AppBackground
+import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.ui.component.KeypadContextItem
 import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.RinklSnackbarHost
 import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.component.accountColor
+import com.example.rinklnote.ui.component.rememberRinklFeedbackController
 import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AccountEditorScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
@@ -280,6 +284,27 @@ fun AppNavigation(app: RinklNoteApp) {
     )
     val authState by authVM.state.collectAsStateWithLifecycle()
     val autoSync by app.settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
+
+    // ── 结构化反馈（体验优化 Task 2）：统一 Snackbar 宿主 + 删除撤销 ──
+    val feedbackController = rememberRinklFeedbackController()
+    val navScope = rememberCoroutineScope()
+
+    // 删除撤销：恢复软删除账单（deleted=0、dirty=1）；失败保留删除状态并给可重试反馈。
+    // 恢复走 BillRepository.undoDeleteBill（单事务：查行 → 恢复 → 余额回补），绝不物理删除已同步数据。
+    fun undoDelete(snapshot: Bill) {
+        navScope.launch {
+            val restored = runCatching { app.repository.undoDeleteBill(snapshot) }.getOrDefault(false)
+            if (restored) {
+                bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
+                feedbackController.show(BillFeedback.Plain("账单已恢复"))
+            } else {
+                feedbackController.show(BillFeedback.UndoFailed(snapshot, "恢复失败，请重试")) {
+                    undoDelete(snapshot)
+                }
+            }
+        }
+    }
+
     // 用户自选背景图：铺在整个 nav 层之下（含底部 tab 栏），并作为全局毛玻璃采样源。
     val appBackgroundUri by app.settingsManager.backgroundUri.collectAsStateWithLifecycle(initialValue = null)
     val hazeState = remember { HazeState() }
@@ -425,15 +450,16 @@ fun AppNavigation(app: RinklNoteApp) {
                         val s = quickAddVM.state.value
                         val cat = s.selectedCategory?.name ?: ""
                         aiVM.appendBookingConfirmed("记好嘞！${s.amount}元（$cat）已入账～")
-                    } else {
-                        Toast.makeText(context, "已记账", Toast.LENGTH_SHORT).show()
                     }
+                    // 原先的「已记账」Toast 已由结构化反馈（已保存到本机 / 已同步到云端 /
+                    // 同步失败仍保留本机）替代；这里只负责关抽屉与刷新（一步确认语义不变）。
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
                     quickAddSurface = QuickAddSurface.Closed
                 }
                 is QuickAddEffect.FinalConfirmFailed -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    // 校验失败类一次性提示：自动消失，不打断继续输入。
+                    feedbackController.show(BillFeedback.Plain(effect.message))
                 }
                 is QuickAddEffect.VoiceBillBooked -> {
                     voiceBookedCount += 1
@@ -442,6 +468,23 @@ fun AppNavigation(app: RinklNoteApp) {
                 is QuickAddEffect.VoiceNoAmount -> {
                     voiceConfirm = "没抓到金额，再说一次～"
                 }
+            }
+        }
+    }
+
+    // 结构化反馈 → Snackbar（体验优化 Task 2）：QuickAdd 保存路径的本地/云端结果，
+    // UI 侧动作（继续记账 / 重试同步）在此挂接，反馈本体由 QuickAddViewModel 产生。
+    LaunchedEffect(quickAddVM) {
+        quickAddVM.feedback.collect { fb ->
+            when (fb) {
+                is BillFeedback.SyncFailedRetained ->
+                    feedbackController.show(fb) { navScope.launch { app.syncManager.sync() } }
+                is BillFeedback.SavedLocally ->
+                    feedbackController.show(fb) {
+                        // 「继续记账」：重开记账抽屉（reset 已清空上笔状态）；仅在记账页生效。
+                        if (currentRoute == "bookkeeping") quickAddSurface = QuickAddSurface.Drawer
+                    }
+                else -> feedbackController.show(fb)
             }
         }
     }
@@ -516,7 +559,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
                         onEditBudget = { navController.navigate("budget-edit") },
-                        onOpenCategoryBudgets = { navController.navigate("budget-categories") }
+                        onOpenCategoryBudgets = { navController.navigate("budget-categories") },
+                        // 超支时「查看支出明细」入口：复用现有月度明细路由，不新造页面。
+                        onOpenMonthDetail = { navController.navigate("month-detail") }
                     )
                 }
                 // Rk省钱计划（大字报乐园 hub）：记账页「更多」抽屉下属的二级页（非 tab 路由 →
@@ -780,15 +825,22 @@ fun AppNavigation(app: RinklNoteApp) {
                                 navController.popBackStack()
                             },
                             onDelete = {
+                                // 删除为软删（deleted=1, dirty=1）：快照进反馈，点「撤销」恢复。
                                 bookkeepingVM.onEvent(BookkeepingEvent.DeleteBill(bill))
                                 bookkeepingVM.onEvent(BookkeepingEvent.CancelEdit)
                                 navController.popBackStack()
-                                Toast.makeText(context, "账单已删除", Toast.LENGTH_SHORT).show()
+                                feedbackController.show(BillFeedback.DeletedUndoable(snapshot = bill)) {
+                                    undoDelete(bill)
+                                }
                             },
                             onConfirm = { newBill ->
                                 bookkeepingVM.onEvent(BookkeepingEvent.ConfirmEdit(newBill))
                                 navController.popBackStack()
-                                Toast.makeText(context, "账单已保存", Toast.LENGTH_SHORT).show()
+                                feedbackController.show(BillFeedback.SavedEditable(bill = newBill)) {
+                                    // 「编辑」：重新载入刚保存的账单回到编辑页。
+                                    bookkeepingVM.onEvent(BookkeepingEvent.EditBill(newBill))
+                                    navController.navigate("bill-edit")
+                                }
                             },
                             onLoadSubCategories = bookkeepingVM::subCategories
                         )
@@ -1022,6 +1074,16 @@ fun AppNavigation(app: RinklNoteApp) {
                 )
             }
         }
+
+        // 结构化反馈 Snackbar（体验优化 Task 2）：浮在底部 tab 栏之上、登录页之下。
+        // 失败/可撤销反馈保持显示直到用户操作或关闭，成功类自动消失。
+        RinklSnackbarHost(
+            controller = feedbackController,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 96.dp)
+        )
 
         // Full-screen login / bot-bind pages — top-most so they cover the bottom nav
         if (showLogin) {

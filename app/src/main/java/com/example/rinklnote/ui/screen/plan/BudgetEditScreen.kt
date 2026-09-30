@@ -62,8 +62,10 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BudgetEditState
 import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
+import com.example.rinklnote.ui.viewmodel.DailyBudgetStatus
 import com.example.rinklnote.ui.viewmodel.DailySpend
 import com.example.rinklnote.ui.viewmodel.SubBreakdown
+import com.example.rinklnote.ui.viewmodel.deriveDailyBudgetAdvice
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
@@ -401,20 +403,26 @@ private fun AmountCard(
                 value = "${Money.format(monthExpenseMinor)} / ${Money.format(existingAmountMinor)}（${(progress * 100).toInt()}%）"
             )
 
-            // 日均可用 / 超支 与 月末预测（线性外推：已花 ÷ 已过天数 × 当月天数）。
-            val remain = existingAmountMinor - monthExpenseMinor
-            if (remain >= 0 && remainingDays != null && remainingDays > 0) {
+            // 日均可用 / 超支 与 月末预测：日额度走 [deriveDailyBudgetAdvice] 统一口径
+            // （剩余预算 ÷ 剩余天数，与计划首页「今日建议额度」同源，避免两套计算）。
+            // 月末预测为线性外推：已花 ÷ 已过天数 × 当月天数。
+            val advice = deriveDailyBudgetAdvice(
+                budgetMinor = existingAmountMinor,
+                spentMinor = monthExpenseMinor,
+                remainingDays = remainingDays ?: 0
+            )
+            if (advice.status == DailyBudgetStatus.OK) {
                 Spacer(modifier = Modifier.height(4.dp))
                 ContextRow(
                     label = "剩余可用",
-                    value = "${Money.format(remain)} · 日均可花 ${Money.format(remain / remainingDays)}"
+                    value = "${Money.format(advice.remainingMinor)} · 日均可花 ${Money.format(advice.dailyAllowanceMinor)}"
                 )
             }
-            if (over) {
+            if (advice.overMinor > 0) {
                 Spacer(modifier = Modifier.height(4.dp))
                 ContextRow(
                     label = "已超预算",
-                    value = Money.format(monthExpenseMinor - existingAmountMinor),
+                    value = Money.format(advice.overMinor),
                     valueColor = MaterialTheme.colorScheme.error
                 )
             }

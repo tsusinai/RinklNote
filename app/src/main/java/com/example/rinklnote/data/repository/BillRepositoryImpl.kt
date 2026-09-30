@@ -2,6 +2,8 @@ package com.example.rinklnote.data.repository
 
 import androidx.room.withTransaction
 import com.example.rinklnote.data.db.AppDatabase
+import com.example.rinklnote.data.db.dao.AccountDao
+import com.example.rinklnote.data.db.dao.BillDao
 import com.example.rinklnote.data.db.entity.ACCOUNT_BUCKET_NAME
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
@@ -18,6 +20,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+
+/**
+ * 删除撤销的落库动作（体验优化 Task 2，须在事务内调用）：
+ * 1. 行仍在且为软删墓碑 → 按快照恢复 deleted=0、dirty=1（恢复即待同步，下次推送按 PUT 把「未删除」写回服务端）；
+ * 2. 行已被推送物理清除（软删墓碑推送后 hardDelete）→ 按快照原样重插（保留原 id 与 server_id），绝不重建新行；
+ * 3. 已恢复过（重复点撤销）→ 幂等跳过，避免余额被重复回补。
+ * 恢复后把这笔账对余额的影响重新应用（删除时曾反向回补）：支出为负、收入为正。
+ */
+internal suspend fun applyUndoDelete(
+    billDao: BillDao,
+    accountDao: AccountDao,
+    snapshot: Bill,
+    now: Long
+) {
+    val existing = billDao.getById(snapshot.id)
+    if (existing != null && !existing.deleted) return
+    val restored = snapshot.copy(deleted = false, dirty = true, updatedAt = now)
+    if (existing == null) {
+        billDao.insert(restored)
+    } else {
+        billDao.update(restored)
+    }
+    val delta = if (snapshot.billType == BillType.EXPENSE) -snapshot.amountMinor else snapshot.amountMinor
+    if (delta == 0L) return
+    val account = accountDao.getById(snapshot.accountId) ?: return
+    accountDao.update(
+        account.copy(balanceMinor = account.balanceMinor + delta, updatedAt = now, dirty = true)
+    )
+}
 
 internal class BillRepositoryImpl(
     private val db: AppDatabase,
@@ -94,6 +125,13 @@ internal class BillRepositoryImpl(
         // 反向回补删除的这笔对该账户余额的影响。
         nudgeAccount(bill.accountId, -balanceDelta(bill))
     }.also { onBillMutated() }
+
+    override suspend fun undoDeleteBill(snapshot: Bill): Boolean = runCatching {
+        db.withTransaction {
+            // 快照恢复（deleted=0、dirty=1）+ 余额回补，单事务保证「查行 → 恢复 → 回补」原子。
+            applyUndoDelete(billDao, accountDao, snapshot, System.currentTimeMillis())
+        }
+    }.isSuccess
 
 
     override suspend fun reorderBills(bills: List<Bill>) = db.withTransaction {

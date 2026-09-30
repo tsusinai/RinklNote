@@ -18,6 +18,8 @@ import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.PlaceRepository
 import com.example.rinklnote.sync.SyncManager
+import com.example.rinklnote.sync.SyncResult
+import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
@@ -147,6 +149,13 @@ class QuickAddViewModel(
 
     private val _effects = Channel<QuickAddEffect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
+
+    /**
+     * 结构化反馈（体验优化 Task 2）：保存/删除/重试的统一文案与操作，
+     * 由 AppNavigation 的 RinklSnackbarHost 渲染；与 effects（UI 编排信号）分离。
+     */
+    private val _feedback = Channel<BillFeedback>(Channel.BUFFERED)
+    val feedback = _feedback.receiveAsFlow()
 
     /** 记账默认账户：优先「无账户」桶（不要求用户强选），兜底到首个真实账户。 */
     private fun defaultAccount(accounts: List<Account>): Account? =
@@ -668,12 +677,24 @@ class QuickAddViewModel(
                 )
                 val savedId = repository.addBill(bill)
                 _effects.send(QuickAddEffect.FinalConfirmCompleted)
+                // 结构化反馈（体验优化 Task 2）：本地落库成功先报「已保存到本机」；云端结果
+                // 按 SyncManager 的推送结果（与同步状态流同源）升级为「已同步到云端」或
+                // 「同步失败仍保留本机」。一步确认语义不变，反馈只是叠加提示。
+                _feedback.trySend(BillFeedback.SavedLocally())
                 // Background push to server (best-effort, non-blocking).
                 // Push the persisted row (with its real auto-generated id) so
                 // SyncManager can stamp server_id on it — otherwise it stays
                 // unsynced and every full sync re-POSTs a duplicate.
                 val saved = bill.copy(id = savedId)
-                syncManager?.let { launch { it.pushBill(saved) } }
+                syncManager?.let { manager ->
+                    launch {
+                        when (val outcome = manager.pushBill(saved)) {
+                            is SyncResult.Success -> _feedback.trySend(BillFeedback.SyncedToCloud())
+                            is SyncResult.Error -> _feedback.trySend(BillFeedback.SyncFailedRetained(outcome.message))
+                            SyncResult.NotLoggedIn -> Unit // 未登录：保留「已保存到本机」，不追加失败提示
+                        }
+                    }
+                }
                 // 常去地点异步累计：带位置落账后合并/新建 places（失败不影响记账）。
                 val location = s.location
                 if (location != null && placeRepository != null) {

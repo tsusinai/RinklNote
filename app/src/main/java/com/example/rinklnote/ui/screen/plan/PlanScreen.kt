@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +56,8 @@ import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetState
 import com.example.rinklnote.ui.viewmodel.BudgetViewModel
 import com.example.rinklnote.ui.viewmodel.CategoryBudgetState
+import com.example.rinklnote.ui.viewmodel.DailyBudgetAdvice
+import com.example.rinklnote.ui.viewmodel.DailyBudgetStatus
 import com.example.rinklnote.ui.viewmodel.SubCategoryBudgetState
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
@@ -80,6 +83,7 @@ import kotlin.math.abs
  * @param hazeState nav 层透传的毛玻璃状态
  * @param onEditBudget 跳转预算编辑页（导航层注入）
  * @param onOpenCategoryBudgets 进入「分类预算设置」页（导航层注入，路由 `budget-categories`）
+ * @param onOpenMonthDetail 超支时「查看支出明细」入口（导航层注入，路由 `month-detail`）
  */
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -88,7 +92,8 @@ fun PlanScreen(
     backgroundUri: String?,
     hazeState: HazeState,
     onEditBudget: () -> Unit,
-    onOpenCategoryBudgets: () -> Unit
+    onOpenCategoryBudgets: () -> Unit,
+    onOpenMonthDetail: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -126,7 +131,8 @@ fun PlanScreen(
                 onClick = {
                     viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
                     onEditBudget()
-                }
+                },
+                onOpenMonthDetail = onOpenMonthDetail
             )
 
             // 预算-挑战联动预警（Task 4.1）：总额预算烧穿过快 → 橙色提示条（实时派生零存储）。
@@ -222,13 +228,16 @@ private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: 
  * 本月总额预算卡（Total Budget Card）：白底 + 毛玻璃。
  *
  * - 未设预算：显示「设置」入口；点击跳预算编辑页。
- * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算 + 百分比 + 剩余天数；
- *   超预算时进度条转 error 色并显示超额金额。
+ * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算 + 百分比 + 剩余天数 +
+ *   今日额度解释区（[DailyAllowanceBlock]，与预算编辑页「日均可花」同一口径）；
+ *   超预算时进度条转 error 色并显示超额金额 + 行动入口（[OverBudgetActions]）。
+ * - 预算为零 / 周期结束：给对应中文状态文案，不出现除零或误导性正数。
  */
 @Composable
 private fun TotalBudgetCard(
     state: BudgetState,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onOpenMonthDetail: () -> Unit
 ) {
     val budget = state.totalBudget
     Column(
@@ -314,8 +323,139 @@ private fun TotalBudgetCard(
                     color = MaterialTheme.colorScheme.error
                 )
             }
+
+            // 今日额度解释区（Task 5）：与预算编辑页「日均可花」共用 [deriveDailyBudgetAdvice]
+            // 单一口径（剩余预算 ÷ 剩余天数）。正常态展示建议额度与计算依据；超支态给行动入口；
+            // 预算为零 / 周期结束给中文说明，不出现除零或误导性正数。
+            val advice = state.dailyAdvice
+            when (advice.status) {
+                DailyBudgetStatus.OK -> {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    DailyAllowanceBlock(advice = advice)
+                }
+                DailyBudgetStatus.OVER -> {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    // 查看支出明细 → 路由 month-detail；调整预算 → 卡片原有点击流（budget-edit）。
+                    OverBudgetActions(
+                        onOpenMonthDetail = onOpenMonthDetail,
+                        onEditBudget = onClick
+                    )
+                }
+                DailyBudgetStatus.ZERO_BUDGET -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "本月预算为 0，调整预算后可查看今日建议额度",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DailyBudgetStatus.PERIOD_ENDED -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "本月周期已结束，月初设置新预算后可查看今日建议额度",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // 未设预算：卡片上方已显示「点击设置本月预算」引导，不重复提示。
+                DailyBudgetStatus.NO_BUDGET -> Unit
+            }
         }
     }
+}
+
+/**
+ * 今日额度解释块（Daily Allowance Block）：建议额度为主行（primary 槽位高亮），
+ * 副行给出计算依据「剩余可用 ÷ 剩余天数」。底色走主题 primary 低透明度，无硬编码色值。
+ */
+@Composable
+private fun DailyAllowanceBlock(advice: DailyBudgetAdvice) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "今日建议额度",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = Money.format(advice.dailyAllowanceMinor),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "剩余可用 ${Money.format(advice.remainingMinor)} ÷ ${advice.remainingDays} 天",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * 超支行动入口（Over Budget Actions）：「查看支出明细」跳 month-detail、「调整预算」
+ * 复用卡片原有 budget-edit 点击流，均沿用现有路由不新造页面。胶囊样式对齐预算编辑页
+ * StatusChip（圆角 + 主题色低透明底），支出明细用 error 语义色、调整预算用 primary。
+ */
+@Composable
+private fun OverBudgetActions(
+    onOpenMonthDetail: () -> Unit,
+    onEditBudget: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OverBudgetActionChip(
+            text = "查看支出明细",
+            container = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+            content = MaterialTheme.colorScheme.error,
+            onClick = onOpenMonthDetail,
+            modifier = Modifier.weight(1f)
+        )
+        OverBudgetActionChip(
+            text = "调整预算",
+            container = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            content = MaterialTheme.colorScheme.primary,
+            onClick = onEditBudget,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/** 超支行动胶囊：圆角 + 低透明主题底 + 居中文本。 */
+@Composable
+private fun OverBudgetActionChip(
+    text: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        color = content,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    )
 }
 
 /** 上月结余行（Last Month Surplus）：仅展示，不结转；正数=收入绿，负数 error 色。 */

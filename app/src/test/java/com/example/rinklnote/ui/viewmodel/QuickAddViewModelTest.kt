@@ -11,6 +11,9 @@ import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.DailyReport
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.sync.SyncManager
+import com.example.rinklnote.sync.SyncResult
+import com.example.rinklnote.ui.component.BillFeedback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +26,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +34,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 
 /**
  * JVM unit tests for the QuickAdd two-phase state machine (Phase 4):
@@ -65,6 +72,17 @@ class QuickAddViewModelTest {
     /** 手动记账必须由用户显式选择标签和账户，测试保存路径时先补齐两项。 */
     private fun TestScope.newReadyVM(): QuickAddViewModel {
         val vm = newVM()
+        vm.onEvent(QuickAddEvent.SelectCategory(repo.expenseCategories.value.first()))
+        vm.onEvent(QuickAddEvent.SelectAccount(accountRepo.accounts.value.first()))
+        return vm
+    }
+
+    /** 构造带打桩 SyncManager 的就绪 VM：pushBill 固定返回 [pushResult]（反馈判定用）。 */
+    private suspend fun TestScope.newReadyVMWithSync(pushResult: SyncResult): QuickAddViewModel {
+        val sync = mock<SyncManager>()
+        whenever(sync.pushBill(any())).thenReturn(pushResult)
+        val vm = QuickAddViewModel(repo, accountRepo, syncManager = sync, api = null)
+        advanceUntilIdle()
         vm.onEvent(QuickAddEvent.SelectCategory(repo.expenseCategories.value.first()))
         vm.onEvent(QuickAddEvent.SelectAccount(accountRepo.accounts.value.first()))
         return vm
@@ -223,6 +241,53 @@ class QuickAddViewModelTest {
         advanceUntilIdle()
 
         assertEquals(2, repo.addedBills.size)
+    }
+
+    // ── 体验优化 Task 2：结构化反馈（保存 → 云端结果升级）──
+
+    @Test
+    fun `保存成功后先报已保存到本机再升级为已同步到云端`() = runTest(dispatcher) {
+        val vm = newReadyVMWithSync(SyncResult.Success(1, 0))
+        vm.onEvent(QuickAddEvent.Digit("20"))
+        vm.onEvent(QuickAddEvent.Confirm)
+        advanceUntilIdle()
+
+        assertEquals(1, repo.addedBills.size)
+        // 先本地落库反馈，再按 SyncManager 的推送结果（与同步状态流同源）升级为云端反馈。
+        assertEquals(BillFeedback.SavedLocally(), vm.feedback.first())
+        assertEquals(BillFeedback.SyncedToCloud(), vm.feedback.first())
+        // 一步确认语义不变：确认即落库关抽屉，FinalConfirmCompleted 效果照发。
+        assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
+    }
+
+    @Test
+    fun `推送失败时反馈同步失败但账单仍保存在本机并可重试`() = runTest(dispatcher) {
+        val vm = newReadyVMWithSync(SyncResult.Error("网络不可用，请检查网络后重试"))
+        vm.onEvent(QuickAddEvent.Digit("20"))
+        vm.onEvent(QuickAddEvent.Confirm)
+        advanceUntilIdle()
+
+        assertEquals(BillFeedback.SavedLocally(), vm.feedback.first())
+        val failed = vm.feedback.first()
+        assertTrue("feedback was $failed", failed is BillFeedback.SyncFailedRetained)
+        failed as BillFeedback.SyncFailedRetained
+        assertEquals("网络不可用，请检查网络后重试", failed.reason)
+        assertEquals("重试", failed.actionLabel)
+        assertTrue("失败类反馈保持显示直到用户操作或关闭", failed.persistent)
+        // 同步失败不丢数据：账单已落库。
+        assertEquals(1, repo.addedBills.size)
+    }
+
+    @Test
+    fun `未登录时保存仅反馈已保存到本机`() = runTest(dispatcher) {
+        val vm = newReadyVMWithSync(SyncResult.NotLoggedIn)
+        vm.onEvent(QuickAddEvent.Digit("20"))
+        vm.onEvent(QuickAddEvent.Confirm)
+        advanceUntilIdle()
+
+        assertEquals(BillFeedback.SavedLocally(), vm.feedback.first())
+        // 未登录不追加失败提示：100ms（虚拟时间）内没有新反馈即为空。
+        assertTrue(runCatching { withTimeout(100) { vm.feedback.first() } }.isFailure)
     }
 
     /** Minimal repository fake — no Room, drives state via MutableStateFlow. */
