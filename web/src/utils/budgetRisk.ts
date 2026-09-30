@@ -80,3 +80,53 @@ export function monthExpenseSoFar(bills: Bill[], now = Date.now()): number {
   }
   return sum
 }
+
+/* ============================================================
+ * 今日建议额度（Task 5 Web 侧）
+ * 口径与 App 预算编辑页「日均可花」钉死对齐：
+ *   剩余日额度 = 剩余预算 ÷ 剩余天数（向下取整）
+ *   剩余天数（含今天）= 当月天数 - 今天几号 + 1
+ * 超支 / 预算为零 / 未设置预算 / 周期异常时不给出额度，
+ * 由调用方展示对应状态文案，不产生除零或误导性正数。
+ * ============================================================ */
+
+/** 剩余天数（含今天）：与 App BudgetViewModel.remainingDays（lengthOfMonth - dayOfMonth + 1）同一口径 */
+export function daysRemaining(now: number): number {
+  return daysInMonth(now) - new Date(now).getDate() + 1
+}
+
+/** 「今日建议额度」解释模型：一次给出本月预算、已用、剩余、剩余天数与今日建议额度 */
+export interface BudgetDailyPlan {
+  /** 本月预算（整数分） */
+  budgetMinor: number
+  /** 本月已用支出（整数分，不含未来账单） */
+  expenseSoFarMinor: number
+  /** 剩余预算 = 预算 - 已用；超支时为负数 */
+  remainMinor: number
+  /** 剩余天数（含今天） */
+  daysRemaining: number
+  /** 是否已超支（剩余预算 < 0） */
+  overspent: boolean
+  /** 今日建议额度（整数分，向下取整）。
+   *  超支或剩余天数异常时为 null —— 不给误导性正数，由调用方展示状态文案。 */
+  dailyAllowanceMinor: number | null
+}
+
+/**
+ * 一步构建「今日建议额度」解释模型。
+ * 未设置预算 / 预算为零（budgetMinor 为空或 ≤ 0）返回 null，由调用方展示「未设置预算」。
+ * 刚好用完（剩余 = 0）与 App 口径一致：额度展示 0（remain ≥ 0 即给出）。
+ */
+export function buildDailyPlan(
+  budgetMinor: number | null | undefined,
+  expenseSoFarMinor: number,
+  now: number,
+): BudgetDailyPlan | null {
+  if (!budgetMinor || budgetMinor <= 0) return null
+  const remainMinor = budgetMinor - expenseSoFarMinor
+  const days = daysRemaining(now)
+  const overspent = remainMinor < 0
+  // 与 App 预算编辑页一致：remain >= 0 且剩余天数 > 0 才给「日均可花」；向下取整不虚高
+  const dailyAllowanceMinor = !overspent && days > 0 ? Math.floor(remainMinor / days) : null
+  return { budgetMinor, expenseSoFarMinor, remainMinor, daysRemaining: days, overspent, dailyAllowanceMinor }
+}

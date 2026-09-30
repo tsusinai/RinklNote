@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   riskLevel, predictBurnMinor, riskPct, assessBudgetRisk, monthExpenseSoFar,
-  daysInMonth, daysElapsed, displayPct,
+  daysInMonth, daysElapsed, displayPct, daysRemaining, buildDailyPlan,
 } from '../budgetRisk'
 import type { Bill } from '../../types'
 
-/* 预算烧穿风险单测（Task 4.1）：档位边界钉死 —— <85 低 / 85~100 中（含边界）/ >100 高。 */
+/* 预算烧穿风险单测（Task 4.1）：档位边界钉死 —— <85 低 / 85~100 中（含边界）/ >100 高。
+ * Task 5：今日建议额度 = 剩余预算 ÷ 剩余天数（含今天），与 App「日均可花」同口径。 */
 
 let seq = 0
 function bill(p: Partial<Bill> & { date: number; amountMinor: number }): Bill {
@@ -94,5 +95,68 @@ describe('displayPct 横幅展示取整（与 App BurnRiskBar pct.toInt() 对齐
     // 99.99% 截断成 99% 仍是中风险语义；档位判定用未取整 pct，两者不冲突
     expect(riskLevel(99.99)).toBe('mid')
     expect(displayPct(99.99)).toBe(99)
+  })
+})
+
+/* ── Task 5：今日建议额度（剩余预算 ÷ 剩余天数，与 App 日均可花同口径）──────────── */
+
+describe('daysRemaining 剩余天数（含今天）', () => {
+  it('与 App BudgetViewModel 口径一致：当月天数 - 今天几号 + 1', () => {
+    const now = new Date(2026, 8, 10, 12).getTime() // 9 月 10 日，30 天月
+    expect(daysRemaining(now)).toBe(21)
+  })
+  it('跨月边界：1 月底 → 非闰年 2 月 28 天；闰年 2028 年 2 月 29 天', () => {
+    expect(daysRemaining(new Date(2027, 0, 31, 12).getTime())).toBe(1)  // 1 月 31 天
+    expect(daysRemaining(new Date(2027, 1, 1, 12).getTime())).toBe(28)  // 非闰年 2 月
+    expect(daysRemaining(new Date(2028, 1, 1, 12).getTime())).toBe(29)  // 闰年 2 月
+  })
+})
+
+describe('buildDailyPlan 今日建议额度', () => {
+  const NOW = new Date(2026, 8, 10, 12).getTime() // 9 月 10 日 → 剩余 21 天
+  it('额度 = 剩余预算 ÷ 剩余天数，整除场景精确命中', () => {
+    // 预算 300 元，已用 90 元 → 剩余 210 元 ÷ 21 天 = 10 元/天
+    const p = buildDailyPlan(30000, 9000, NOW)
+    expect(p).not.toBeNull()
+    expect(p!.daysRemaining).toBe(21)
+    expect(p!.remainMinor).toBe(21000)
+    expect(p!.dailyAllowanceMinor).toBe(1000)
+  })
+  it('除不尽时向下取整，不给出虚高额度', () => {
+    // 剩余 100 元 ÷ 21 天 = 4.761… → 476 分
+    const p = buildDailyPlan(10000, 0, NOW)
+    expect(p!.dailyAllowanceMinor).toBe(476)
+  })
+  it('超支：额度为 null，不出现误导性正数；剩余为负如实暴露', () => {
+    const p = buildDailyPlan(10000, 12000, NOW)
+    expect(p!.overspent).toBe(true)
+    expect(p!.remainMinor).toBe(-2000)
+    expect(p!.dailyAllowanceMinor).toBeNull()
+  })
+  it('刚好用完：与 App remain≥0 口径一致，额度展示 0', () => {
+    const p = buildDailyPlan(10000, 10000, NOW)
+    expect(p!.overspent).toBe(false)
+    expect(p!.remainMinor).toBe(0)
+    expect(p!.dailyAllowanceMinor).toBe(0)
+  })
+  it('预算为零 / 未设置预算：整体返回 null，不产生除零', () => {
+    expect(buildDailyPlan(0, 5000, NOW)).toBeNull()
+    expect(buildDailyPlan(null, 5000, NOW)).toBeNull()
+    expect(buildDailyPlan(undefined, 5000, NOW)).toBeNull()
+    expect(buildDailyPlan(-100, 0, NOW)).toBeNull() // 负数预算同样视为未设置
+  })
+  it('周期末最后一天：剩余 1 天，额度 = 剩余预算全额', () => {
+    const last = new Date(2026, 8, 30, 12).getTime()
+    const p = buildDailyPlan(10000, 4000, last)
+    expect(p!.daysRemaining).toBe(1)
+    expect(p!.dailyAllowanceMinor).toBe(6000)
+  })
+  it('解释模型一次给全：预算 / 已用 / 剩余 / 剩余天数', () => {
+    const p = buildDailyPlan(50000, 8000, NOW)!
+    expect(p.budgetMinor).toBe(50000)
+    expect(p.expenseSoFarMinor).toBe(8000)
+    expect(p.remainMinor).toBe(42000)
+    expect(p.daysRemaining).toBe(21)
+    expect(p.overspent).toBe(false)
   })
 })

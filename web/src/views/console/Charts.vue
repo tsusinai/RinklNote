@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import VChart from '../../utils/echarts' // ECharts 按需注册统一出口（utils/echarts.ts）
 import { useDataStore } from '../../stores/data'
 import { useThemeStore } from '../../stores/theme'
 import { insights } from '../../api/insights'
 import { budgets } from '../../api/budgets'
 import { toMonthStr, fmtDate, monthStart } from '../../utils/date'
-import { assessBudgetRisk, monthExpenseSoFar, displayPct, type BudgetRiskAssessment } from '../../utils/budgetRisk'
+import { assessBudgetRisk, monthExpenseSoFar, displayPct, buildDailyPlan, type BudgetRiskAssessment } from '../../utils/budgetRisk'
 import { dailyExpense, monthlyTrend, expenseByCategory, inPeriod, type ChartPeriod } from '../../utils/chartData'
 import { CHART_ANIMATION, readChartPalette, readChartAxisColor, readExpenseIncomeColors, readChartLineColor } from '../../utils/echartsTheme'
 import { formatMoney } from '../../utils/money'
@@ -20,6 +21,7 @@ import type { MonthlyReview, Budget } from '../../types'
 const data = useDataStore()
 const theme = useThemeStore()
 const toast = useToast()
+const router = useRouter()
 const period = ref<ChartPeriod>('month')
 const revMonth = ref(toMonthStr(Date.now()))
 const review = ref<MonthlyReview | null>(null)
@@ -178,11 +180,19 @@ async function exportShare() {
 /* 预算烧穿风险预警（Task 4.1 Web 侧）：本地实时派生、零存储。
  * 口径与 App 钉死对齐：pct = 预测周期末累计消耗 ÷ 月预算 × 100；<85 低 / 85~100 中 / >100 高。 */
 const monthBudget = ref<Budget | null>(null)
+/* 预算加载三态：加载中 / 失败 / 未设置 —— 失败不能伪装成「未设置预算」误导用户 */
+const budgetLoading = ref(true)
+const budgetError = ref(false)
 async function loadMonthBudget() {
+  budgetLoading.value = true
+  budgetError.value = false
   try {
     const list = await budgets.list()
     monthBudget.value = list.find((b) => !b.deleted && b.monthStart === monthStart(Date.now())) ?? null
-  } catch { monthBudget.value = null }
+  } catch {
+    monthBudget.value = null
+    budgetError.value = true
+  } finally { budgetLoading.value = false }
 }
 const risk = computed<BudgetRiskAssessment | null>(() => {
   const b = monthBudget.value
@@ -190,6 +200,19 @@ const risk = computed<BudgetRiskAssessment | null>(() => {
   void data.bills.length // 依赖账单变化触发重算
   return assessBudgetRisk(b.amountMinor, monthExpenseSoFar(data.bills), Date.now())
 })
+
+/* 今日建议额度（Task 5 Web）：剩余预算 ÷ 剩余天数（含今天），与 App「日均可花」同口径。
+ * 已用口径与风险横幅一致（monthExpenseSoFar，不含未来账单）；未设置/预算为零时为 null。 */
+const dailyPlan = computed(() => {
+  const b = monthBudget.value
+  if (!b || b.amountMinor <= 0) return null
+  void data.bills.length // 依赖账单变化触发重算
+  return buildDailyPlan(b.amountMinor, monthExpenseSoFar(data.bills), Date.now())
+})
+
+/* 超支引导入口：支出明细走既有「账单」路由，调整预算走「设置」页的月度预算卡片（不复制编辑逻辑） */
+function goBills() { router.push({ name: 'bills' }) }
+function goSettings() { router.push({ name: 'settings' }) }
 
 async function init() {
   if (!data.bills.length) {
@@ -236,6 +259,45 @@ watch(revMonth, loadReview)
       <button v-for="p in (['week','month','year'] as ChartPeriod[])" :key="p" :class="['toggle-btn', { on: period === p }]" @click="period = p">
         {{ p === 'week' ? '本周' : p === 'month' ? '本月' : '本年' }}
       </button>
+    </div>
+
+    <!-- 今日建议额度（Task 5）：剩余预算 ÷ 剩余天数，明示计算依据；超支不给正数额度并给出入口 -->
+    <div v-reveal="30" class="chart-card">
+      <div class="card-title">今日还能花多少 <span class="hint">本月预算 · 今日建议额度</span></div>
+      <div v-if="budgetLoading" class="plan-body">
+        <Skeleton height="30px" width="45%" /><Skeleton height="14px" width="80%" /><Skeleton height="14px" width="60%" />
+      </div>
+      <EmptyState v-else-if="budgetError" icon="chart" text="预算加载失败" hint="请检查网络后重试，本地记账不受影响" />
+      <EmptyState v-else-if="!dailyPlan" icon="chart" text="尚未设置本月预算" hint="在「设置 → 月度预算」设置后，这里会给出今日建议额度" />
+      <div v-else class="plan-body">
+        <template v-if="!dailyPlan.overspent">
+          <div class="plan-hero">
+            <span class="plan-amount">{{ formatMoney(dailyPlan.dailyAllowanceMinor ?? 0) }}</span>
+            <span class="plan-unit">今日建议额度</span>
+          </div>
+          <p class="plan-explain">
+            计算口径：剩余预算 {{ formatMoney(dailyPlan.remainMinor) }} ÷ 剩余 {{ dailyPlan.daysRemaining }} 天（含今天）；
+            每记一笔会实时回落，超支当天会提醒你。
+          </p>
+        </template>
+        <template v-else>
+          <div class="plan-hero over">
+            <span class="plan-amount">已超支 {{ formatMoney(-dailyPlan.remainMinor) }}</span>
+            <span class="plan-unit">今日不再给额度建议</span>
+          </div>
+          <p class="plan-explain">本月支出已超过预算，先看看钱花在哪儿，或调一调预算再继续。</p>
+          <div class="plan-actions">
+            <button class="plan-btn" type="button" @click="goBills">查看支出明细</button>
+            <button class="plan-btn" type="button" @click="goSettings">调整预算</button>
+          </div>
+        </template>
+        <div class="plan-grid">
+          <div class="plan-item"><span class="pi-k">本月预算</span><b class="pi-v">{{ formatMoney(dailyPlan.budgetMinor) }}</b></div>
+          <div class="plan-item"><span class="pi-k">已用</span><b class="pi-v" :class="{ over: dailyPlan.overspent }">{{ formatMoney(dailyPlan.expenseSoFarMinor) }}</b></div>
+          <div class="plan-item"><span class="pi-k">剩余</span><b class="pi-v">{{ formatMoney(Math.max(0, dailyPlan.remainMinor)) }}</b></div>
+          <div class="plan-item"><span class="pi-k">剩余天数</span><b class="pi-v">{{ dailyPlan.daysRemaining }} 天</b></div>
+        </div>
+      </div>
     </div>
 
     <!-- 预算烧穿风险预警（Task 4.1）：仅本月有预算且预测 ≥85% 时展示 -->
@@ -329,6 +391,27 @@ watch(revMonth, loadReview)
 
 /* 周期切换：220ms 过渡（背景/文字/描边随选中态平滑变化） */
 .period-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+
+/* 今日建议额度（Task 5）：金额一律整数分经 formatMoney 展示，色彩走既有令牌 */
+.plan-body { display: flex; flex-direction: column; gap: 10px; }
+.plan-hero { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.plan-amount { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.plan-hero.over .plan-amount { color: var(--expense); }
+.plan-unit { color: var(--muted); font-size: 13px; }
+.plan-explain { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-btn {
+  padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border); background: none;
+  color: var(--primary); font-size: 13px; cursor: pointer; font-family: inherit;
+  transition: background var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease);
+}
+.plan-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
+.plan-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.plan-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.pi-k { color: var(--muted); font-size: 12px; }
+.pi-v { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pi-v.over { color: var(--expense); }
+@media (max-width: 640px) { .plan-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* 预算烧穿风险预警条：中风险橙 / 高风险红，色彩全部走既有令牌（--chart-2 / --expense） */
 .risk-banner {
