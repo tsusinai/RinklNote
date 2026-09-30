@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -97,6 +98,7 @@ import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
+import com.example.rinklnote.ui.viewmodel.SuggestionSource
 import kotlinx.coroutines.launch
 
 @Composable
@@ -237,12 +239,21 @@ private fun DrawerContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            state.suggestion?.let { suggestion ->
-                SuggestionSection(
-                    label = suggestion.label,
-                    onUse = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
-                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) }
+            // 智能建议卡（体验优化 Task 3）：依据 / 模糊金额 / 固定与关闭均为可见入口；
+            // 关闭或自动收起后出现「重新显示」入口，不依赖用户猜测手势。
+            val aiSuggestion = state.suggestion
+            if (aiSuggestion != null) {
+                AiSuggestionCard(
+                    suggestion = aiSuggestion,
+                    pinned = state.suggestionPinned,
+                    onApply = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
+                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) },
+                    onTogglePin = { viewModel.onEvent(QuickAddEvent.ToggleSuggestionPin) },
+                    onEditAmount = onAmountTap
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+            } else if (state.suggestionRestorable) {
+                SuggestionReshowChip(onShow = { viewModel.onEvent(QuickAddEvent.ShowSuggestion) })
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -337,6 +348,153 @@ private fun DrawerContent(
                 )
             }
         }
+    }
+}
+
+/**
+ * 智能建议卡（体验优化 Task 3）：
+ * - 高置信度（needsConfirmation=false）：点卡片「一键记入」，保留一步落库通路；
+ * - 需确认（needsConfirmation=true）：点卡片只回填表单（检查后记入），核对后手动点「确认」；
+ * - 模糊金额：明确展示原始区间与系统采用的中值，并提供「改金额」入口，不把中值当精确金额；
+ * - 固定（📌）后 5 秒自动消失不再生效；✕ 关闭后可从「重新显示」入口找回。
+ */
+@Composable
+private fun AiSuggestionCard(
+    suggestion: QuickAddState.SuggestionData,
+    pinned: Boolean,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+    onTogglePin: () -> Unit,
+    onEditAmount: () -> Unit
+) {
+    val shape = RoundedCornerShape(15.dp)
+    val onContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .then(applyCardGlass(shape))
+            .clickable(onClick = onApply)
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = suggestion.label,
+                fontSize = 14.sp,
+                color = onContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            // 固定：可见入口（不依赖长按猜测手势）；固定后 5 秒自动消失不再生效
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onTogglePin),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📌",
+                    fontSize = 13.sp,
+                    color = if (pinned) onContainer else onContainer.copy(alpha = 0.45f)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✕", fontSize = 14.sp, color = onContainer)
+            }
+        }
+        // 依据行：优先展示服务端解释，否则按推荐来源生成简短依据
+        val basis = suggestion.explanation
+            ?: suggestion.categorySource?.let { source ->
+                "依据：" + when (source) {
+                    SuggestionSource.HISTORY -> "历史记账"
+                    SuggestionSource.RULE -> "规则匹配"
+                    SuggestionSource.LLM -> "AI 归类"
+                }
+            }
+        basis?.let {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = it,
+                fontSize = 12.sp,
+                color = onContainer.copy(alpha = 0.78f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        // 模糊金额行：原始区间 + 系统采用的中值；「改金额」直达金额输入，不以中值冒充精确金额
+        val rangeMin = suggestion.amountMinMinor
+        val rangeMax = suggestion.amountMaxMinor
+        if (suggestion.fuzzyAmount && rangeMin != null && rangeMax != null) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "金额 ${Money.toYuanInputString(rangeMin)}~" +
+                        "${Money.toYuanInputString(rangeMax)} 元" +
+                        " · 按 ${Money.format(suggestion.amount)} 记",
+                    fontSize = 12.sp,
+                    color = onContainer.copy(alpha = 0.78f),
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = "改金额",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = onContainer,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onEditAmount)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+        // 动作提示：一键记入 vs 检查后记入，让确认层语义可见
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = when {
+                suggestion.needsConfirmation && suggestion.filled -> "已填入 · 核对后点「确认」记入"
+                suggestion.needsConfirmation -> "点击填入表单 · 核对后再记入"
+                else -> "点击一键记入"
+            },
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = onContainer
+        )
+    }
+}
+
+/** 建议卡被关闭/自动收起后的「重新显示」入口（体验优化 Task 3：可发现性，不靠猜测手势）。 */
+@Composable
+private fun SuggestionReshowChip(onShow: () -> Unit) {
+    val shape = RoundedCornerShape(15.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .then(applyCardGlass(shape))
+            .clickable(onClick = onShow)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "记账建议已收起",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = "重新显示",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 

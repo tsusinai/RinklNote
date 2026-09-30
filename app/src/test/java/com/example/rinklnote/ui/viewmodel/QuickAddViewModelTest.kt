@@ -1,5 +1,7 @@
 package com.example.rinklnote.ui.viewmodel
 
+import com.example.rinklnote.data.network.ApiService
+import com.example.rinklnote.data.network.dto.ParseResponse
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.BillTemplate
@@ -24,12 +26,14 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -85,6 +89,13 @@ class QuickAddViewModelTest {
         advanceUntilIdle()
         vm.onEvent(QuickAddEvent.SelectCategory(repo.expenseCategories.value.first()))
         vm.onEvent(QuickAddEvent.SelectAccount(accountRepo.accounts.value.first()))
+        return vm
+    }
+
+    /** 构造带打桩 ApiService 的 VM：parse / suggest 结果由用例注入（Task 3 建议确认层）。 */
+    private fun TestScope.newVMWithApi(api: ApiService): QuickAddViewModel {
+        val vm = QuickAddViewModel(repo, accountRepo, syncManager = null, api = api)
+        advanceUntilIdle()
         return vm
     }
 
@@ -288,6 +299,191 @@ class QuickAddViewModelTest {
         assertEquals(BillFeedback.SavedLocally(), vm.feedback.first())
         // 未登录不追加失败提示：100ms（虚拟时间）内没有新反馈即为空。
         assertTrue(runCatching { withTimeout(100) { vm.feedback.first() } }.isFailure)
+    }
+
+    // ── 体验优化 Task 3：建议可信度与确认层 ──
+
+    @Test
+    fun `高置信度解析建议一键记入直接落库`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.parseBill(any())).thenReturn(
+            ParseResponse(
+                amount = "35", categoryName = "三餐", remark = "午餐",
+                confidence = "HIGH", needsConfirmation = false, categorySource = "HISTORY"
+            )
+        )
+        val vm = newVMWithApi(api)
+        vm.onEvent(QuickAddEvent.NlpInput("午餐35元"))
+        vm.onEvent(QuickAddEvent.NlpSubmit)
+        advanceUntilIdle()
+
+        // 高置信度：保留一步落库通路（账户由默认账户兜底）
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(3500L, repo.addedBills[0].amountMinor)
+        assertEquals("三餐", repo.addedBills[0].categoryName)
+        assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
+        assertNull(vm.state.value.suggestion)
+    }
+
+    @Test
+    fun `需确认的解析建议只出卡片不落库点卡片后回填表单`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.parseBill(any())).thenReturn(
+            ParseResponse(
+                amount = "35", categoryName = "三餐", remark = "午餐",
+                confidence = "MEDIUM", needsConfirmation = true, categorySource = "RULE",
+                explanation = "规则词「午餐」归类"
+            )
+        )
+        val vm = newVMWithApi(api)
+        vm.onEvent(QuickAddEvent.NlpInput("午餐三四十元"))
+        vm.onEvent(QuickAddEvent.NlpSubmit)
+        advanceUntilIdle()
+
+        // 只出建议卡：不落库、不回填、无一步确认效果
+        assertEquals(0, repo.addedBills.size)
+        val card = requireNotNull(vm.state.value.suggestion) { "应出现需确认建议卡" }
+        assertTrue(card.needsConfirmation)
+        assertEquals("三餐", card.categoryName)
+        assertEquals("规则词「午餐」归类", card.explanation)
+        assertEquals("", vm.state.value.amount)
+        assertNull(vm.state.value.selectedCategory)
+        assertTrue(runCatching { withTimeout(100) { vm.effects.first() } }.isFailure)
+
+        // 点卡片（检查后记入）：回填表单，仍不落库，等用户手动确认
+        vm.onEvent(QuickAddEvent.SuggestionClick)
+        advanceUntilIdle()
+        assertEquals(0, repo.addedBills.size)
+        assertEquals("35", vm.state.value.amount)
+        assertEquals("三餐", vm.state.value.selectedCategory?.name)
+        assertTrue(vm.state.value.suggestion?.filled == true)
+        assertTrue(runCatching { withTimeout(100) { vm.effects.first() } }.isFailure)
+    }
+
+    @Test
+    fun `模糊金额建议展示区间与中值且修改金额后按新值落库`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.parseBill(any())).thenReturn(
+            ParseResponse(
+                amount = "35", categoryName = "三餐", remark = "买了些",
+                confidence = "MEDIUM", needsConfirmation = true, categorySource = "RULE",
+                fuzzyAmount = true, amountMinMinor = 3000L, amountMaxMinor = 4000L,
+                explanation = "模糊金额「三四十」（区间30~40元，按中值35元记）"
+            )
+        )
+        val vm = newVMWithApi(api)
+        vm.onEvent(QuickAddEvent.NlpInput("午餐三四十元"))
+        vm.onEvent(QuickAddEvent.NlpSubmit)
+        advanceUntilIdle()
+
+        // 区间与中值正确进入展示模型：amount 为中值（整数分），区间 3000~4000 分
+        val card = requireNotNull(vm.state.value.suggestion) { "应出现模糊金额建议卡" }
+        assertTrue(card.fuzzyAmount)
+        assertEquals(3500L, card.amount)
+        assertEquals(3000L, card.amountMinMinor)
+        assertEquals(4000L, card.amountMaxMinor)
+        assertEquals("模糊金额「三四十」（区间30~40元，按中值35元记）", card.explanation)
+
+        // 检查后记入：回填中值 → 用户改成 38 → 手动确认，按新值落库
+        vm.onEvent(QuickAddEvent.SuggestionClick)
+        assertEquals("35", vm.state.value.amount)
+        vm.onEvent(QuickAddEvent.Clear)
+        vm.onEvent(QuickAddEvent.Digit("3"))
+        vm.onEvent(QuickAddEvent.Digit("8"))
+        vm.onEvent(QuickAddEvent.Confirm)
+        advanceUntilIdle()
+
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(3800L, repo.addedBills[0].amountMinor)
+    }
+
+    @Test
+    fun `高置信度但分类匹配不到时降级为检查后记入不落库`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.parseBill(any())).thenReturn(
+            ParseResponse(
+                amount = "12", categoryName = "不存在的分类",
+                confidence = "HIGH", needsConfirmation = false
+            )
+        )
+        val vm = newVMWithApi(api)
+        vm.onEvent(QuickAddEvent.NlpInput("买点东西12元"))
+        vm.onEvent(QuickAddEvent.NlpSubmit)
+        advanceUntilIdle()
+
+        // 分类解析不到：不再静默无响应，也不落库——降级为「检查后记入」卡片
+        assertEquals(0, repo.addedBills.size)
+        val card = requireNotNull(vm.state.value.suggestion) { "应降级为检查后记入卡片" }
+        assertTrue(card.filled)
+        assertEquals("12", vm.state.value.amount)
+        assertNull(vm.state.value.selectedCategory)
+    }
+
+    @Test
+    fun `历史智能建议一键记入直接落库并清除卡片`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.getSuggestion()).thenReturn(
+            mapOf("label" to "午餐时间", "categoryName" to "三餐", "amount" to "20")
+        )
+        val vm = newVMWithApi(api)
+        vm.loadSuggestion()
+        runCurrent() // 先跑到 5 秒自动消失定时器的挂起点，断言卡片模型
+
+        val card = requireNotNull(vm.state.value.suggestion) { "应加载出智能建议卡" }
+        // insights/suggest 来自用户自己的历史高频模式：高置信度 + 历史来源 + 无需确认
+        assertFalse(card.needsConfirmation)
+        assertEquals("午餐时间", card.label)
+        assertEquals("三餐", card.categoryName)
+        assertEquals(2000L, card.amount)
+
+        vm.onEvent(QuickAddEvent.SuggestionClick)
+        advanceUntilIdle()
+
+        assertEquals(1, repo.addedBills.size)
+        assertEquals(2000L, repo.addedBills[0].amountMinor)
+        assertEquals("三餐", repo.addedBills[0].categoryName)
+        assertEquals(QuickAddEffect.FinalConfirmCompleted, vm.effects.first())
+        assertNull(vm.state.value.suggestion)
+    }
+
+    @Test
+    fun `建议卡默认5秒自动消失固定后不消失可关闭并重新显示`() = runTest(dispatcher) {
+        val api = mock<ApiService>()
+        whenever(api.getSuggestion()).thenReturn(
+            mapOf("label" to "午餐时间", "categoryName" to "三餐", "amount" to "20")
+        )
+        val vm = newVMWithApi(api)
+
+        // 默认：5 秒后自动消失，且保留「重新显示」入口
+        vm.loadSuggestion()
+        runCurrent()
+        assertNotNull(vm.state.value.suggestion)
+        advanceUntilIdle()
+        assertNull(vm.state.value.suggestion)
+        assertTrue(vm.state.value.suggestionRestorable)
+
+        // 重新显示：卡片恢复，入口收起；恢复后的卡重新参与 5 秒自动消失
+        vm.onEvent(QuickAddEvent.ShowSuggestion)
+        assertNotNull(vm.state.value.suggestion)
+        assertFalse(vm.state.value.suggestionRestorable)
+
+        // 固定：自动消失不再生效
+        vm.onEvent(QuickAddEvent.ToggleSuggestionPin)
+        assertTrue(vm.state.value.suggestionPinned)
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.suggestion)
+
+        // 关闭：卡片清除、固定态复位，仍可重新显示
+        vm.onEvent(QuickAddEvent.DismissSuggestion)
+        assertNull(vm.state.value.suggestion)
+        assertFalse(vm.state.value.suggestionPinned)
+        assertTrue(vm.state.value.suggestionRestorable)
+        vm.onEvent(QuickAddEvent.ShowSuggestion)
+        assertNotNull(vm.state.value.suggestion)
+        // 未固定 → 重新计时 5 秒后再次自动收起
+        advanceUntilIdle()
+        assertNull(vm.state.value.suggestion)
+        assertTrue(vm.state.value.suggestionRestorable)
     }
 
     /** Minimal repository fake — no Room, drives state via MutableStateFlow. */

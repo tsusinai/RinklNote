@@ -217,7 +217,23 @@ data class ParseResponse(
     val categoryName: String = "",
     val remark: String = "",
     val subCategoryName: String = "",
-    val message: String = ""
+    val message: String = "",
+    // ── 体验优化 Task 3：建议可信度契约（服务端恒有键，含显式 null）──
+    // 置信度："HIGH"=可一键记入；"MEDIUM"=有依据但需过目；"LOW"=AI 归类/无分类，必须检查后记入。
+    val confidence: String = "LOW",
+    // 是否需要用户确认后才能记入（服务端 = confidence != HIGH；模糊金额恒为 true）。门控以此字段为准。
+    val needsConfirmation: Boolean = true,
+    // 分类推荐来源："HISTORY"（历史统计/学习词）| "RULE"（规则词表）| "LLM"（AI 归类）；null = 无分类推荐。
+    val categorySource: String? = null,
+    // 账户推荐来源；服务端暂不做账户推荐，恒为 null（保留字段，App 端按本地默认账户兜底）。
+    val accountSource: String? = null,
+    // 现成中文解释（建议依据），可直接展示；null = 无。
+    val explanation: String? = null,
+    // 是否命中模糊金额词（三四十/几十块等）；true 时 amount 是区间中值而非精确金额。
+    val fuzzyAmount: Boolean = false,
+    // 模糊区间下界/上界（整数分）；仅 fuzzyAmount=true 时非 null。
+    val amountMinMinor: Long? = null,
+    val amountMaxMinor: Long? = null
 )
 
 @Serializable

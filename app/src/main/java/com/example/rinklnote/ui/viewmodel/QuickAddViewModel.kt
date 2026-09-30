@@ -14,6 +14,7 @@ import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.ParseRequest
+import com.example.rinklnote.data.network.dto.ParseResponse
 import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.PlaceRepository
@@ -54,6 +55,10 @@ data class QuickAddState(
     val isParsing: Boolean = false,
     val suggestion: SuggestionData? = null,
     val suggestionDismissed: Boolean = false,
+    /** 建议卡已被用户固定：5 秒自动消失不再生效（体验优化 Task 3）。 */
+    val suggestionPinned: Boolean = false,
+    /** 建议卡被关闭/自动收起后仍有可恢复的建议：显示「重新显示」入口。 */
+    val suggestionRestorable: Boolean = false,
     /** 已打点的位置：仅用户主动点「位置」chip 采集一次才有值；null = 不带位置。 */
     val location: LocationTag? = null,
 
@@ -63,7 +68,35 @@ data class QuickAddState(
     /** 常去地点建议：打点位置接近已知地点时出现（零存储实时派生）。 */
     val placeSuggestion: PlaceSuggestionData? = null
 ) {
-    data class SuggestionData(val label: String, val categoryName: String, val amount: Long)
+    /**
+     * 智能建议（体验优化 Task 3）：金额一律整数分，模糊金额时 [amount] 是区间中值。
+     * 可信度字段与服务端 POST /api/bills/parse 的 ParseSuggestionResponse 契约一一对应；
+     * 本地 VoiceParser 兜底解析没有模糊区间概念，恒 fuzzyAmount=false。
+     */
+    data class SuggestionData(
+        val label: String,
+        val categoryName: String,
+        /** 金额（分）；fuzzyAmount=true 时为区间中值，不得当精确金额展示。 */
+        val amount: Long,
+        /** 置信度等级（HIGH/MEDIUM/LOW）。 */
+        val confidence: SuggestionConfidence = SuggestionConfidence.LOW,
+        /** 分类推荐来源（HISTORY/RULE/LLM）；null = 无分类推荐。 */
+        val categorySource: SuggestionSource? = null,
+        /** 账户推荐来源；服务端暂不推荐账户，恒 null（App 按本地默认账户兜底）。 */
+        val accountSource: SuggestionSource? = null,
+        /** true = 必须检查后记入：点建议只回填表单，绝不直接落库。门控以此字段为准。 */
+        val needsConfirmation: Boolean = true,
+        /** 现成中文解释（建议依据）；null = 无，由 UI 按来源生成简短依据文案。 */
+        val explanation: String? = null,
+        /** 是否模糊金额（三四十/几十块等）；true 时 [amount] 是 [amountMinMinor]~[amountMaxMinor] 的中值。 */
+        val fuzzyAmount: Boolean = false,
+        val amountMinMinor: Long? = null,
+        val amountMaxMinor: Long? = null,
+        /** 建议回填备注；空串 = 不带备注（与旧建议卡行为一致）。 */
+        val remark: String = "",
+        /** 表单已按建议回填过：再次点建议卡不覆盖用户已修改的金额/分类。 */
+        val filled: Boolean = false
+    )
 
     /** 打点到账单上的经纬度（度）。 */
     data class LocationTag(val latitude: Double, val longitude: Double)
@@ -78,6 +111,38 @@ data class QuickAddState(
 
     val categories: List<Category>
         get() = if (billType == BillType.EXPENSE) expenseCategories else incomeCategories
+}
+
+/** 建议置信度等级（与服务端 NLU 的 SuggestionConfidence 对应）。 */
+enum class SuggestionConfidence {
+    /** 可一键记入。 */
+    HIGH,
+    /** 有依据但需用户过目。 */
+    MEDIUM,
+    /** AI 归类或无分类，必须检查后记入。 */
+    LOW;
+
+    companion object {
+        /** 服务端原始字符串 → 枚举；未知值兜底 LOW（宁多确认不误记）。 */
+        fun fromRaw(raw: String?): SuggestionConfidence =
+            entries.firstOrNull { it.name == raw } ?: LOW
+    }
+}
+
+/** 分类/账户推荐来源（与服务端 NLU 的 SuggestionSource 对应）。 */
+enum class SuggestionSource {
+    /** 历史统计 / 用户词表 / 学习层沉淀。 */
+    HISTORY,
+    /** 内置规则词表命中。 */
+    RULE,
+    /** AI（LLM）归类。 */
+    LLM;
+
+    companion object {
+        /** 服务端原始字符串 → 枚举；未知值兜底 null（UI 不展示依据行）。 */
+        fun fromRaw(raw: String?): SuggestionSource? =
+            entries.firstOrNull { it.name == raw }
+    }
 }
 
 sealed interface QuickAddEvent {
@@ -96,6 +161,12 @@ sealed interface QuickAddEvent {
     data class TemplateClick(val template: BillTemplate) : QuickAddEvent
     data object SuggestionClick : QuickAddEvent
     data object DismissSuggestion : QuickAddEvent
+
+    /** 建议卡「固定」按钮：切换固定态；固定后 5 秒自动消失不再生效。 */
+    data object ToggleSuggestionPin : QuickAddEvent
+
+    /** 建议卡被关闭/自动收起后，点「重新显示」入口恢复上次建议。 */
+    data object ShowSuggestion : QuickAddEvent
     data object Confirm : QuickAddEvent
 
     /** 位置 chip：抽屉侧采集成功后回填经纬度（采集动作在 UI 层，VM 不持有 Context）。 */
@@ -223,8 +294,18 @@ class QuickAddViewModel(
             is QuickAddEvent.SuggestionClick -> onSuggestionClick()
             is QuickAddEvent.VoiceUtterance -> onVoiceUtterance(event.text)
             is QuickAddEvent.DismissSuggestion -> _state.update {
-                it.copy(suggestion = null, suggestionDismissed = true)
+                // 显式关闭：恢复默认（下张建议卡重新参与 5 秒自动消失），并保留「重新显示」入口
+                it.copy(
+                    suggestion = null,
+                    suggestionDismissed = true,
+                    suggestionRestorable = it.suggestion != null,
+                    suggestionPinned = false
+                )
             }
+            is QuickAddEvent.ToggleSuggestionPin -> _state.update {
+                it.copy(suggestionPinned = !it.suggestionPinned)
+            }
+            is QuickAddEvent.ShowSuggestion -> reshowSuggestion()
             is QuickAddEvent.Confirm -> confirm()
             is QuickAddEvent.LocationResolved -> {
                 _state.update {
@@ -443,23 +524,36 @@ class QuickAddViewModel(
         viewModelScope.launch {
             try {
                 val result = svc.parseBill(ParseRequest(text))
-                if (result.amount.isNotBlank() && result.amount.toDoubleOrNull() != null) {
-                    val cat = _state.value.categories.find { it.name == result.categoryName }
-                    if (cat != null) {
-                        _state.update {
-                            it.copy(
-                                amount = result.amount,
-                                selectedCategory = cat,
-                                billType = cat.billType,
-                                remark = result.remark.ifBlank { text },
-                                nlpInput = "",
-                                isParsing = false
-                            )
-                        }
-                        // One-step: NLP intent saves directly
-                        finalConfirm()
+                // 金额以「元」字符串到达（模糊金额时为区间中值）。服务端由 Double 转字符串，
+                // 走 Money 的 Double 外部边界换算（含可信上限守卫，兼容科学计数法），归一为整数分。
+                val parsedYuan = result.amount.toDoubleOrNull()
+                val amountMinor = if (parsedYuan != null && Money.isPlausibleParsedYuan(parsedYuan)) {
+                    Money.yuanToMinor(parsedYuan)
+                } else {
+                    null
+                }
+                if (amountMinor != null) {
+                    val suggestion = suggestionFromParse(result, text, amountMinor)
+                    lastSuggestion = suggestion
+                    if (!result.needsConfirmation) {
+                        // 高置信度：沿用一步落库通路（applySuggestion 内含默认账户兜底，
+                        // 以及分类/账户解析失败时降级「检查后记入」，不再静默无响应）。
+                        _state.update { it.copy(isParsing = false, nlpInput = "") }
+                        applySuggestion(suggestion)
                         return@launch
                     }
+                    // 需要确认（MEDIUM/LOW 或模糊金额）：只出建议卡，点「检查后记入」才回填表单，
+                    // 绝不直接 finalConfirm（体验优化 Task 3 确认层）。
+                    _state.update {
+                        it.copy(
+                            isParsing = false,
+                            nlpInput = "",
+                            suggestion = suggestion,
+                            suggestionRestorable = false,
+                            suggestionDismissed = false
+                        )
+                    }
+                    return@launch
                 }
                 _state.update { it.copy(isParsing = false) }
             } catch (_: Exception) {
@@ -468,6 +562,26 @@ class QuickAddViewModel(
             }
         }
     }
+
+    /** 服务端 parse 契约 → 本地建议模型：字段语义与服务端 ParseSuggestionResponse 一一对应。 */
+    private fun suggestionFromParse(
+        result: ParseResponse,
+        inputText: String,
+        amountMinor: Long
+    ): QuickAddState.SuggestionData = QuickAddState.SuggestionData(
+        label = inputText,
+        categoryName = result.categoryName,
+        amount = amountMinor,
+        confidence = SuggestionConfidence.fromRaw(result.confidence),
+        categorySource = SuggestionSource.fromRaw(result.categorySource),
+        accountSource = SuggestionSource.fromRaw(result.accountSource),
+        needsConfirmation = result.needsConfirmation,
+        explanation = result.explanation?.takeIf { it.isNotBlank() },
+        fuzzyAmount = result.fuzzyAmount,
+        amountMinMinor = result.amountMinMinor,
+        amountMaxMinor = result.amountMaxMinor,
+        remark = result.remark.ifBlank { inputText }
+    )
 
     /** Offline/unauth fallback: local rule-based parsing (VoiceParser). */
     private fun applyLocalParse(text: String) {
@@ -601,22 +715,64 @@ class QuickAddViewModel(
     }
 
     // ── Suggestion ──
+
+    /** 上一次加载/解析出的建议：供「重新显示」入口恢复（不随卡片关闭而丢失）。 */
+    private var lastSuggestion: QuickAddState.SuggestionData? = null
+
     private fun onSuggestionClick() {
         val s = _state.value.suggestion ?: return
-        val cat = _state.value.categories.find { it.name == s.categoryName } ?: return
-        val acct = defaultAccount(_state.value.accounts) ?: return
+        applySuggestion(s)
+    }
+
+    /**
+     * 应用建议（体验优化 Task 3 确认层门控）：
+     * - needsConfirmation=true → 只回填表单，**绝不调用 finalConfirm**；金额、分类、账户
+     *   保持可改，由用户核对后手动点「确认」记入。
+     * - needsConfirmation=false（高置信度）→ 一键记入：回填后走原一步落库通路。
+     *   分类/账户解析不到时降级为「检查后记入」，不再静默无响应。
+     * - 已回填过（filled）的建议卡再点不重复动作，避免覆盖用户已修改的金额/分类。
+     */
+    private fun applySuggestion(s: QuickAddState.SuggestionData) {
+        if (s.filled) return
+        if (s.needsConfirmation) {
+            fillFormFromSuggestion(s)
+            return
+        }
+        val cat = _state.value.categories.find { it.name == s.categoryName }
+        val acct = defaultAccount(_state.value.accounts)
+        if (cat == null || acct == null) {
+            fillFormFromSuggestion(s)
+            return
+        }
         _state.update {
             it.copy(
                 amount = Money.toYuanInputString(s.amount),
                 selectedCategory = cat,
                 billType = cat.billType,
-                selectedAccount = acct,
-                remark = "",
+                // 保留用户已选账户；未选时兜底默认账户（与旧建议卡行为一致）
+                selectedAccount = it.selectedAccount ?: acct,
+                remark = s.remark,
                 suggestion = null,
-                suggestionDismissed = true
+                suggestionDismissed = true,
+                suggestionRestorable = false
             )
         }
-        viewModelScope.launch { finalConfirm() }
+        finalConfirm()
+    }
+
+    /** 按建议回填表单（检查后记入）：卡片转为「已填入」提示态，依据/模糊区间继续可见。 */
+    private fun fillFormFromSuggestion(s: QuickAddState.SuggestionData) {
+        val cat = _state.value.categories.find { it.name == s.categoryName }
+        _state.update {
+            it.copy(
+                amount = Money.toYuanInputString(s.amount),
+                selectedCategory = cat ?: it.selectedCategory,
+                billType = cat?.billType ?: it.billType,
+                selectedAccount = it.selectedAccount ?: defaultAccount(it.accounts),
+                remark = s.remark,
+                suggestion = s.copy(filled = true)
+            )
+        }
     }
 
     fun loadSuggestion() {
@@ -629,18 +785,52 @@ class QuickAddViewModel(
                 if (!catName.isNullOrBlank() && amount != null) {
                     // 服务端给的是「元」字符串，转成分保存；解析失败（异常格式）直接放弃该建议。
                     val amtMinor = Money.parseMinor(amount) ?: return@launch
+                    // 智能建议来自用户自己的历史高频模式（insights/suggest）：视为高置信度，
+                    // 保留原「点卡片一键记入」的一步通路，不给高频场景增加点击数。
+                    val data = QuickAddState.SuggestionData(
+                        label = result["label"] ?: catName,
+                        categoryName = catName,
+                        amount = amtMinor,
+                        confidence = SuggestionConfidence.HIGH,
+                        categorySource = SuggestionSource.HISTORY,
+                        needsConfirmation = false
+                    )
+                    lastSuggestion = data
                     _state.update {
-                        it.copy(suggestion = QuickAddState.SuggestionData(
-                            label = result["label"] ?: catName,
-                            categoryName = catName,
-                            amount = amtMinor
-                        ))
+                        it.copy(
+                            suggestion = data,
+                            suggestionRestorable = false,
+                            suggestionDismissed = false
+                        )
                     }
-                    kotlinx.coroutines.delay(5000)
-                    _state.update { it.copy(suggestion = null) }
+                    autoDismissIfNotPinned(data)
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * 建议卡默认 5 秒自动消失（保留基线行为）；固定（suggestionPinned）后不消失。
+     * 只收起「本次加载的那张卡」：期间被关闭又手动重显的卡不受旧定时器牵连。
+     */
+    private suspend fun autoDismissIfNotPinned(target: QuickAddState.SuggestionData) {
+        kotlinx.coroutines.delay(5000)
+        if (_state.value.suggestion !== target) return
+        if (_state.value.suggestionPinned) return
+        _state.update { it.copy(suggestion = null, suggestionRestorable = true) }
+    }
+
+    /** 「重新显示」：恢复上次建议，并重新参与 5 秒自动消失（固定态下不会消失）。 */
+    private fun reshowSuggestion() {
+        val data = lastSuggestion ?: return
+        _state.update {
+            it.copy(
+                suggestion = data,
+                suggestionDismissed = false,
+                suggestionRestorable = false
+            )
+        }
+        viewModelScope.launch { autoDismissIfNotPinned(data) }
     }
 
     private val confirming = AtomicBoolean(false)
@@ -740,6 +930,8 @@ class QuickAddViewModel(
                 isParsing = false,
                 suggestion = null,
                 suggestionDismissed = false,
+                // 「重新显示」入口随本次记账收起；固定态是本次会话的偏好，跨笔保留
+                suggestionRestorable = false,
                 // 位置不跨笔继承：本笔记完，下一笔默认重新开始（要不要打点由用户再决定）
                 location = null,
                 // 记账日覆盖同样不跨笔继承
