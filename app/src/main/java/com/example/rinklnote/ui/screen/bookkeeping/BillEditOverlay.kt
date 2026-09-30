@@ -784,7 +784,7 @@ private fun DeleteBillDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("删除这笔账单？") },
-        text = { Text("删除后会从本地和云端同步移除，此操作不可撤销。") },
+        text = { Text("删除后会从本地和云端移除，确认后可在提示条中撤销。") },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("删除", color = MaterialTheme.colorScheme.error)
