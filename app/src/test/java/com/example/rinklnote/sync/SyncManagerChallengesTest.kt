@@ -11,6 +11,7 @@ import com.example.rinklnote.data.network.dto.ChallengeDTO
 import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.UpsertChallengeRequest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -52,6 +53,8 @@ class SyncManagerChallengesTest {
             challengeDao = challengeDao
         )
         whenever(tokenManager.lastSyncTime).thenReturn(flowOf(0L))
+        // 体验优化 Task 1：单条推送也先校验登录态；默认按「已登录」打桩，既有用例语义不变。
+        runBlocking { whenever(tokenManager.isLoggedIn()).thenReturn(true) }
     }
 
     private suspend fun stubLoggedIn(loggedIn: Boolean) {

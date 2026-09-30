@@ -17,6 +17,7 @@ import com.example.rinklnote.data.network.dto.CreateBillRequest
 import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
@@ -57,6 +58,8 @@ class SyncManagerTest {
         accountDao = mock()
         manager = SyncManager(api, tokenManager, billDao, templateDao = null, budgetDao = budgetDao, accountDao = accountDao)
         whenever(tokenManager.lastSyncTime).thenReturn(flowOf(0L))
+        // 体验优化 Task 1：单条推送也先校验登录态；默认按「已登录」打桩，既有用例语义不变。
+        runBlocking { whenever(tokenManager.isLoggedIn()).thenReturn(true) }
     }
 
     private suspend fun stubLoggedIn(loggedIn: Boolean) {
@@ -486,5 +489,88 @@ class SyncManagerTest {
                     !acc.dirty
             }
         )
+    }
+
+    // ── 体验优化 Task 1：同步状态可观察化（成功 / 失败保持 dirty / 重试恢复 / 401 需要登录）──
+
+    @Test
+    fun `sync success exposes Synced status with pushed and pulled counts`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(listOf(billDTO(1, 100)), serverTime = 1000))
+
+        manager.sync()
+
+        val status = manager.status.value
+        assertTrue("status was $status", status is SyncStatus.Synced)
+        val synced = status as SyncStatus.Synced
+        assertEquals(0, synced.pushed)
+        assertEquals(1, synced.pulled)
+        assertTrue("完成时间应大于 0", synced.time > 0L)
+    }
+
+    @Test
+    fun `push failure keeps the bill dirty and reports RetryPending with pending count`() = runTest {
+        // 账户尚无 server_id → pushOneBill 返回 false，本条留在本机等下次同步（原语义不变）。
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = null)
+        )
+        whenever(billDao.countUnsynced()).thenReturn(1L)
+
+        val result = manager.pushBill(bill(id = 7, serverId = null))
+
+        // 账单仍保持 dirty：绝不回写 server_id（回写即置 dirty=0）。
+        verify(billDao, never()).updateServerId(any(), any(), any())
+        assertTrue("result was $result", result is SyncResult.Error)
+        val status = manager.status.value
+        assertTrue("status was $status", status is SyncStatus.RetryPending)
+        val retry = status as SyncStatus.RetryPending
+        assertEquals(1, retry.pendingCount)
+        assertEquals("账户尚未同步，稍后自动重试", retry.reason)
+    }
+
+    @Test
+    fun `retry after failure restores Synced and clears the persisted failure`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenThrow(RuntimeException("网络不可用"))
+            .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
+
+        val first = manager.sync()
+        assertTrue("first result was $first", first is SyncResult.Error)
+        assertTrue("失败后应为待重试：${manager.status.value}", manager.status.value is SyncStatus.RetryPending)
+        verify(tokenManager).setSyncFailure("网络不可用")
+
+        // 立即重试 → 恢复成功，状态回到 Synced 并清除持久化的失败原因。
+        val retried = manager.sync()
+        assertTrue("retried result was $retried", retried is SyncResult.Success)
+        assertTrue("重试后应为已同步：${manager.status.value}", manager.status.value is SyncStatus.Synced)
+        verify(tokenManager).clearSyncFailure()
+    }
+
+    @Test
+    fun `unauthorized 401 enters NeedLogin status`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenThrow(HttpException(Response.error<Any>(401, "unauthorized".toResponseBody())))
+
+        val result = manager.sync()
+
+        // 返回值语义不变（仍是 Error，不改变既有调用方行为），但状态进入「需要登录」。
+        assertTrue("result was $result", result is SyncResult.Error)
+        assertEquals(SyncStatus.NeedLogin, manager.status.value)
+        verify(tokenManager).setSyncFailure("登录已过期，请重新登录")
     }
 }

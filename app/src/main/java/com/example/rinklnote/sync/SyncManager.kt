@@ -21,15 +21,41 @@ import com.example.rinklnote.data.network.dto.TemplateDTO
 import com.example.rinklnote.data.network.dto.UpdateAccountRequest
 import com.example.rinklnote.data.network.dto.UpsertBudgetRequest
 import com.example.rinklnote.data.network.dto.UpsertChallengeRequest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
+import java.io.IOException
 
 sealed class SyncResult {
     data object NotLoggedIn : SyncResult()
     data class Success(val pushed: Int, val pulled: Int) : SyncResult()
     data class Error(val message: String) : SyncResult()
+}
+
+/**
+ * 同步状态（体验优化 Task 1）：SyncManager 暴露的可观察状态流，供个人资料页与
+ * 结构化反馈收集展示。**只描述最近一次同步/推送的结果**，不参与、也不改变任何
+ * 同步协议行为（请求顺序 / LWW / 软删除 / 乐观锁均维持原样）。
+ */
+sealed class SyncStatus {
+    /** 空闲：启动后还没有产生过同步结果（重启后回落到这里，可配 TokenManager 持久化的失败原因还原展示）。 */
+    data object Idle : SyncStatus()
+
+    /** 同步中（全量同步或单条推送在途）。 */
+    data object Syncing : SyncStatus()
+
+    /** 已同步：完成时间 + 本次上传/下载数（单条推送时 pulled = 0）。 */
+    data class Synced(val time: Long, val pushed: Int, val pulled: Int) : SyncStatus()
+
+    /** 待重试：本地待上传条数 + 用户可读的失败原因（数据仍完整保留在本机）。 */
+    data class RetryPending(val pendingCount: Int, val reason: String, val time: Long) : SyncStatus()
+
+    /** 需要登录：未登录或登录已过期（HTTP 401）。 */
+    data object NeedLogin : SyncStatus()
 }
 
 class SyncManager(
@@ -45,9 +71,18 @@ class SyncManager(
     // concurrently and double-submit the same bill.
     private val syncMutex = Mutex()
 
-    suspend fun sync(): SyncResult = syncMutex.withLock {
-        if (!tokenManager.isLoggedIn()) return SyncResult.NotLoggedIn
+    /** 可收集的同步状态流（只读）。状态只描述结果，见 [SyncStatus] 注释。 */
+    private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
+    val status: StateFlow<SyncStatus> = _status.asStateFlow()
 
+    suspend fun sync(): SyncResult = syncMutex.withLock {
+        if (!tokenManager.isLoggedIn()) {
+            // 未登录：不发任何请求；状态置为「需要登录」供个人资料页/反馈层消费。
+            _status.value = SyncStatus.NeedLogin
+            return SyncResult.NotLoggedIn
+        }
+        // 状态只描述进度，不改变下方任何请求顺序与冲突处理逻辑。
+        _status.value = SyncStatus.Syncing
         return try {
             // 0. Sync accounts first so the local account↔server-id mapping is in place
             //    before bills are pushed/pulled. The App stores a bill's accountId as the
@@ -147,9 +182,21 @@ class SyncManager(
             // 5. Sync challenges (push unsynced, then pull all + LWW merge)
             syncChallenges()
 
-            SyncResult.Success(pushed, pulled)
+            SyncResult.Success(pushed, pulled).also {
+                // 成功即清除持久化的失败原因（TokenManager），让重启后的状态卡不再误报待重试。
+                tokenManager.clearSyncFailure()
+                _status.value = SyncStatus.Synced(System.currentTimeMillis(), pushed, pulled)
+            }
         } catch (e: Exception) {
-            SyncResult.Error(e.message ?: "同步失败")
+            val message = readableError(e)
+            // 失败原因持久化（仅时间 + 用户可读文案，绝不写入 token 或账单内容）。
+            tokenManager.setSyncFailure(message)
+            _status.value = if (e is HttpException && e.code() == 401) {
+                SyncStatus.NeedLogin
+            } else {
+                SyncStatus.RetryPending(pendingUploadCount(), message, System.currentTimeMillis())
+            }
+            SyncResult.Error(message)
         }
     }
 
@@ -227,21 +274,36 @@ class SyncManager(
         }
     }
 
-    /** Upload a single local bill (non-blocking, called after QuickAdd/edit/delete) */
-    suspend fun pushBill(bill: Bill) = syncMutex.withLock {
+    /**
+     * Upload a single local bill (non-blocking, called after QuickAdd/edit/delete).
+     *
+     * 返回推送结果并同步驱动 [status]（成功 / 待重试 / 需要登录），供「已同步到云端 /
+     * 同步失败仍保留本机」等结构化反馈判定使用——判定口径与状态流同源，不另起一套。
+     */
+    suspend fun pushBill(bill: Bill): SyncResult = syncMutex.withLock {
+        if (!tokenManager.isLoggedIn()) return@withLock SyncResult.NotLoggedIn
+        _status.value = SyncStatus.Syncing
         try {
-            pushOneBill(bill)
-        } catch (_: Exception) {
-            // Will be pushed on next full sync
+            if (pushOneBill(bill)) {
+                succeedPush(pushed = 1)
+            } else {
+                // 账户尚未解析出 server_id：本条保留在本机等下次同步（原语义不变）。
+                failPush("账户尚未同步，稍后自动重试")
+            }
+        } catch (e: Exception) {
+            failPush(readableError(e), e)
         }
     }
 
     /** Upload a single local budget (non-blocking, called after SetBudget/delete). */
     suspend fun pushBudget(budget: Budget) = syncMutex.withLock {
+        if (!tokenManager.isLoggedIn()) return@withLock Unit
+        _status.value = SyncStatus.Syncing
         try {
             pushOneBudget(budget)
-        } catch (_: Exception) {
-            // Will be pushed on next full sync
+            succeedPush(pushed = 1)
+        } catch (e: Exception) {
+            failPush(readableError(e), e)
         }
     }
 
@@ -335,10 +397,13 @@ class SyncManager(
 
     /** Upload a single local challenge (non-blocking, called after create/adjust). */
     suspend fun pushChallenge(challenge: Challenge) = syncMutex.withLock {
+        if (!tokenManager.isLoggedIn()) return@withLock Unit
+        _status.value = SyncStatus.Syncing
         try {
             pushOneChallenge(challenge)
-        } catch (_: Exception) {
-            // Will be pushed on next full sync
+            succeedPush(pushed = 1)
+        } catch (e: Exception) {
+            failPush(readableError(e), e)
         }
     }
 
@@ -422,12 +487,54 @@ class SyncManager(
 
     /** Upload a single local account (non-blocking, called after create/edit/delete). */
     suspend fun pushAccount(account: Account) = syncMutex.withLock {
-        val dao = accountDao ?: return@withLock
+        if (!tokenManager.isLoggedIn()) return@withLock Unit
+        _status.value = SyncStatus.Syncing
         try {
             pushOneAccount(account)
-        } catch (_: Exception) {
-            // Will be pushed on next full sync
+            succeedPush(pushed = 1)
+        } catch (e: Exception) {
+            failPush(readableError(e), e)
         }
+    }
+
+    // ── 同步状态辅助（体验优化 Task 1）：只写状态流与持久化失败原因，不参与同步逻辑 ──
+
+    /** 最近一次推送成功：写状态并清除 TokenManager 里持久化的失败原因。 */
+    private suspend fun succeedPush(pushed: Int): SyncResult {
+        tokenManager.clearSyncFailure()
+        _status.value = SyncStatus.Synced(System.currentTimeMillis(), pushed, pulled = 0)
+        return SyncResult.Success(pushed, pulled = 0)
+    }
+
+    /** 最近一次推送失败：写状态并持久化用户可读原因（数据仍完整保留在本机等重试）。 */
+    private suspend fun failPush(reason: String, error: Exception? = null): SyncResult {
+        tokenManager.setSyncFailure(reason)
+        _status.value = if (error is HttpException && error.code() == 401) {
+            SyncStatus.NeedLogin
+        } else {
+            SyncStatus.RetryPending(pendingUploadCount(), reason, System.currentTimeMillis())
+        }
+        return SyncResult.Error(reason)
+    }
+
+    /** 本地待上传条数（账单/账户/预算/挑战合计），仅用于状态展示；单个来源查询异常按 0 兜底。 */
+    private suspend fun pendingUploadCount(): Int {
+        var count = runCatching { billDao.countUnsynced() }.getOrDefault(0L)
+        accountDao?.let { count += runCatching { it.countUnsynced() }.getOrDefault(0L) }
+        budgetDao?.let { count += runCatching { it.getUnsynced().size }.getOrDefault(0) }
+        challengeDao?.let { count += runCatching { it.getUnsynced().size }.getOrDefault(0) }
+        return count.toInt()
+    }
+
+    /** 把异常翻译成用户可读的失败原因（只用于展示与持久化，不参与同步流程）。 */
+    private fun readableError(e: Exception): String = when {
+        e is HttpException -> when (e.code()) {
+            401 -> "登录已过期，请重新登录"
+            in 500..599 -> "服务器暂时不可用（HTTP ${e.code()}）"
+            else -> "网络请求失败（HTTP ${e.code()}）"
+        }
+        e is IOException -> "网络不可用，请检查网络后重试"
+        else -> e.message?.takeIf { it.isNotBlank() } ?: "同步失败"
     }
 
     /** Accounts are few in number → push all unsynced, pull everything, merge by LWW. */

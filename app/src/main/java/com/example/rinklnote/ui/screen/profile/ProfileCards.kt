@@ -1,6 +1,9 @@
 package com.example.rinklnote.ui.screen.profile
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -9,7 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
+import com.example.rinklnote.data.local.LastSyncFailure
 import com.example.rinklnote.data.local.ThemeMode
+import com.example.rinklnote.sync.SyncStatus
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.SettingsRow
@@ -27,14 +32,25 @@ import com.example.rinklnote.util.Money
  * 本卡只留外观与显示偏好。分组现为：数据与同步 → 通知 → 个性化 → 通用。
  */
 
-/** «数据与同步» 组：自动同步开关 + 立即同步行（附「上次同步」小字）+ 同步结果。 */
+/**
+ * «数据与同步» 组：自动同步开关 + 立即同步行 + 同步状态卡。
+ *
+ * 2026-10-01 升级（体验优化 Task 1）：把「上次同步」小字升级为完整状态卡——
+ * 同步中 / 已同步（时间 + 本次上传下载数）/ 待重试（待上传数 + 原因 + 立即重试）/
+ * 需要登录；未登录时给登录入口。状态来自 SyncManager 暴露的 [SyncStatus] 流；
+ * 进程重启后状态回落 Idle，用 TokenManager 持久化的最近失败原因还原「待重试」展示。
+ */
 @Composable
 internal fun SyncCard(
     autoSync: Boolean,
+    isLoggedIn: Boolean,
+    status: SyncStatus,
     lastSync: Long,
-    syncStatus: String?,
+    lastFailure: LastSyncFailure?,
     onAutoSyncChange: (Boolean) -> Unit,
-    onSyncNow: () -> Unit
+    onSyncNow: () -> Unit,
+    onRetry: () -> Unit,
+    onLoginClick: () -> Unit
 ) {
     SettingsGroupCard(title = "数据与同步") {
         SettingsRow(
@@ -49,13 +65,121 @@ internal fun SyncCard(
             value = "上次同步 ${formatSyncTime(lastSync)}",
             onClick = onSyncNow
         )
-        if (syncStatus != null) {
-            Text(
-                text = syncStatus,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+        RinklDivider()
+        SyncStatusBlock(
+            isLoggedIn = isLoggedIn,
+            status = status,
+            lastSync = lastSync,
+            lastFailure = lastFailure,
+            onRetry = onRetry,
+            onLoginClick = onLoginClick
+        )
+    }
+}
+
+/** 立即重试小按钮：触发 SyncManager 重新同步（协议语义不变）。 */
+@Composable
+private fun RetryButton(onRetry: () -> Unit) {
+    Button(
+        onClick = onRetry,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(text = "立即重试", fontSize = 13.sp)
+    }
+}
+
+/** 12sp 的说明小字，左缩进 52dp 与行内标签对齐（行内边距 16 + 图标 24 + 间距 12）。 */
+@Composable
+private fun StatusHint(text: String) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 12.dp)
+    )
+}
+
+/** 同步状态块：按登录态与 [SyncStatus] 给出进行中 / 已同步 / 待重试 / 需要登录的文案与操作。 */
+@Composable
+private fun SyncStatusBlock(
+    isLoggedIn: Boolean,
+    status: SyncStatus,
+    lastSync: Long,
+    lastFailure: LastSyncFailure?,
+    onRetry: () -> Unit,
+    onLoginClick: () -> Unit
+) {
+    when {
+        // 未登录：状态卡退化为登录入口。
+        !isLoggedIn -> SettingsRow(
+            icon = R.drawable.ic_sync,
+            label = "未登录，暂不同步",
+            value = "去登录",
+            onClick = onLoginClick
+        )
+
+        else -> when (val s = status) {
+            is SyncStatus.Syncing -> SettingsRow(
+                icon = R.drawable.ic_sync,
+                label = "同步中…",
+                value = "请稍候"
             )
+
+            is SyncStatus.Synced -> Column {
+                SettingsRow(
+                    icon = R.drawable.ic_sync,
+                    label = "已同步",
+                    value = formatSyncTime(s.time)
+                )
+                StatusHint(
+                    text = if (s.pushed == 0 && s.pulled == 0) {
+                        "云端无新变化"
+                    } else {
+                        "本次上传 ${s.pushed} 条 · 下载 ${s.pulled} 条"
+                    }
+                )
+            }
+
+            is SyncStatus.RetryPending -> Column {
+                SettingsRow(
+                    icon = R.drawable.ic_sync,
+                    iconTint = MaterialTheme.colorScheme.error,
+                    label = if (s.pendingCount > 0) "待重试 · ${s.pendingCount} 条待上传" else "待重试",
+                    trailing = { RetryButton(onRetry) }
+                )
+                StatusHint(text = s.reason)
+            }
+
+            // 登录过期（401）：给重新登录入口。
+            is SyncStatus.NeedLogin -> SettingsRow(
+                icon = R.drawable.ic_sync,
+                iconTint = MaterialTheme.colorScheme.error,
+                label = "登录已过期，同步暂停",
+                value = "重新登录",
+                onClick = onLoginClick
+            )
+
+            SyncStatus.Idle -> {
+                // 进程重启后状态回落 Idle：若持久化的失败时间晚于上次成功同步，还原「待重试」。
+                val recentFailure = lastFailure?.takeIf { it.time > lastSync }
+                if (recentFailure != null) {
+                    Column {
+                        SettingsRow(
+                            icon = R.drawable.ic_sync,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            label = "待重试",
+                            trailing = { RetryButton(onRetry) }
+                        )
+                        StatusHint(text = recentFailure.reason)
+                    }
+                } else {
+                    SettingsRow(
+                        icon = R.drawable.ic_sync,
+                        label = "同步状态",
+                        value = "暂未同步"
+                    )
+                }
+            }
         }
     }
 }

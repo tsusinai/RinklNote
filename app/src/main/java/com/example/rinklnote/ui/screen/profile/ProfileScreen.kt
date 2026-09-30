@@ -64,7 +64,6 @@ import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.notification.PayNotifyListenerService
 import com.example.rinklnote.sync.SyncManager
-import com.example.rinklnote.sync.SyncResult
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.achievementBadgeName
@@ -139,6 +138,10 @@ fun ProfileScreen(
     val themeMode by settingsManager.themeMode.collectAsStateWithLifecycle(ThemeMode.SYSTEM)
     val autoSync by settingsManager.autoSync.collectAsStateWithLifecycle(initialValue = true)
     val lastSync by tokenManager.lastSyncTime.collectAsStateWithLifecycle(initialValue = 0L)
+    // 同步状态卡（体验优化 Task 1）：SyncManager 的可观察状态流 + TokenManager 持久化的失败原因
+    // （重启后状态回落 Idle 时，用它还原「待重试」展示）。
+    val syncStatus by syncManager.status.collectAsStateWithLifecycle()
+    val lastSyncFailure by tokenManager.lastSyncFailure.collectAsStateWithLifecycle(initialValue = null)
     val dailyReportEnabled by settingsManager.dailyReportEnabled.collectAsStateWithLifecycle(initialValue = false)
     val dailyReportHour by settingsManager.dailyReportHour.collectAsStateWithLifecycle(initialValue = 9)
     val dailyReportMinute by settingsManager.dailyReportMinute.collectAsStateWithLifecycle(initialValue = 0)
@@ -164,7 +167,6 @@ fun ProfileScreen(
     var dialog by remember { mutableStateOf<ProfileDialog?>(null) }
     val dismissDialog: () -> Unit = { dialog = null }
 
-    var syncStatus by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -334,19 +336,14 @@ fun ProfileScreen(
             item(key = "sync") {
                 SyncCard(
                     autoSync = autoSync,
+                    isLoggedIn = state.isLoggedIn,
+                    status = syncStatus,
                     lastSync = lastSync,
-                    syncStatus = syncStatus,
+                    lastFailure = lastSyncFailure,
                     onAutoSyncChange = { coroutineScope.launch { settingsManager.setAutoSync(it) } },
-                    onSyncNow = {
-                        coroutineScope.launch {
-                            syncStatus = "同步中..."
-                            syncStatus = when (val r = syncManager.sync()) {
-                                is SyncResult.NotLoggedIn -> "未登录"
-                                is SyncResult.Success -> "同步完成 (推送${r.pushed}条, 拉取${r.pulled}条)"
-                                is SyncResult.Error -> r.message
-                            }
-                        }
-                    }
+                    onSyncNow = { coroutineScope.launch { syncManager.sync() } },
+                    onRetry = { coroutineScope.launch { syncManager.sync() } },
+                    onLoginClick = onLoginClick
                 )
             }
             item(key = "dailyReport") {
