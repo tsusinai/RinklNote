@@ -45,6 +45,12 @@ interface BillDao {
     @Query("DELETE FROM bills WHERE id = :id")
     suspend fun hardDeleteById(id: Long)
 
+    // 条件物理删除：仅当行仍是软删墓碑（deleted=1）时清除。单条 SQL 原子执行，
+    // 供删除推送路径使用 —— 推送在途时用户可能已撤销删除（deleted=0、dirty=1），
+    // 无条件删除会把刚恢复的账单再次删掉（体验审查 P1 竞态修复）。
+    @Query("DELETE FROM bills WHERE id = :id AND deleted = 1")
+    suspend fun hardDeleteTombstoneById(id: Long)
+
     @Query("DELETE FROM bills")
     suspend fun deleteAll()
 

@@ -121,7 +121,13 @@ class SyncManager(
                 val (deleted, alive) = response.bills.partition { it.deleted }
 
                 // Delete locally-removed bills
-                deleted.forEach { billDao.deleteByServerId(it.id) }
+                deleted.forEach { dto ->
+                    // 撤销竞态防护：本地行若已撤销删除（deleted=0、dirty=1），保留本地新意图，
+                    // 下次推送会以 PUT 恢复服务端；服务端墓碑不得把刚恢复的账单再删掉。
+                    // 本地行不存在或仍是墓碑时维持原行为（清理本地行/陈旧墓碑）。
+                    val local = billDao.getByServerId(dto.id)
+                    if (local == null || local.deleted) billDao.deleteByServerId(dto.id)
+                }
 
                 // Upsert changed bills (Room @Upsert handles insert-or-update).
                 // Skip any server row that the local device has a dirty (unsynced)
@@ -182,10 +188,21 @@ class SyncManager(
             // 5. Sync challenges (push unsynced, then pull all + LWW merge)
             syncChallenges()
 
-            SyncResult.Success(pushed, pulled).also {
-                // 成功即清除持久化的失败原因（TokenManager），让重启后的状态卡不再误报待重试。
-                tokenManager.clearSyncFailure()
-                _status.value = SyncStatus.Synced(System.currentTimeMillis(), pushed, pulled)
+            // 体验审查修复（P1）：单条推送失败此前被静默吞掉，流程仍会走到「已同步」，
+            // 用户会看到已同步但本地还压着待上传数据。全部阶段结束后核对本地待上传
+            // 余量：仍有余量就如实呈现「待重试」（含条数），并把返回值改为 Error。
+            val pending = pendingUploadCount()
+            if (pending > 0) {
+                val reason = "有 $pending 条数据尚未上传，已保留在本机"
+                tokenManager.setSyncFailure(reason)
+                _status.value = SyncStatus.RetryPending(pending, reason, System.currentTimeMillis())
+                SyncResult.Error(reason)
+            } else {
+                SyncResult.Success(pushed, pulled).also {
+                    // 成功即清除持久化的失败原因（TokenManager），让重启后的状态卡不再误报待重试。
+                    tokenManager.clearSyncFailure()
+                    _status.value = SyncStatus.Synced(System.currentTimeMillis(), pushed, pulled)
+                }
             }
         } catch (e: Exception) {
             val message = readableError(e)
@@ -213,12 +230,15 @@ class SyncManager(
                 if (serverId == null) {
                     // Never pushed to the server — nothing to soft-delete remotely,
                     // so purge the local tombstone immediately (otherwise it lingers
-                    // forever as an unsynced deleted row).
-                    billDao.hardDeleteById(bill.id)
+                    // forever as an unsynced deleted row). 条件清除：推送在途时用户可能
+                    // 已撤销删除，只清仍是墓碑的行，不碰刚恢复的账单。
+                    billDao.hardDeleteTombstoneById(bill.id)
                     return true
                 }
                 api.deleteBill(serverId)
-                billDao.hardDeleteById(bill.id)
+                // 撤销竞态防护：api.deleteBill 在途期间用户可能已撤销（deleted=0、dirty=1），
+                // 这里只物理清除仍是墓碑的行，避免把刚恢复的账单再次删掉。
+                billDao.hardDeleteTombstoneById(bill.id)
                 true
             }
             bill.serverId != null -> {
@@ -499,8 +519,19 @@ class SyncManager(
 
     // ── 同步状态辅助（体验优化 Task 1）：只写状态流与持久化失败原因，不参与同步逻辑 ──
 
-    /** 最近一次推送成功：写状态并清除 TokenManager 里持久化的失败原因。 */
+    /**
+     * 最近一次推送成功：本条结果记 Success（结构化反馈针对本条账单），但状态卡要如实 ——
+     * 本地仍压着其他待上传数据时呈现「待重试」（体验审查 P1：不误报「已同步」）；
+     * 待上传清零才清除持久化失败原因并报已同步。
+     */
     private suspend fun succeedPush(pushed: Int): SyncResult {
+        val pending = pendingUploadCount()
+        if (pending > 0) {
+            _status.value = SyncStatus.RetryPending(
+                pending, "仍有 $pending 条数据待上传", System.currentTimeMillis()
+            )
+            return SyncResult.Success(pushed, pulled = 0)
+        }
         tokenManager.clearSyncFailure()
         _status.value = SyncStatus.Synced(System.currentTimeMillis(), pushed, pulled = 0)
         return SyncResult.Success(pushed, pulled = 0)

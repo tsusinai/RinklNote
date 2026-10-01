@@ -98,21 +98,24 @@ class SyncManagerTest {
     }
 
     @Test
-    fun `tombstone with no server id hard-deletes locally without any api call`() = runTest {
+    fun `tombstone with no server id purges only the tombstone locally without any api call`() = runTest {
         val b = bill(id = 7, deleted = true, serverId = null)
         manager.pushBill(b)
-        verify(billDao).hardDeleteById(7)
+        // 条件物理删除：只清仍是墓碑的行（推送在途时用户可能已撤销删除）。
+        verify(billDao).hardDeleteTombstoneById(7)
+        verify(billDao, never()).hardDeleteById(7)
         verify(api, never()).deleteBill(any())
         verify(api, never()).uploadBill(any())
         verify(api, never()).updateBill(any(), any())
     }
 
     @Test
-    fun `deleted bill with server id deletes remotely and locally`() = runTest {
+    fun `deleted bill with server id deletes remotely and purges the tombstone conditionally`() = runTest {
         val b = bill(id = 7, deleted = true, serverId = 99)
         manager.pushBill(b)
         verify(api).deleteBill(99)
-        verify(billDao).hardDeleteById(7)
+        verify(billDao).hardDeleteTombstoneById(7)
+        verify(billDao, never()).hardDeleteById(7)
     }
 
     @Test
@@ -175,6 +178,75 @@ class SyncManagerTest {
         verify(billDao).deleteByServerId(9)
         // alive list is empty → sync still calls upsertAll with an empty batch
         verify(billDao).upsertAll(emptyList())
+    }
+
+    @Test
+    fun `pull delete keeps a locally restored bill (undo race guard)`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        whenever(billDao.getUnsynced()).thenReturn(emptyList())
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(listOf(billDTO(9, 900, deleted = true)), serverTime = 1000))
+        // 本地行已被用户撤销删除（deleted=0、dirty=1）：服务端墓碑不得把它删掉。
+        whenever(billDao.getByServerId(9))
+            .thenReturn(bill(id = 7, deleted = false, serverId = 9).copy(dirty = true))
+
+        manager.sync()
+
+        verify(billDao, never()).deleteByServerId(9)
+    }
+
+    @Test
+    fun `sync reports RetryPending when a bill push fails but pull succeeds`() = runTest {
+        stubLoggedIn(true)
+        stubAccountSyncDefaults()
+        val failing = bill(id = 7, deleted = false, serverId = null)
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 99)
+        )
+        whenever(billDao.getUnsynced()).thenReturn(listOf(failing))
+        whenever(api.uploadBill(any())).thenThrow(RuntimeException("模拟网络断开"))
+        whenever(billDao.countUnsynced()).thenReturn(1L)
+        whenever(budgetDao.getUnsynced()).thenReturn(emptyList())
+        whenever(api.getBudgets()).thenReturn(emptyList())
+        whenever(api.syncBills(after = null, afterId = null, limit = 200))
+            .thenReturn(SyncResponse(emptyList(), serverTime = 1000))
+
+        val result = manager.sync()
+
+        // 拉取成功了，但账单没推上去：不得报「已同步」，要如实呈现待重试。
+        assertTrue("sync returned $result", result is SyncResult.Error)
+        val status = manager.status.value
+        assertTrue("status was $status", status is SyncStatus.RetryPending)
+        assertEquals(1, (status as SyncStatus.RetryPending).pendingCount)
+        verify(tokenManager).setSyncFailure(any())
+        verify(tokenManager, never()).clearSyncFailure()
+    }
+
+    @Test
+    fun `single push success keeps RetryPending while other rows are still pending`() = runTest {
+        val b = bill(id = 7, deleted = false, serverId = null)
+        whenever(accountDao.getById(1L)).thenReturn(
+            Account(id = 1, name = "微信", balanceMinor = 0L, iconColor = "#000000", serverId = 99)
+        )
+        whenever(api.uploadBill(any())).thenReturn(
+            BillDTO(id = 500, amountMinor = 1000L, billType = "EXPENSE", categoryId = 1,
+                categoryName = "三餐", accountId = 1, date = 100, source = "APP",
+                createdAt = 100, updatedAt = 1000)
+        )
+        // 本条已推上去，但本地还有其他待上传数据（如之前推送失败的账单）。
+        whenever(billDao.countUnsynced()).thenReturn(2L)
+
+        val result = manager.pushBill(b)
+
+        // 本条反馈仍是 Success（「已同步到云端」针对本条），但状态卡不得误报已同步。
+        assertEquals(SyncResult.Success(1, 0), result)
+        val status = manager.status.value
+        assertTrue("status was $status", status is SyncStatus.RetryPending)
+        assertEquals(2, (status as SyncStatus.RetryPending).pendingCount)
+        verify(tokenManager, never()).clearSyncFailure()
     }
 
     @Test
