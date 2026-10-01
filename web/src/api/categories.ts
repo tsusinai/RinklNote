@@ -7,6 +7,8 @@ export function normalizeCategory(c: Category & { billType?: string }): Category
 }
 
 export const categories = {
-  list: async (): Promise<Category[]> =>
-    (await api<Array<Category & { billType: string }>>('/api/bills/categories')).map(normalizeCategory),
+  // opts 透传 allow401（同步路径 loadData 用）：401 变成 HttpError 交给状态卡展示，
+  // 而不是在 api() 内部被清 token + 硬跳转劫持（体验审查 P2）。
+  list: async (opts?: { allow401?: boolean }): Promise<Category[]> =>
+    (await api<Array<Category & { billType: string }>>('/api/bills/categories', opts)).map(normalizeCategory),
 }

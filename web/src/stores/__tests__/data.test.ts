@@ -91,8 +91,9 @@ describe('loadData 结构化结果（Task 4）', () => {
   })
 
   it('401 需要重新登录：结果为 unauthorized', async () => {
-    // 无 token 时 401 不触发跳转，直接落为 unauthorized 结果
-    useAuthStore().token = null
+    // 已登录但 token 失效的真实场景：loadData 全部资源走 allow401，
+    // 401 落为 unauthorized 结果而不是被 api() 清 token + 硬跳转劫持。
+    useAuthStore().token = 't'
     const s = useDataStore()
     globalThis.fetch = vi.fn(async () => ({ status: 401, ok: false, json: async () => ({}) })) as any
     const r = await s.loadData()

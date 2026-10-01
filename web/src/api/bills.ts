@@ -7,15 +7,16 @@ export interface CreateBillPayload {
 }
 
 /** Forward-paginate all bills using the server's composite cursor (updatedAt, id).
- *  Ported 1:1 from web/index.html fetchAllBills() — keep behavior identical. */
-export async function fetchAllBills(): Promise<Bill[]> {
+ *  Ported 1:1 from web/index.html fetchAllBills() — keep behavior identical.
+ *  opts 透传 allow401（同步路径用）：401 交给调用方展示，不在 api() 内部硬跳转。 */
+export async function fetchAllBills(opts?: { allow401?: boolean }): Promise<Bill[]> {
   const all: Bill[] = []
   let after = 0, afterId: number | null = null, hasMore = true, guard = 0
   while (hasMore && guard++ < 500) {
     const query: Record<string, number | undefined> = { limit: 200 }
     if (after > 0) query.after = after
     if (afterId != null) query.afterId = afterId
-    const res = await api<SyncResponse>('/api/bills/sync', { query })
+    const res = await api<SyncResponse>('/api/bills/sync', { query, ...opts })
     const list = res.bills || []
     if (list.length) all.push(...list)
     after = res.nextAfter != null ? res.nextAfter : Math.max(0, ...list.map(b => b.updatedAt || 0))

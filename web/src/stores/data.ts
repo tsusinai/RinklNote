@@ -97,13 +97,16 @@ export const useDataStore = defineStore('data', {
       const resources: Record<SyncResource, boolean> = { cats: false, accts: false, bills: false, keywords: false }
       const errors: SyncError[] = []
 
-      // 分类与账户并行拉取；任一失败记入明细并保留旧数据
+      // 分类与账户并行拉取；任一失败记入明细并保留旧数据。
+      // 四个资源统一 allow401：401 变成 HttpError 交给下方状态推导，让 SyncCard 能
+      // 呈现「需要重新登录 + 去登录」，而不是在 api() 内部被清 token + 硬跳转劫持
+      // （体验审查 P2：unauthorized 状态此前基本不可见）。
       await Promise.all([
-        categories.list().then(
+        categories.list({ allow401: true }).then(
           (list) => { this.cats = list; resources.cats = true },
           (e) => { errors.push(toSyncError('cats', e)) },
         ),
-        accounts.list().then(
+        accounts.list({ allow401: true }).then(
           (list) => { this.accts = list; resources.accts = true },
           (e) => { errors.push(toSyncError('accts', e)) },
         ),
@@ -112,11 +115,11 @@ export const useDataStore = defineStore('data', {
       // 账单与关键词：仅登录后拉取；游客态不拉，不算失败
       if (auth.token) {
         try {
-          const all = await fetchAllBills()
+          const all = await fetchAllBills({ allow401: true })
           this.bills = all.reverse() // newest first（与原 web 一致）
           resources.bills = true
           try {
-            this.keywords = await keywords.list()
+            this.keywords = await keywords.list({ allow401: true })
             resources.keywords = true
           } catch (e) {
             errors.push(toSyncError('keywords', e))

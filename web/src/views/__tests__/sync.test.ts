@@ -88,8 +88,10 @@ describe('SyncCard 同步状态卡（Task 4）', () => {
     wrapper.unmount()
   })
 
-  it('401：状态「需要重新登录」，提供「去登录」入口', async () => {
-    useAuthStore().token = null
+  it('401（已登录态）：状态「需要重新登录」+「去登录」入口，不被硬跳转劫持', async () => {
+    // 真实场景是已登录但 token 失效：allow401 让 401 走 HttpError 进状态卡，
+    // 而不是在 api() 内部被清 token + window.location 硬跳转导致状态不可见。
+    useAuthStore().token = 't'
     globalThis.fetch = vi.fn(async () => ({ status: 401, ok: false, json: async () => ({}) })) as any
     const wrapper = mount(SyncCard)
     await wrapper.find('button').trigger('click')
