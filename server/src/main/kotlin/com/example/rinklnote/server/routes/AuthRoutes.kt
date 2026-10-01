@@ -125,13 +125,15 @@ private fun meResponseOf(user: UserInfo, avatarStorage: AvatarStorage): MeRespon
 fun Route.authRoutes(
     userService: UserService,
     qqBotService: QQBotService,
-    avatarStorage: AvatarStorage = AvatarStorage()
+    avatarStorage: AvatarStorage = AvatarStorage(),
+    // 限流器可注入：生产用默认额度；测试注入大额度实例做隔离，避免测试类内
+    // 请求量触发 429 把用例打挂（生产路径与额度不变）。
+    loginLimiter: InMemoryRateLimiter = InMemoryRateLimiter(maxAttempts = 10, windowSeconds = 600),      // 10 failed / 10 min
+    registerLimiter: InMemoryRateLimiter = InMemoryRateLimiter(maxAttempts = 5, windowSeconds = 3600)   // 5 registrations / hour
 ) {
     // In-memory per-IP limiting: blocks brute-force login/password guessing and
     // mass account creation. Generous limits so legit users behind a shared IP
     // are not affected.
-    val loginLimiter = InMemoryRateLimiter(maxAttempts = 10, windowSeconds = 600)      // 10 failed / 10 min
-    val registerLimiter = InMemoryRateLimiter(maxAttempts = 5, windowSeconds = 3600)   // 5 registrations / hour
 
     route("/api/auth") {
         post("/register") {

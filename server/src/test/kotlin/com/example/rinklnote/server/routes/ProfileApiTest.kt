@@ -3,6 +3,7 @@ package com.example.rinklnote.server.routes
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
 import com.example.rinklnote.server.services.AvatarStorage
+import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.TestDatabase
 import com.example.rinklnote.server.services.UserService
@@ -113,7 +114,13 @@ class ProfileApiTest {
                 }
                 routing {
                     staticFiles("/uploads", File(avatarDir.absolutePath))
-                    authRoutes(userService, qqBotService, storage)
+                    // 限流隔离：测试类内多次注册会触发真实额度（5 次/小时）产生 429，
+                    // 注入大额度实例，让本类只验证业务行为而非限流窗口。
+                    authRoutes(
+                        userService, qqBotService, storage,
+                        loginLimiter = InMemoryRateLimiter(maxAttempts = Int.MAX_VALUE, windowSeconds = 1),
+                        registerLimiter = InMemoryRateLimiter(maxAttempts = Int.MAX_VALUE, windowSeconds = 1)
+                    )
                 }
             }.start(wait = false)
             port = runBlocking { server.resolvedConnectors().first().port }
