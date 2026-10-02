@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +100,16 @@ sealed interface BillFeedback {
         override val actionLabel: String get() = "编辑"
     }
 
+    /**
+     * 需要用户行动的失败提示（体验审查 P1：权限失败、定位服务关闭等）：
+     * [actionLabel] 为「去设置 / 重试」等行动文案；默认常驻直到用户操作或关闭。
+     */
+    data class Actionable(
+        override val message: String,
+        override val actionLabel: String,
+        override val persistent: Boolean = true
+    ) : BillFeedback
+
     /** 一般一次性提示（校验失败、恢复成功等），自动消失、无操作按钮。 */
     data class Plain(override val message: String) : BillFeedback
 }
@@ -166,6 +177,15 @@ class RinklFeedbackController(private val scope: CoroutineScope) {
 fun rememberRinklFeedbackController(): RinklFeedbackController {
     val scope = rememberCoroutineScope()
     return remember { RinklFeedbackController(scope) }
+}
+
+/**
+ * 组合局部（体验审查 P1）：任意层级的 composable（抽屉、地图、组件）都能直接展示
+ * 结构化反馈，不必逐层透传控制器。AppNavigation 根部用
+ * `CompositionLocalProvider(LocalRinklFeedback provides feedbackController)` 提供实例。
+ */
+val LocalRinklFeedback = compositionLocalOf<RinklFeedbackController> {
+    error("RinklFeedbackController 未提供：请在 AppNavigation 根部 CompositionLocalProvider 注入")
 }
 
 /**

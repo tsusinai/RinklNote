@@ -9,7 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Row
@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -38,6 +39,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,13 +47,16 @@ import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -65,9 +70,11 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.materials.HazeMaterials
 import com.example.rinklnote.ui.component.BillCard
+import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.HeatmapBox
+import com.example.rinklnote.ui.component.LocalRinklFeedback
 import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.component.MoreDrawer
 import com.example.rinklnote.ui.component.RinklTopBar
@@ -110,11 +117,16 @@ fun BookkeepingScreen(
     onOpenLogin: () -> Unit = {},
     // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
     // 默认空实现防接线前编译断。dayStart = 当日 0 点 epoch millis，业务时区）
-    onOpenDay: (Long) -> Unit = {}
+    onOpenDay: (Long) -> Unit = {},
+    // 拖拽删除撤销（体验审查 P1）：收到删除前快照，接 AppNavigation 的 undoDelete
+    // （软删恢复 + 反馈），与 bill-edit 删除路径同一恢复闭包。
+    onUndoDelete: (Bill) -> Unit = {}
 ) {
     val horizonalPadding = 10.dp
 
     val state by viewModel.monthState.collectAsStateWithLifecycle()
+    // 结构化反馈（体验审查 P1）：拖删撤销提示经统一 Snackbar 展示（AppNavigation 根部注入）。
+    val feedback = LocalRinklFeedback.current
 
     val isCurrentMonth = state.selectedMonthOffset == 0
     val monthLabel = remember(state.selectedMonthOffset) {
@@ -153,14 +165,21 @@ fun BookkeepingScreen(
         computeMonthHeatmap(state.bills, state.selectedMonthOffset)
     }
 
-    // 拖动收尾：松手时按当前状态决定删除（不弹确认框——拖入+松手两段手势即防误触）或重排
+    // 拖动收尾：松手时按当前状态决定删除（不弹确认框——拖入+松手两段手势即防误触）或重排。
+    // 删除走既有 VM 事件（软删/余额/推送语义不变），同时给可撤销反馈：快照进 Snackbar，
+    // 点「撤销」经 onUndoDelete 恢复（与 bill-edit 删除路径一致）。
     val onDragFinished: () -> Unit = {
         val d = dragHost.dragging
         if (d != null) {
             val dragged = state.bills.firstOrNull { it.id == d.billId }
             if (dragHost.isOverDelete) {
                 dragHaptics.confirm()
-                dragged?.let { viewModel.onEvent(BookkeepingEvent.DeleteBill(it)) }
+                dragged?.let { bill ->
+                    viewModel.onEvent(BookkeepingEvent.DeleteBill(bill))
+                    feedback.show(BillFeedback.DeletedUndoable(snapshot = bill)) {
+                        onUndoDelete(bill)
+                    }
+                }
             } else if (dragged != null) {
                 val dayBills = groupedBills[d.date].orEmpty()
                 val others = dayBills.filter { it.id != d.billId }
@@ -173,9 +192,18 @@ fun BookkeepingScreen(
         }
     }
 
-    // 震动边沿：拖起（重）、进入删除区（重）、插入位变化（轻）
+    // 首次拖拽的一次性操作提示：rememberSaveable 会话内只提醒一次（旋转屏幕不重弹）。
+    var dragHintShown by rememberSaveable { mutableStateOf(false) }
+
+    // 震动边沿：拖起（重）、进入删除区（重）、插入位变化（轻）；首次拖起顺带给操作提示。
     LaunchedEffect(dragHost.dragging?.billId) {
-        if (dragHost.dragging != null) dragHaptics.heavy()
+        if (dragHost.dragging != null) {
+            dragHaptics.heavy()
+            if (!dragHintShown) {
+                dragHintShown = true
+                feedback.show(BillFeedback.Plain("松手删除账单，可在提示条中撤销"))
+            }
+        }
     }
     LaunchedEffect(dragHost.isOverDelete) {
         if (dragHost.isOverDelete) dragHaptics.heavy()
@@ -293,14 +321,18 @@ fun BookkeepingScreen(
                 .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                 .clip(CircleShape)
                 .hazeEffect(hazeState, HazeMaterials.thin())
-                .clickable(enabled = !isDragging) { onOpenDrawer() },
+                .clickable(enabled = !isDragging, onClickLabel = "增加账单") { onOpenDrawer() }
+                // 拖动中该区变身删除目标区（体验审查 P1 语义）：描述挪到容器上，避免与图标重复播报。
+                .then(
+                    if (isDragging) Modifier.semantics { contentDescription = "拖到此处删除" } else Modifier
+                ),
             contentAlignment = Alignment.Center
         ) {
             Crossfade(targetState = isDragging, label = "fabIcon") { deleting ->
                 if (deleting) {
                     Icon(
                         imageVector = Icons.Filled.Delete,
-                        contentDescription = "拖到此处删除账单",
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
@@ -450,31 +482,46 @@ private fun TopBar(
             modifier = Modifier.align(Alignment.Center),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "‹ ",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = textColor,
-                modifier = Modifier
-                    .padding(horizontal = 6.dp)
-                    .pointerInput(Unit) { detectTapGestures { onPrev() } }
-            )
+            // 月份切换箭头（体验审查 P1）：裸 pointerInput 改为 IconButton，触控目标 ≥48dp，
+            // 并补「上个月 / 下个月」无障碍描述；箭头字阶与配色保持不变。
+            IconButton(
+                onClick = onPrev,
+                modifier = Modifier.size(48.dp).semantics { contentDescription = "上个月" }
+            ) {
+                Text(
+                    "‹",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor
+                )
+            }
             Text(
                 text = monthLabel,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
                 color = textColor,
-                modifier = Modifier.pointerInput(Unit) { detectTapGestures { onBackToNow() } }
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    role = Role.Button,
+                    onClickLabel = "回到本月"
+                ) { onBackToNow() }
             )
-            Text(
-                " ›",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (offset < 0) textColor else textColor.copy(alpha = 0.35f),
-                modifier = Modifier
-                    .padding(horizontal = 6.dp)
-                    .pointerInput(offset) { detectTapGestures { if (offset < 0) onNext() } }
-            )
+            IconButton(
+                onClick = onNext,
+                enabled = offset < 0,
+                modifier = Modifier.size(48.dp).semantics { contentDescription = "下个月" }
+            ) {
+                Text(
+                    "›",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    // 已是当月时箭头置灰（视觉不变）；按钮 disabled + enabled 门控同步语义。
+                    color = if (offset < 0) textColor else textColor.copy(alpha = 0.35f)
+                )
+            }
         }
         Row(
             modifier = Modifier.align(Alignment.CenterEnd),

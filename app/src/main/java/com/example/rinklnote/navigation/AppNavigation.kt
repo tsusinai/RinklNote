@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +74,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -83,6 +86,9 @@ import com.example.rinklnote.ui.component.AppBackground
 import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.ui.component.KeypadContextItem
 import com.example.rinklnote.ui.component.NumericKeypad
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import com.example.rinklnote.ui.component.LocalRinklFeedback
 import com.example.rinklnote.ui.component.RinklSnackbarHost
 import com.example.rinklnote.ui.component.VoiceInputBar
 import com.example.rinklnote.ui.component.accountColor
@@ -346,6 +352,8 @@ fun AppNavigation(app: RinklNoteApp) {
     // Voice input: bottom floating mini bar (device real-time recognition, server
     // Whisper fallback). RECORD_AUDIO runtime permission is required before recording.
     // （声明须先于 pendingQuickAdd 消费：长按快捷方式「语音记账」的深链在该效应里调用 startVoice。）
+    // 「重试」动作经状态槽中转：launcher 的回调在自身初始化器内无法直接引用自己。
+    val permissionRetry = remember { mutableStateOf<(() -> Unit)?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -353,9 +361,30 @@ fun AppNavigation(app: RinklNoteApp) {
             quickAddSurface = QuickAddSurface.Closed
             voiceActive = true
         } else {
-            Toast.makeText(context, "需要录音权限才能使用语音记账", Toast.LENGTH_SHORT).show()
+            // 权限拒绝反馈走结构化 Snackbar（体验审查 P1）：拒绝后还能再弹系统弹窗
+            // （软拒绝）给「重试」再次申请；不能弹（勾了「不再询问」）引导去系统设置。
+            val activity = context as? ComponentActivity
+            val canAskAgain = activity?.let {
+                ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.RECORD_AUDIO)
+            } ?: false
+            if (canAskAgain) {
+                feedbackController.show(
+                    BillFeedback.Actionable("需要麦克风权限才能语音记账", "重试")
+                ) { permissionRetry.value?.invoke() }
+            } else {
+                feedbackController.show(
+                    BillFeedback.Actionable("请在系统设置中开启麦克风权限", "去设置")
+                ) {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                            .setData(Uri.fromParts("package", context.packageName, null))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            }
         }
     }
+    SideEffect { permissionRetry.value = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) } }
 
     val startVoice: (VoiceTarget) -> Unit = { target ->
         voiceTarget = target
@@ -416,7 +445,11 @@ fun AppNavigation(app: RinklNoteApp) {
     }
     val onTabClick: (Int) -> Unit = { index -> navigateTo(tabRoutes[index]) }
     val currentTabIndex = tabRoutes.indexOfFirst { it == currentRoute }
-    val tabSwipeModifier = if (currentTabIndex >= 0) {
+    // 全局横滑切 tab（体验审查 P1 门控）：只在四个主页、且 QuickAdd 抽屉/键盘完全关闭时
+    // 才挂载手势——浮层在途（Drawer/Keypad/两种过渡态）时横滑不应切走页面。四个主页内部
+    // 没有横向滚动手势子组件（横向 Pager/LazyRow 只在二级页 month-detail / bill-edit，
+    // 那些路由本就不挂此手势），无需再按路由禁用。
+    val tabSwipeModifier = if (currentTabIndex >= 0 && quickAddSurface == QuickAddSurface.Closed) {
         Modifier.pointerInput(currentTabIndex) {
             var dragDistance = 0f
             detectHorizontalDragGestures(
@@ -505,6 +538,9 @@ fun AppNavigation(app: RinklNoteApp) {
     // 有自己的 BackHandler，组合优先级更高，会先于导航返回被消费。
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        // 结构化反馈注入组合树（体验审查 P1）：抽屉 / 地图 / 组件等任意层级可直接
+        // LocalRinklFeedback.current.show(...)，不再走一次性 Toast。
+        CompositionLocalProvider(LocalRinklFeedback provides feedbackController) {
         // 自定义背景铺满整窗：底部 tab 栏、状态栏、导航栏都在同一张图上，避免底部露出纯色条。
         AppBackground(backgroundUri = appBackgroundUri, hazeState = hazeState)
 
@@ -806,7 +842,9 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenSearch = { navController.navigate("bill-search") },
                         onOpenChallenges = { navController.navigate("challenges") },
                         onOpenLogin = { showLogin = true },
-                        onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") }
+                        onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") },
+                        // 拖拽删除撤销（体验审查 P1）：与 bill-edit 删除路径同一恢复闭包（软删恢复 + 反馈）。
+                        onUndoDelete = { undoDelete(it) }
                     )
 
                 }
@@ -1173,6 +1211,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 },
                 onDismiss = { showQqBotGuide = false }
             )
+        }
         }
     }
 }
