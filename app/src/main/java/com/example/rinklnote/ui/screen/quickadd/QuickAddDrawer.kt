@@ -4,8 +4,10 @@ import java.util.Locale
 
 
 import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
-import android.widget.Toast
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -57,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,11 +67,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,10 +86,13 @@ import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Category
 import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.ui.component.AccountIcon
+import com.example.rinklnote.ui.component.BillFeedback
+import com.example.rinklnote.ui.component.LocalRinklFeedback
 import com.example.rinklnote.ui.component.RinklCardFrostedStyle
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.pressScale
+import com.example.rinklnote.util.LocationGrabber
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import com.example.rinklnote.ui.theme.AxisLabelGray
@@ -93,13 +104,32 @@ import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.util.rememberPressHaptics
-import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import com.example.rinklnote.ui.viewmodel.SuggestionSource
 import kotlinx.coroutines.launch
+
+/**
+ * 抽屉自适应宽度（体验审查 P1）：固定 200dp 在内容变多后过窄，改为可读上限 320dp、
+ * 小屏按屏宽 0.88 占比收缩（避免贴满遮住主页面）。快捷记账与「更多」抽屉同款。
+ */
+@Composable
+private fun adaptiveDrawerWidth(): Dp {
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    return minOf(320.dp, screenWidth * 0.88f)
+}
+
+/** 跳系统设置的本应用详情页（定位权限/定位服务关闭时「去设置」用）。 */
+private fun openAppSettings(context: android.content.Context) {
+    context.startActivity(
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null)
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    )
+}
 
 @Composable
 fun QuickAddDrawer(
@@ -150,7 +180,7 @@ fun QuickAddDrawer(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight(0.88f)
-                    .width(200.dp)
+                    .width(adaptiveDrawerWidth())
                     .padding(vertical = 8.dp)
                     .clip(panelShape)
                     .then(panelSurface)
@@ -602,7 +632,7 @@ private fun CategorySection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("标签", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("长按呼出二级标签", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("长按或点「更多」呼出二级标签", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -678,7 +708,7 @@ private fun CategoryRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             Icon(
                 painter = painterResource(categoryIconRes(category.name)),
                 contentDescription = category.name,
@@ -686,15 +716,26 @@ private fun CategoryRow(
                 tint = Color.Unspecified
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(category.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-            // 有二级分类的行尾提示标记：长按呼出二级标签
+            Text(
+                category.name,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // 有二级分类的行尾显式入口（体验审查 P1：长按是隐藏手势，点「更多」等效呼出二级标签）
             if (hasSubCategories) {
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(2.dp))
                 Text(
-                    "···",
+                    "更多",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClickLabel = "展开二级标签", role = Role.Button, onClick = onLongPress)
+                        .padding(horizontal = 6.dp, vertical = 10.dp)
                 )
             }
         }
@@ -867,6 +908,17 @@ private fun CountBefore(
     val haptics = rememberPressHaptics()
     // 金额框是抽屉里最大的可点元素之一：加按压缩放反馈（复用点击手势的 InteractionSource）
     val amountInteraction = remember { MutableInteractionSource() }
+    // 一次性提示（体验审查 P1）：长按切换收支属于隐藏手势，首次展示抽屉时用反馈条提示一次。
+    // 会话内只出现一次（rememberSaveable，配置变更不重弹）；跨会话持久化留待后续。
+    // 控制器在组合期捕获（CompositionLocal.current 只能在组合上下文读取）。
+    val feedbackHost = LocalRinklFeedback.current
+    var typeHintShown by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!typeHintShown) {
+            typeHintShown = true
+            feedbackHost.show(BillFeedback.Plain("点「收/支」或长按金额可切换收支方向"))
+        }
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -905,14 +957,49 @@ private fun CountBefore(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
+        // 显式收支切换（体验审查 P1）：点击与长按等效，长按保留为快捷方式。
+        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            TypeToggleChip(
+                label = "支出",
+                selected = isExpense,
+                selectedColor = MaterialTheme.colorScheme.tertiary,
+                onSelect = { if (!isExpense) onToggleType() }
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            TypeToggleChip(
+                label = "收入",
+                selected = !isExpense,
+                selectedColor = LocalRinklColors.current.incomeColor,
+                onSelect = { if (isExpense) onToggleType() }
+            )
+        }
+        Spacer(modifier = Modifier.height(2.dp))
         Text("点击输入金额", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "长按金额切换收支",
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-        )
     }
+}
+
+/** 收/支切换小 chip：选中态按语义色填充（支出=tertiary、收入=收入色令牌），未选灰底。 */
+@Composable
+private fun TypeToggleChip(
+    label: String,
+    selected: Boolean,
+    selectedColor: Color,
+    onSelect: () -> Unit
+) {
+    Text(
+        text = label,
+        fontSize = 12.sp,
+        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+        color = if (selected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (selected) selectedColor.copy(alpha = 0.14f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+            )
+            .clickable(onClickLabel = if (label == "支出") "切换为支出" else "切换为收入", role = Role.Button, onClick = onSelect)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    )
 }
 
 /**
@@ -927,7 +1014,9 @@ private fun OcrChipRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .clip(RoundedCornerShape(15.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .clickable(onClick = onClick)
+            // mergeDescendants：图标为装饰（旁有文字），读屏合并为一条「拍小票识别」
+            .semantics(mergeDescendants = true) {}
+            .clickable(onClickLabel = "拍小票识别", onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -949,7 +1038,7 @@ private fun OcrChipRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
 
 /**
  * 位置打点 chip（快捷记账）：默认「位置」不采集；点一下采集当前位置一次，
- * 成功显示「已定位 · 可再点取消」（再点取消），失败 Toast 提示检查定位权限。
+ * 成功显示「已定位 · 可再点取消」（再点取消），失败按原因给「去设置 / 重试」结构化反馈。
  * 采集动作在 UI 层执行（VM 不持有 Context），经纬度经事件回填 VM 状态，
  * 键盘「确认」落库时才带上。
  */
@@ -965,6 +1054,38 @@ private fun LocationChipRow(
     var locating by remember { mutableStateOf(false) }
     val rinkl = LocalRinklColors.current
     val located = location != null
+    // 控制器在组合期捕获（CompositionLocal.current 只能在组合上下文读取）。
+    val feedbackHost = LocalRinklFeedback.current
+
+    // 定位流程（体验审查 P1）：失败按原因给可行动反馈——永久拒绝/服务关「去设置」，
+    // 可重试的给「重试」（重试动作重新执行本流程），不再用一次性 Toast。
+    fun locate() {
+        if (locating) return
+        locating = true
+        scope.launch {
+            val feedback: BillFeedback = when (val result = LocationGrabber.grabWithReason(context)) {
+                is LocationGrabber.GrabResult.Coords -> {
+                    locating = false
+                    onResolved(result.latitude, result.longitude)
+                    return@launch
+                }
+                is LocationGrabber.GrabResult.Failure -> when (result.reason) {
+                    LocationGrabber.LocationFailureReason.PERMISSION_PERMANENTLY_DENIED ->
+                        BillFeedback.Actionable("定位权限已被拒绝，请在系统设置中开启", "去设置")
+                    LocationGrabber.LocationFailureReason.LOCATION_SERVICE_OFF ->
+                        BillFeedback.Actionable("系统定位服务未开启，请在设置中开启", "去设置")
+                    LocationGrabber.LocationFailureReason.PERMISSION_DENIED ->
+                        BillFeedback.Actionable("未授予定位权限，无法获取当前位置", "重试")
+                    LocationGrabber.LocationFailureReason.TIMEOUT_OR_UNAVAILABLE ->
+                        BillFeedback.Actionable("定位超时，请稍后重试", "重试")
+                }
+            }
+            locating = false
+            feedbackHost.show(feedback) {
+                if (feedback.actionLabel == "重试") locate() else openAppSettings(context)
+            }
+        }
+    }
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(15.dp))
@@ -976,20 +1097,13 @@ private fun LocationChipRow(
                 }
             )
             .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(15.dp)))
-            .clickable {
+            // mergeDescendants：读屏把图标+文字合并为一条「记录当前位置」语义
+            .semantics(mergeDescendants = true) {}
+            .clickable(onClickLabel = if (located) "清除位置" else "记录当前位置") {
                 if (located) {
                     onCleared()
-                } else if (!locating) {
-                    locating = true
-                    scope.launch {
-                        val got = LocationGrabber.grab(context)
-                        locating = false
-                        if (got != null) {
-                            onResolved(got.first, got.second)
-                        } else {
-                            Toast.makeText(context, "定位失败，请检查定位权限", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                } else {
+                    locate()
                 }
             }
             .padding(horizontal = 10.dp, vertical = 5.dp),

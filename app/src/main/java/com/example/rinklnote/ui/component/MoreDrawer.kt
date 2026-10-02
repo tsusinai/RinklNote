@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,8 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
@@ -128,14 +135,15 @@ fun MoreDrawer(
                     ) { onDismiss() }
             )
 
-            // 抽屉面板：左缘贴边、宽 200dp、满高顶天立地、右缘 18dp 圆角。
+            // 抽屉面板：左缘贴边、自适应宽度（体验审查 P1：可读上限 320dp、小屏按屏宽 0.88 占比，
+            // 与快捷记账抽屉一致）、满高顶天立地、右缘 18dp 圆角。
             // 不再用 0.88h 居中（那是底部抽屉 QuickAddDrawer 的镜像几何——空隙落在左右不显眼，
             // 镜像到竖轴后顶部/底部各留 ~6% 空隙，与状态栏避让、内边距层层叠加，头部离屏顶过远）；
             // 顶部节奏统一由 DrawerContent 的「状态栏避让 + 12dp 呼吸」单一来源承担
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(200.dp)
+                    .width(adaptiveMoreDrawerWidth())
                     .clip(panelShape)
                     .then(panelSurface)
                     .then(applyCardGlass(panelShape))
@@ -165,6 +173,13 @@ fun MoreDrawer(
 /** 行点击的统一收口：先关抽屉再触发回调（导航发生在关抽屉动画启动之后）。 */
 private fun closeThen(onDismiss: () -> Unit, action: () -> Unit): () -> Unit =
     { onDismiss(); action() }
+
+/** 抽屉自适应宽度（体验审查 P1）：可读上限 320dp，小屏按屏宽 0.88 占比收缩；与快捷记账抽屉一致。 */
+@Composable
+private fun adaptiveMoreDrawerWidth(): Dp {
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    return minOf(320.dp, screenWidth * 0.88f)
+}
 
 @Composable
 private fun DrawerContent(
@@ -202,12 +217,12 @@ private fun DrawerContent(
                 // 左右 4dp 叠加内容列 12dp = 头像区距面板缘 16dp，行内 CenterVertically 垂直居中
                 .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
                 // 未登录时头部即登录入口（与「登录后可云端同步账单」文案承诺一致）；
-                // 沿用功能行约定：先关闭抽屉再触发回调
+                // 沿用功能行约定：先关闭抽屉再触发回调；语义动作名明确供读屏播报
                 .then(
                     if (profileLoggedIn) {
                         Modifier
                     } else {
-                        Modifier.clickable {
+                        Modifier.clickable(onClickLabel = "去登录") {
                             onDismiss()
                             onOpenLogin()
                         }
@@ -230,7 +245,8 @@ private fun DrawerContent(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -240,14 +256,18 @@ private fun DrawerContent(
                     maxLines = 1
                 )
             }
-            // 右上角关闭（轻量 ✕ 触点，同快捷记账抽屉建议条的关闭样式）
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center
+            // 右上角关闭：IconButton 保证 ≥48dp 触控 + 读屏「关闭」（体验审查 P2，原 28dp 触点过小）
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(48.dp)
             ) {
-                Text("✕", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "✕",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // 「✕」字形对读屏无意义：整体语义收敛为「关闭」
+                    modifier = Modifier.clearAndSetSemantics { contentDescription = "关闭" }
+                )
             }
         }
 
@@ -342,6 +362,8 @@ private fun MoreDrawerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // mergeDescendants：读屏把「图标 + 标签 + 箭头」合并为单条「标签，按钮」语义，不逐项播报
+            .semantics(mergeDescendants = true) {}
             .clickable(onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
