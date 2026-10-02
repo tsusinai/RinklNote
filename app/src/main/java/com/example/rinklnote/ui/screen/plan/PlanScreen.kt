@@ -35,8 +35,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -246,7 +248,12 @@ private fun TotalBudgetCard(
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .clickable { onClick() }
+            // 整卡只保留一个语义点击节点：动作名按状态区分（未设=设置，已设=编辑）。
+            // 卡内「设置 ›」是纯视觉提示（无独立 clickable），读屏时随卡片合并播报。
+            .clickable(
+                onClickLabel = if (budget == null) "设置本月预算" else "编辑本月预算",
+                role = Role.Button
+            ) { onClick() }
             .padding(16.dp)
     ) {
         Row(
@@ -296,7 +303,9 @@ private fun TotalBudgetCard(
                 Text(
                     text = "已花 $spentText / 预算 $budgetText",
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = "$percent%",
@@ -578,7 +587,9 @@ private fun CategoryBudgetCard(
                     text = category.categoryName,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 BudgetProgressBar(
@@ -652,6 +663,8 @@ private fun SubCategoryBudgetRow(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -696,7 +709,9 @@ private fun BudgetProgressBar(
             Text(
                 text = "已花 $spentText / 预算 ${currencyText(amountMinor)}",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "已超 ${Money.format(overBudgetBy)}",
@@ -710,7 +725,9 @@ private fun BudgetProgressBar(
             Text(
                 text = "已花 $spentText / 预算 ${currencyText(amountMinor)}",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = "${(expenseMinor.toDouble() / amountMinor * 100).toInt()}%",

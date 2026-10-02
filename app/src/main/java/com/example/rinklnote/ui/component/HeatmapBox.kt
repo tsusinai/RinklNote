@@ -32,14 +32,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.ui.component.applyCardGlass
 import java.time.LocalDate
+import kotlin.math.roundToLong
 
 /** 月度每日支出热力图：周一起始的月历格子，每个格子按当日支出深浅着色。
  *  当日支出越高颜色越深，today 加主色描边；无支出日为最浅底色。可点击标题区收回/展开。 */
@@ -122,7 +129,9 @@ fun HeatmapBox(
                     .weight(1f)
                     .clickable(
                         interactionSource = interactionSource,
-                        indication = null
+                        indication = null,
+                        // 读屏动作名随状态切换（默认只有「双击激活」）。
+                        onClickLabel = if (expanded) "收起月历" else "展开月历"
                     ) { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -208,10 +217,19 @@ fun HeatmapBox(
                                     if (intensity > 0.55f) Color.White else MaterialTheme.colorScheme.onSurface
                                 val dayTap = onDayTap
                                 val isSelected = dayTap != null && selectedDay == day
+                                // 读屏语义：dailyExpense 存的是「分」（Float），直接走 Money.format 出「¥xx」；
+                                // 选中态用 stateDescription 单独标注，不拼进描述串。
+                                val daySemantic =
+                                    "${heatmap.monthValue}月${day}日，" +
+                                        if (amount > 0f) "支出 ${Money.format(amount.roundToLong())}" else "无支出"
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
                                         .aspectRatio(CELL_ASPECT_RATIO)
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = daySemantic
+                                            if (isSelected) stateDescription = "已选中"
+                                        }
                                         .padding(2.dp)
                                         .then(
                                             when {
@@ -231,7 +249,15 @@ fun HeatmapBox(
                                         .clip(cellShape)
                                         .background(bg)
                                         .then(
-                                            if (dayTap != null) Modifier.clickable { dayTap(day) } else Modifier
+                                            if (dayTap != null) {
+                                                // 可点格子：Role.Button + 明确动作名「查看当天账单」。
+                                                Modifier.clickable(
+                                                    onClickLabel = "查看当天账单",
+                                                    role = Role.Button
+                                                ) { dayTap(day) }
+                                            } else {
+                                                Modifier
+                                            }
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -239,7 +265,9 @@ fun HeatmapBox(
                                         text = day.toString(),
                                         fontSize = 12.sp,
                                         color = textColor,
-                                        fontWeight = if (day == todayDay) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (day == todayDay) FontWeight.Bold else FontWeight.Normal,
+                                        // 日期数字已并入格子 contentDescription，单独读一遍是冗余。
+                                        modifier = Modifier.clearAndSetSemantics { }
                                     )
                                 }
                             } else {

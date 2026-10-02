@@ -58,6 +58,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -355,6 +357,8 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
             Box(
                 modifier = Modifier
                     .size(24.dp)
+                    // 「✕」是字符不是图标：语义上补「清空搜索词」，避免读屏读出符号名。
+                    .semantics { contentDescription = "清空搜索词" }
                     .clickable { onQueryChanged("") },
                 contentAlignment = Alignment.Center
             ) {
@@ -520,7 +524,9 @@ private fun CategoryBox(label: String, selected: Boolean, onClick: () -> Unit) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
-            }
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -601,7 +607,9 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
-            }
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -747,7 +755,8 @@ private fun SummarySegment(label: String, value: String, valueColor: Color, modi
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = valueColor,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
