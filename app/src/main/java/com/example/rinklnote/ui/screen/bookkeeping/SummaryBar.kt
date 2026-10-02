@@ -73,6 +73,7 @@ fun SummaryBar(
     ) {
         // 收入/支出合计行
         // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+        // 各段 softWrap=false（体验审查 P2）：大字体/窄屏下金额绝不被拆成两行。
         val incomeColor = LocalRinklColors.current.incomeColor
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -82,31 +83,41 @@ fun SummaryBar(
                 text = "${currentMonth}月：",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false
             )
             Text(
                 text = "支出",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.tertiary
+                color = MaterialTheme.colorScheme.tertiary,
+                maxLines = 1,
+                softWrap = false
             )
             Text(
                 text = "${Money.formatPlain(totalExpense)}  ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.tertiary
+                color = MaterialTheme.colorScheme.tertiary,
+                maxLines = 1,
+                softWrap = false
             )
             Text(
                 text = "收入",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = incomeColor
+                color = incomeColor,
+                maxLines = 1,
+                softWrap = false
             )
             Text(
                 text = "${Money.formatPlain(totalIncome)}  ",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = incomeColor
+                color = incomeColor,
+                maxLines = 1,
+                softWrap = false
             )
             if (hasSummary) {
                 Spacer(modifier = Modifier.weight(1f))
