@@ -159,6 +159,10 @@ fun Application.module() {
         groupSplit = GroupSplitService(billService),
         batchBooking = BatchBookingService(billService, nluService)
     )
+    // 预算亮灯钩子（阶段 3）：QQ 通道每笔落账后回调（注意参数序：hook 是 userId 在前）。
+    butlerRouter.budgetLightHook = { userId, categoryName, amountMinor ->
+        butlerCare.budgetLight(categoryName, amountMinor, userId)
+    }
 
     // AI 助手接口（小爱等手机 AI）—— 个人访问令牌 + 结构化查询
     val aiTokenService = AiTokenService()
