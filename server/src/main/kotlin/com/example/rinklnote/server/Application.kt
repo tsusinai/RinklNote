@@ -27,6 +27,13 @@ import com.example.rinklnote.server.services.WecomBotService
 import com.example.rinklnote.server.services.coach.CoachService
 import com.example.rinklnote.server.services.asr.AsrConfig
 import com.example.rinklnote.server.services.asr.WhisperAsrService
+import com.example.rinklnote.server.services.butler.BatchBookingService
+import com.example.rinklnote.server.services.butler.ButlerCareService
+import com.example.rinklnote.server.services.butler.ButlerIntentRouter
+import com.example.rinklnote.server.services.butler.GroupSplitService
+import com.example.rinklnote.server.services.butler.ReceiptOcrService
+import com.example.rinklnote.server.services.butler.RichQueryService
+import com.example.rinklnote.server.services.butler.VoiceTranscribeService
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.DefaultNLUService
 import com.example.rinklnote.server.services.nlu.LLMParser
@@ -120,9 +127,47 @@ fun Application.module() {
         anomalyThreshold = anomalyThreshold
     )
 
+    // Speech-to-text (optional). Unconfigured → Android falls back to on-device recognition;
+    // QQ 语音兜底（管家阶段 1）也复用这一个 AsrService。
+    val asrApiKey = System.getenv("ASR_API_KEY")
+        ?: environment.config.propertyOrNull("asr.apiKey")?.getString()
+    val asrBaseUrl = System.getenv("ASR_BASE_URL")
+        ?: environment.config.propertyOrNull("asr.baseUrl")?.getString()
+        ?: "https://api.openai.com"
+    val asrModel = System.getenv("ASR_MODEL")
+        ?: environment.config.propertyOrNull("asr.model")?.getString()
+        ?: "whisper-1"
+    val asrTimeoutMs = System.getenv("ASR_TIMEOUT_MS")?.toLongOrNull()
+        ?: environment.config.propertyOrNull("asr.timeoutMs")?.getString()?.toLongOrNull()
+        ?: 30_000L
+    val asrService = WhisperAsrService(
+        if (asrApiKey.isNullOrBlank()) null
+        else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
+    )
+
+    // 小盘 QQ 消息处理管家（2026-10-03）：多模态归一化 + 意图调度 + 主动照料。
+    // 各能力实现见 services/butler/；未配置视觉/ASR 时对应能力优雅降级为引导文案。
+    val butlerCare = ButlerCareService(billService, budgetService, challengeService, userService, log)
+    val butlerVoiceFallback = VoiceTranscribeService(asrService)
+    val butlerReceiptOcr = ReceiptOcrService(billService, log)
+    val butlerRouter = ButlerIntentRouter(
+        billService = billService,
+        budgetService = budgetService,
+        voiceFallback = butlerVoiceFallback,
+        receiptOcr = butlerReceiptOcr,
+        richQuery = RichQueryService(billService, budgetService),
+        groupSplit = GroupSplitService(billService),
+        batchBooking = BatchBookingService(billService, nluService)
+    )
+
     // AI 助手接口（小爱等手机 AI）—— 个人访问令牌 + 结构化查询
     val aiTokenService = AiTokenService()
-    val phoneIntentRouter = PhoneIntentRouter(billService, budgetService, insightService, nluService)
+    val phoneIntentRouter = PhoneIntentRouter(
+        billService, budgetService, insightService, nluService,
+        onBillBooked = { userId, categoryName, amountMinor ->
+            butlerCare.budgetLight(categoryName, amountMinor, userId)
+        }
+    )
     val aiAssistService = AiAssistService(billService, budgetService, insightService)
 
     // QQ Official Bot — config stored in DB, managed via Web UI
@@ -136,7 +181,7 @@ fun Application.module() {
 
     // QQ Official Bot gateway — long WebSocket connection (default receiving mode).
     // Shares message processing with the HTTP webhook path via QQMessageProcessor.
-    val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService)
+    val qqWsClient = QQBotWebSocketClient(qqBotService, userService, billService, nluService, budgetService, insightService, butlerRouter)
     qqWsClient.start(appScope)
 
     // 飞书自建应用机器人（B2）——配置存 bot_config，经 Web 管理端维护；
@@ -269,29 +314,15 @@ fun Application.module() {
             else insightService.polishHabitCopy(habit)
         },
         weeklyProvider = { userId -> coachService.weeklyPushCopy(userId) },
+        // 晨报 / 暮检（管家阶段 3）：开关、时刻、内容全在 ButlerCareService 内判断（bot_config KV 配置）。
+        morningProvider = { userId -> butlerCare.morningReport(userId) },
+        eveningProvider = { userId -> butlerCare.eveningNudge(userId) },
         intervalMs = 30_000L,
         log = log
     )
     pushScheduler.start(appScope)
 
     val templateService = TemplateService()
-
-    // Speech-to-text (optional). Unconfigured → Android falls back to on-device recognition.
-    val asrApiKey = System.getenv("ASR_API_KEY")
-        ?: environment.config.propertyOrNull("asr.apiKey")?.getString()
-    val asrBaseUrl = System.getenv("ASR_BASE_URL")
-        ?: environment.config.propertyOrNull("asr.baseUrl")?.getString()
-        ?: "https://api.openai.com"
-    val asrModel = System.getenv("ASR_MODEL")
-        ?: environment.config.propertyOrNull("asr.model")?.getString()
-        ?: "whisper-1"
-    val asrTimeoutMs = System.getenv("ASR_TIMEOUT_MS")?.toLongOrNull()
-        ?: environment.config.propertyOrNull("asr.timeoutMs")?.getString()?.toLongOrNull()
-        ?: 30_000L
-    val asrService = WhisperAsrService(
-        if (asrApiKey.isNullOrBlank()) null
-        else AsrConfig(asrApiKey, asrBaseUrl, asrModel, asrTimeoutMs)
-    )
 
     // 汇率服务（2026-09-18 Task 4.2）：免 key 开放源（open.er-api.com，USD 基准）每日拉一次，
     // 缓存 bot_config KV；失败回落上次成功值，从未成功回落演示表（与 App DEMO_RATES_VS_CNY 同值）。
@@ -314,6 +345,9 @@ fun Application.module() {
             config = mailIngestConfig,
             billService = billService,
             alert = { text -> alertNotifier.deliver(text) },
+            onBooked = { merchant, amountMinor, categoryName ->
+                butlerCare.mailBookedNotice(mailIngestConfig.userId, merchant, amountMinor, categoryName)
+            },
             log = log
         )
         mailIngest.start(appScope)
@@ -339,6 +373,8 @@ fun Application.module() {
         feishuBotService.shutdown()
         wecomBotService.shutdown()
         asrService.shutdown()
+        butlerVoiceFallback.shutdown()
+        butlerReceiptOcr.shutdown()
         rateHttpClient.close()
     }
 
@@ -354,7 +390,7 @@ fun Application.module() {
         correctionRoutes()
         keywordRoutes()
         insightRoutes(insightService)
-        qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService)
+        qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService, butlerRouter)
         qqBotManageRoutes(qqBotService, userService)
         feishuBotWebhookRoutes(feishuBotService, userService, billService, nluService, budgetService, insightService)
         feishuBotManageRoutes(feishuBotService, userService)

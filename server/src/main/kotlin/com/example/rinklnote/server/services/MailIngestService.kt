@@ -33,6 +33,8 @@ class MailIngestService(
     val config: MailIngestConfig,
     private val billService: BillService,
     private val alert: suspend (String) -> Unit = {},
+    /** 落账回调（2026-10-03 管家阶段 3）：每笔邮件账单入账成功后触发（Application.kt 接到 ButlerCareService）。 */
+    private val onBooked: suspend (merchant: String, amountMinor: Long, categoryName: String) -> Unit = { _, _, _ -> },
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
     private val log: Logger,
     /** 收件箱打开器（默认 Jakarta Mail 真实现；测试注入假实现，零网络）。 */
@@ -86,6 +88,12 @@ class MailIngestService(
                 )
                 // 个人记忆层同步累计（商家词来自规则命中的字段，聚合口径不变）
                 UserMemoryService.recordBillAsync(config.userId, parsed.merchant, categoryName)
+                // 管家阶段 3：入账成功即推通道确认消息（失败只记日志，不影响入账主流程）
+                try {
+                    onBooked(parsed.merchant, parsed.amountMinor, categoryName ?: "")
+                } catch (e: Exception) {
+                    log.warn("邮件入账通知发送失败: ${e.message}")
+                }
                 inbox.markRead(msg)
                 booked++
                 log.info("邮件账单已入账 user=${config.userId} amountMinor=${parsed.amountMinor} merchant=${parsed.merchant}")

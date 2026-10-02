@@ -32,7 +32,12 @@ class PhoneIntentRouter(
     private val budgetService: BudgetService,
     private val insightService: InsightService,
     private val nluService: NLUService,
-    private val ruleBasedParser: RuleBasedParser = RuleBasedParser()
+    private val ruleBasedParser: RuleBasedParser = RuleBasedParser(),
+    /**
+     * 落账回调（2026-10-03 管家阶段 3）：每笔 chat 记账成功后触发，返回追加到回执尾部的
+     * 文案（如分类预算亮灯告警）；null = 不追加。默认 null，飞书/企微/订阅号通道行为零变化。
+     */
+    private val onBillBooked: (suspend (userId: Long, categoryName: String, amountMinor: Long) -> String?)? = null
 ) {
     private val shanghai = ZoneId.of("Asia/Shanghai")
 
@@ -87,7 +92,9 @@ class PhoneIntentRouter(
             // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
             UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)
             // 小盘人格化（Task 1.5）：回执统一走 MascotVoice（锚点「已记录」由指南锁定）
-            val base = MascotVoice.bookkeepingReceipt(bill.categoryName, bill.amountMinor)
+            var base = MascotVoice.bookkeepingReceipt(bill.categoryName, bill.amountMinor)
+            // 管家阶段 3：落账后预算亮灯钩子（跨沿告警文案追加在回执尾部；null 不追加）
+            onBillBooked?.invoke(userId, bill.categoryName, bill.amountMinor)?.let { base = "$base\n$it" }
             // Task 3 建议可信度：回执附注（多条用「；」连接，单条时保持原有单括号格式）——
             // 1) 模糊金额区间（Task 1.3）：必须保留「区间30~40元，按中值35元记」，不把模糊金额说成精确金额；
             // 2) LLM 低置信度归类：追加「AI 归类，建议核对」，明确这是机器猜测而非确定结论。

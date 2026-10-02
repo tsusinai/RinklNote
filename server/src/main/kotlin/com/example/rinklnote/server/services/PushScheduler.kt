@@ -58,6 +58,10 @@ class PushScheduler(
     private val dailyReportProvider: suspend (userId: Long) -> String?,
     /** 周报（账单教练，2026-09-18 Task 1.4）：每周一 ≥9:00 推一次；默认 null（未接线不推，行为零变化）。 */
     private val weeklyProvider: suspend (userId: Long) -> String? = { null },
+    /** 晨报（2026-10-03 管家阶段 3）：时刻/开关/内容全在 provider 内判断（含 bot_config KV 配置），null 即不推。 */
+    private val morningProvider: suspend (userId: Long) -> String? = { null },
+    /** 暮检（2026-10-03 管家阶段 3）：同上，≥ 配置时刻才产出内容，天级去重靠 push_log。 */
+    private val eveningProvider: suspend (userId: Long) -> String? = { null },
     private val clock: () -> LocalDateTime = { LocalDateTime.now(SHANGHAI) },
     private val intervalMs: Long = 30_000L,
     /** 重试指数退避基数：第 n 次重试延迟 = base × 2^(n-1)。测试注入小值。 */
@@ -163,6 +167,10 @@ class PushScheduler(
                         .format(DateTimeFormatter.ISO_LOCAL_DATE)
                     pushIfNeeded(u.id, channel, targetId, "WEEKLY_REPORT", weekKey, weeklyProvider)
                 }
+                // 晨报（2026-10-03 管家阶段 3）：独立成条，勿嵌进上面任一分支 —— 时刻/开关判断在 provider 内。
+                pushIfNeeded(u.id, channel, targetId, "MORNING_REPORT", dayKey, morningProvider)
+                // 暮检（管家阶段 3）：同上。
+                pushIfNeeded(u.id, channel, targetId, "EVENING_NUDGE", dayKey, eveningProvider)
             } catch (e: Exception) {
                 log.warn("push user=${u.id} failed: ${e.message}")
             }

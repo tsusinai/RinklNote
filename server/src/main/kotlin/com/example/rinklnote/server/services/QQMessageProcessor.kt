@@ -1,11 +1,15 @@
 package com.example.rinklnote.server.services
 
+import com.example.rinklnote.server.services.butler.ButlerChatType
+import com.example.rinklnote.server.services.butler.ButlerIncoming
+import com.example.rinklnote.server.services.butler.ButlerIntentRouter
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.NLUService
 import com.example.rinklnote.server.tables.WebhookEventTable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -41,7 +45,9 @@ object QQMessageProcessor {
         billService: BillService,
         nluService: NLUService,
         budgetService: BudgetService,
-        insightService: InsightService
+        insightService: InsightService,
+        // 管家管线（2026-10-03）：null = 关闭管家能力，处理器行为与改造前完全一致。
+        butler: ButlerIntentRouter? = null
     ) {
         try {
             // Handle content as string or array
@@ -61,20 +67,33 @@ object QQMessageProcessor {
             // Strip group mention markup like <@!123456>
             var content = rawContent.replace(Regex("""<@!\d+>"""), "").replace(Regex("""<@\d+>"""), "").trim()
 
+            // 附件提取（2026-10-03 管家阶段 1）：图片直链（识图入账）与语音直链（Whisper 兜底）。
             // QQ 语音消息的 content 为空，语音由 attachments 携带：
             // - asr_refer_text：QQ 平台自带语音转写文本（首选）
-            // - voice_wav_url / url：原始音频（AMR/WAV），后续如需可退回 Whisper 转写
+            // - voice_wav_url / url：原始音频（AMR/WAV），平台转写缺失时交管家 VoiceTranscribeService 兜底
+            var voiceUrl: String? = null
+            var imageUrl: String? = null
+            d["attachments"]?.jsonArray?.forEach { el ->
+                val obj = el.jsonObject
+                val url = obj["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                when (obj["content_type"]?.jsonPrimitive?.content) {
+                    "voice" -> voiceUrl = url
+                    "image" -> imageUrl = url
+                }
+            }
             if (content.isBlank()) {
                 val voiceText = d["attachments"]?.jsonArray
                     ?.firstOrNull { it.jsonObject["content_type"]?.jsonPrimitive?.content == "voice" }
-                    ?.jsonObject?.get("asr_refer_text")?.jsonPrimitive?.content
+                    ?.jsonObject?.get("asr_refer_text")?.jsonPrimitive?.contentOrNull
                     ?.trim()
-                if (voiceText.isNullOrBlank()) {
-                    logger.info("QQ event dropped: blank content, no voice transcript (t=$eventType)")
+                if (!voiceText.isNullOrBlank()) {
+                    logger.info("QQ voice message transcribed by platform: $voiceText")
+                    content = voiceText
+                } else if (voiceUrl == null && imageUrl == null) {
+                    logger.info("QQ event dropped: blank content, no voice transcript, no media (t=$eventType)")
                     return
                 }
-                logger.info("QQ voice message transcribed by platform: $voiceText")
-                content = voiceText
+                // 无平台转写但有语音/图片附件：content 保持为空，交给管家管线兜底（Whisper / 识图）。
             }
             val msgId = d["id"]?.jsonPrimitive?.content ?: return
 
@@ -158,7 +177,35 @@ object QQMessageProcessor {
                 return
             }
 
-            val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
+            // 管家管线（2026-10-03）：多模态（识图/语音兜底）与管家意图（AA 分账/批量记账/
+            // 无消费打卡/富查账）。返回 null = 无人认领，落回既有自然语言路由。
+            if (butler != null) {
+                val inc = ButlerIncoming(
+                    userId = user.id,
+                    openid = openid,
+                    chatType = if (groupOpenid != null) ButlerChatType.GROUP else ButlerChatType.PRIVATE,
+                    groupOpenid = groupOpenid,
+                    msgId = msgId,
+                    text = content.takeIf { it.isNotBlank() },
+                    voiceUrl = voiceUrl,
+                    imageUrl = imageUrl
+                )
+                val butlerReply = butler.dispatch(inc)
+                if (butlerReply != null) {
+                    if (groupOpenid != null) {
+                        qqBotService.sendGroupMessage(groupOpenid, butlerReply, msgId)
+                    } else {
+                        qqBotService.sendC2CMessage(openid, butlerReply, msgId)
+                    }
+                    logger.info("QQ butler reply for user ${user.id}: ${butlerReply.replace("\n", " / ")}")
+                    return
+                }
+            }
+
+            val router = PhoneIntentRouter(
+                billService, budgetService, insightService, nluService,
+                onBillBooked = butler?.budgetLightHook
+            )
             val reply = router.route(content, user.id)
             val out = if (isNew) "欢迎！已开通 QQ 记账账号。用中文说「午餐20元」即可记账；回复「登录」可获取网页登录码。\n\n$reply" else reply
             if (groupOpenid != null) {

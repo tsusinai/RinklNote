@@ -6,6 +6,7 @@ import com.example.rinklnote.server.services.InMemoryRateLimiter
 import com.example.rinklnote.server.services.QQBotService
 import com.example.rinklnote.server.services.QQMessageProcessor
 import com.example.rinklnote.server.services.UserService
+import com.example.rinklnote.server.services.butler.ButlerIntentRouter
 import com.example.rinklnote.server.services.insight.InsightService
 import com.example.rinklnote.server.services.nlu.NLUService
 import io.ktor.http.*
@@ -25,7 +26,9 @@ fun Route.qqBotWebhookRoutes(
     billService: BillService,
     nluService: NLUService,
     budgetService: BudgetService,
-    insightService: InsightService
+    insightService: InsightService,
+    // 管家管线（2026-10-03）：null = 关闭管家能力，行为与改造前一致。
+    butler: ButlerIntentRouter? = null
 ) {
     val logger = LoggerFactory.getLogger("QQBotWebhook")
     val scope = CoroutineScope(Dispatchers.Default)
@@ -120,7 +123,7 @@ fun Route.qqBotWebhookRoutes(
                         scope.launch {
                             val dedupKey = "$eventType:$msgId"
                             if (QQMessageProcessor.isFirstEvent(dedupKey)) {
-                                QQMessageProcessor.process(eventType, d, qqBotService, userService, billService, nluService, budgetService, insightService)
+                                QQMessageProcessor.process(eventType, d, qqBotService, userService, billService, nluService, budgetService, insightService, butler)
                             } else {
                                 logger.info("Duplicate webhook event ignored: $dedupKey")
                             }
