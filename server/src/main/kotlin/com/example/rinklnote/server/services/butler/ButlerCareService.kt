@@ -3,6 +3,7 @@ package com.example.rinklnote.server.services.butler
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
 import com.example.rinklnote.server.services.ChallengeService
+import com.example.rinklnote.server.services.TimeUtil
 import com.example.rinklnote.server.services.UserService
 import io.ktor.util.logging.Logger
 
@@ -25,8 +26,16 @@ class ButlerCareService(
     private val budgetService: BudgetService,
     private val challengeService: ChallengeService,
     private val userService: UserService,
-    private val log: Logger
+    private val log: Logger,
+    /** 可注入时钟（测试固定到目标时刻）；业务时区 Asia/Shanghai。 */
+    private val clock: () -> java.time.LocalDateTime = { java.time.LocalDateTime.now(TimeUtil.BOOKKEEPING_ZONE) }
 ) {
+
+    /**
+     * 通道发送器（Application.kt 装配后才有值）：按 飞书 > QQ 选用户已绑定通道发送。
+     * null 时 [mailBookedNotice] 只记日志不发送。
+     */
+    var channelSender: (suspend (userId: Long, content: String) -> Boolean)? = null
 
     /** 晨报（昨日小结 + 今日预算可用 + 无消费/挑战状态）；无内容返回 null 不推。 */
     suspend fun morningReport(userId: Long): String? {

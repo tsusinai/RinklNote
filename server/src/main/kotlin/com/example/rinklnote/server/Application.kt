@@ -215,6 +215,17 @@ fun Application.module() {
         log.info("订阅号未配置 —— 可在 Web 设置页维护")
     }
 
+    // 管家主动通知的通道发送器（阶段 3）：邮件入账确认等，按 飞书 > QQ 选已绑定通道。
+    butlerCare.channelSender = { userId, content ->
+        val u = userService.findById(userId)
+        when {
+            u == null -> false
+            u.feishuOpenId != null -> feishuBotService.sendText(u.feishuOpenId, content)
+            u.qqOpenid != null -> qqBotService.sendC2CMessage(u.qqOpenid, content, "")
+            else -> false
+        }
+    }
+
     // 全局异常告警（2026-09-18 Task 0.8）：未捕获异常经 Bot 通道推给主账号（ADMIN_IDENTITIES）。
     // StatusPages 需在路由前安装，但告警目标依赖上面各 Bot 服务 —— 因此 configureErrorHandling
     // 挪到这里（仍在 routing 之前，语义不变）。告警只含路径与异常摘要，不含请求体。
