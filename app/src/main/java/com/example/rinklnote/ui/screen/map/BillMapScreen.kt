@@ -2,16 +2,18 @@ package com.example.rinklnote.ui.screen.map
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
+import android.provider.Settings
 import android.text.TextPaint
 import android.text.TextUtils
 import android.util.TypedValue
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas as IconCanvas
@@ -59,6 +61,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,7 +74,9 @@ import com.example.rinklnote.R
 import com.example.rinklnote.RinklNoteApp
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.LocalRinklFeedback
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
@@ -116,8 +123,9 @@ private const val BILL_GRID_DEG = 10_000.0
  *    （支出/收入色随收支令牌 expenseColor / incomeColor，标签烧进图标常驻显示，
  *    见 [buildMarkerDrawable]）。点击标记 = 该点平移居中 + [onOpenBill] 打开代表账单
  *    （同位置多笔时为最近一笔，气泡附 ×N）。右下角「回到我的位置」悬浮钮：
- *    [LocationGrabber] 采集一次 → animateTo 并画定位圆点，失败 Toast；
- *    首次进入地图也会自动尝试一次定位（失败保持默认中心，静默降级）。
+ *    [LocationGrabber.grabWithReason] 采集一次 → animateTo 并画定位圆点；
+ *    失败按原因走统一反馈（[BillFeedback.Actionable]：永久拒绝/服务关给「去设置」、
+ *    其余给「重试」）；首次进入地图也会自动尝试一次定位（失败保持默认中心，静默降级）。
  *    无带位置账单时地图中央显示半透明空态提示卡。
  * ③ 拒绝态：引导卡（说明 + 「去开启」重试 + 返回）。
  *
@@ -684,7 +692,7 @@ private fun MapContent(
 
     // 首次进入地图自动尝试一次定位（focusBillId 已指定时跳过）：成功 → 画「我的位置」圆点
     // 并 animateTo；失败（无权限/无 provider/超时）→ 保持默认中心（上海人民广场一带）
-    // 静默降级，不弹 Toast 打扰首次浏览。
+    // 静默降级，不弹反馈打扰首次浏览（手动按钮才给「去设置/重试」可行动反馈）。
     LaunchedEffect(mapView) {
         if (focusBillId != null) return@LaunchedEffect
         val grabbed = LocationGrabber.grab(context, LOCATE_TIMEOUT_MS) ?: return@LaunchedEffect
@@ -704,6 +712,61 @@ private fun MapContent(
         }
     }
 
+    // —— 「回到我的位置」手动定位流程（体验审查 P1：Toast → 统一结构化反馈）——
+    // 成功：画定位圆点并居中，[BillFeedback.Plain] 自动消失；失败：按 [LocationGrabber]
+    // 的原因分类给可行动反馈——永久拒绝 / 定位服务关给「去设置」，可重试给「重试」
+    // （动作 = 再跑一遍本流程）。提取为局部函数以便「重试」动作自引用（val lambda 不能自引用）。
+    val feedback = LocalRinklFeedback.current
+    val openAppSettings: () -> Unit = {
+        // 「去设置」约定：系统设置详情页必须开外部 Intent（App 内无法承载设置页）
+        context.startActivity(
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", context.packageName, null)
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+    fun runLocateFlow() {
+        scope.launch {
+            when (val grabbed = LocationGrabber.grabWithReason(context, LOCATE_TIMEOUT_MS)) {
+                is LocationGrabber.GrabResult.Coords -> {
+                    myLocationMarker = placeMyLocationMarker(
+                        mapView, context, myLocationMarker, themeColorArgb,
+                        grabbed.latitude, grabbed.longitude
+                    )
+                    mapView.controller.animateTo(GeoPoint(grabbed.latitude, grabbed.longitude))
+                    feedback.show(BillFeedback.Plain("已定位到当前位置"))
+                }
+
+                is LocationGrabber.GrabResult.Failure -> when (grabbed.reason) {
+                    LocationGrabber.LocationFailureReason.PERMISSION_PERMANENTLY_DENIED ->
+                        feedback.show(
+                            BillFeedback.Actionable("定位权限已被拒绝，请前往系统设置开启", "去设置"),
+                            onAction = openAppSettings
+                        )
+
+                    LocationGrabber.LocationFailureReason.LOCATION_SERVICE_OFF ->
+                        feedback.show(
+                            BillFeedback.Actionable("系统定位服务未开启，请前往设置开启", "去设置"),
+                            onAction = openAppSettings
+                        )
+
+                    LocationGrabber.LocationFailureReason.PERMISSION_DENIED ->
+                        feedback.show(
+                            BillFeedback.Actionable("未授予定位权限，无法获取当前位置", "重试"),
+                            onAction = { runLocateFlow() }
+                        )
+
+                    LocationGrabber.LocationFailureReason.TIMEOUT_OR_UNAVAILABLE ->
+                        feedback.show(
+                            BillFeedback.Actionable("定位超时，请稍后重试", "重试"),
+                            onAction = { runLocateFlow() }
+                        )
+                }
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
@@ -720,7 +783,7 @@ private fun MapContent(
                     .clip(RoundedCornerShape(15.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.90f))
                     .then(applyCardGlass(RoundedCornerShape(15.dp)))
-                    .clickable(onClick = onBack),
+                    .clickable(onClick = onBack, onClickLabel = "返回", role = Role.Button),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -796,7 +859,8 @@ private fun MapContent(
         }
 
         // 右下角「回到我的位置」悬浮钮：点击采集一次定位 → 成功 animateTo 并画定位圆点；
-        // 失败 Toast 提示。MyLocation 图标在 material-icons-extended（项目未引入该依赖，
+        // 失败按原因走统一 Snackbar 反馈（去设置/重试，见 [runLocateFlow]）。
+        // MyLocation 图标在 material-icons-extended（项目未引入该依赖，
         // 本文件也不新增依赖），故用 Canvas 手绘同款「准星」造型：外环 + 中心实心点 + 四向刻度，
         // 颜色走主题令牌 themeColor（IconCanvas 别名是为了避开 android.graphics.Canvas 重名）。
         Box(
@@ -808,21 +872,10 @@ private fun MapContent(
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surface)
                 .then(applyCardGlass(CircleShape))
-                .clickable {
-                    scope.launch {
-                        val grabbed = LocationGrabber.grab(context, LOCATE_TIMEOUT_MS)
-                        if (grabbed != null) {
-                            val (lat, lng) = grabbed
-                            myLocationMarker = placeMyLocationMarker(
-                                mapView, context, myLocationMarker, themeColorArgb, lat, lng
-                            )
-                            mapView.controller.animateTo(GeoPoint(lat, lng))
-                        } else {
-                            Toast.makeText(
-                                context, "定位失败，请检查定位权限", Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
+                // 无障碍语义：Canvas 准星没有文本子元素，显式补元素名与点击动作说明
+                .semantics { contentDescription = "回到我的位置" }
+                .clickable(onClickLabel = "回到我的位置", role = Role.Button) {
+                    runLocateFlow()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -939,7 +992,12 @@ private fun GeoRankingTogglePill(expanded: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .then(applyCardGlass(RoundedCornerShape(18.dp)))
-            .clickable(onClick = onClick)
+            // 无障碍语义：补点击动作说明（收起/展开方向），TalkBack 播报更明确
+            .clickable(
+                onClick = onClick,
+                onClickLabel = if (expanded) "收起地点排行" else "展开地点排行",
+                role = Role.Button
+            )
             .padding(horizontal = 12.dp, vertical = 7.dp)
     ) {
         Text(
