@@ -65,6 +65,9 @@ data class RinklColors(
  */
 val LocalRinklColors = staticCompositionLocalOf { defaultRinklColors(dark = false) }
 
+/** 卡片白色蒙版开关的 CompositionLocal（由根部单次收集向下注入，避免各卡片重复启动协程流）。 */
+val LocalCardOverlayEnabled = staticCompositionLocalOf { false }
+
 /** 默认（未自定义）配色。[dark] 只影响需要随明暗反转的槽位（字体/顶栏/收支两色）。 */
 fun defaultRinklColors(dark: Boolean): RinklColors = RinklColors(
     fontColor = if (dark) Color.White else Color.Black,

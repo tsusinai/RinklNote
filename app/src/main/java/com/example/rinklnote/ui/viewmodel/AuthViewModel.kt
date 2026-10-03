@@ -102,6 +102,7 @@ sealed interface AuthEvent {
     data class SetDailyReportQq(val enabled: Boolean, val hour: Int, val minute: Int) : AuthEvent
     data object ClearError : AuthEvent
     data object ClearSuccess : AuthEvent
+    data object ClearBindResult : AuthEvent
 }
 
 class AuthViewModel(
@@ -132,6 +133,7 @@ class AuthViewModel(
             is AuthEvent.NewPasswordChanged -> _state.update { it.copy(newPassword = event.value, error = null) }
             is AuthEvent.ClearError -> _state.update { it.copy(error = null) }
             is AuthEvent.ClearSuccess -> _state.update { it.copy(successMessage = null) }
+            is AuthEvent.ClearBindResult -> _state.update { it.copy(bindSucceeded = null) }
             is AuthEvent.Login -> login()
             is AuthEvent.Register -> register()
             is AuthEvent.FetchProfile -> fetchProfile()

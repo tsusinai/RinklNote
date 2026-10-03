@@ -327,7 +327,9 @@ private fun CaptureCard(capture: BillCapture, onConfirm: () -> Unit, onIgnore: (
     }
 }
 
+private val CAPTURE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("M/d HH:mm")
+
 /** 捕获时间展示（统一业务时区 M/d HH:mm）。 */
 private fun formatCaptureTime(epochMs: Long): String =
     Instant.ofEpochMilli(epochMs).atZone(bookkeepingZone())
-        .format(DateTimeFormatter.ofPattern("M/d HH:mm"))
+        .format(CAPTURE_TIME_FORMATTER)

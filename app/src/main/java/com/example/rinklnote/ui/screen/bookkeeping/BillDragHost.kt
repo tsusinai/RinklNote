@@ -38,9 +38,19 @@ data class BillDragInfo(
  *  - 松手 → UI 层读 [isOverDelete] / [insertionIndex] 决定删除或重排，再调 [endDrag] 复位。
  * 行 bounds 由各 BillRow 经 [registerRow] 注册（billId → 全局 Rect）。
  */
+@androidx.compose.runtime.Stable
 class BillDragHost {
     var dragging by mutableStateOf<BillDragInfo?>(null)
         private set
+
+    /** 是否正处于拖拽中（离散布尔状态，供外层避免监听高频 pointerY 变动）。 */
+    val isDragging: Boolean get() = dragging != null
+
+    /** 正在拖拽的账单日期（无拖拽时为 null）。 */
+    val draggedDate: Long? get() = dragging?.date
+
+    /** 正在拖拽的账单 id（无拖拽时为 null）。 */
+    val draggedBillId: Long? get() = dragging?.billId
 
     /** 删除区（FAB）的全局 bounds，由 FAB 经 onGloballyPositioned 上报。 */
     var deleteZone by mutableStateOf<Rect?>(null)

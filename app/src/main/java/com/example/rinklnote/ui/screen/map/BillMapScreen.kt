@@ -703,10 +703,19 @@ private fun MapContent(
         mapView.controller.animateTo(GeoPoint(lat, lng))
     }
 
-    // 生命周期对齐：进出页面启停瓦片下载调度，卸载时解绑（预实现阶段不做 SqlTileWriter 深清理）
-    DisposableEffect(Unit) {
-        mapView.onResume()
+    // 生命周期对齐：对齐宿主 Activity 的 ON_RESUME / ON_PAUSE，退后台自动暂停瓦片下载与定位监听
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             mapView.onPause()
             mapView.onDetach()
         }

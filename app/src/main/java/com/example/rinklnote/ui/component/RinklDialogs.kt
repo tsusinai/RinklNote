@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,10 +48,11 @@ private val RinklDialogShape = RoundedCornerShape(20.dp)
 @Composable
 fun RinklDialogTheme(content: @Composable () -> Unit) {
     val rinkl = LocalRinklColors.current
+    val onPrimaryColor = if (rinkl.themeColor.luminance() > 0.6f) Color.Black else Color.White
     MaterialTheme(
         colorScheme = MaterialTheme.colorScheme.copy(
             primary = rinkl.themeColor,
-            onPrimary = Color.White,
+            onPrimary = onPrimaryColor,
             primaryContainer = rinkl.themeColor.copy(alpha = 0.16f),
             onPrimaryContainer = rinkl.themeColor
         ),

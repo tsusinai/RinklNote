@@ -133,7 +133,7 @@ fun ThemeGalleryScreen(
                 }
 
                 // 三套解锁主题卡：解锁=可换装；未解锁=锁 + 条件；使用中=金色高亮贴纸。
-                items(cards.size) { index ->
+                items(cards.size, key = { cards[it].name }, contentType = { "theme_card" }) { index ->
                     val card = cards[index]
                     val preset = UnlockableThemePresets.firstOrNull { it.name == card.name }
                     if (preset != null) {

@@ -60,11 +60,16 @@ fun BotBindPage(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    // 绑定成功 → 自动关闭（bindSucceeded 是一次性副作用标记，由 VM 提交成功时置位）
-    LaunchedEffect(state.bindSucceeded) {
-        if (state.bindSucceeded != null) onDismiss()
+    val handleDismiss = {
+        viewModel.onEvent(AuthEvent.ClearBindResult)
+        onDismiss()
     }
-    BackHandler { onDismiss() }
+
+    // 绑定成功 → 清理状态并自动关闭
+    LaunchedEffect(state.bindSucceeded) {
+        if (state.bindSucceeded != null) handleDismiss()
+    }
+    BackHandler { handleDismiss() }
 
     // 输入法弹出时整列上移，避免盖住绑定码输入框与提交按钮；收起时无额外内边距。
     // enableEdgeToEdge 下系统不会自动避让，必须显式让位。
@@ -82,7 +87,7 @@ fun BotBindPage(
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onDismiss) {
+            IconButton(onClick = handleDismiss) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
             Text(

@@ -219,48 +219,51 @@ private fun DrawerContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // 顶部间距统一交给内容列（状态栏避让 + 12dp 呼吸），行内不再留 top；
-                // 左右 4dp 叠加内容列 12dp = 头像区距面板缘 16dp，行内 CenterVertically 垂直居中
-                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp)
-                // 未登录时头部即登录入口（与「登录后可云端同步账单」文案承诺一致）；
-                // 沿用功能行约定：先关闭抽屉再触发回调；语义动作名明确供读屏播报
-                .then(
-                    if (profileLoggedIn) {
-                        Modifier
-                    } else {
-                        Modifier.clickable(onClickLabel = "去登录") {
-                            onDismiss()
-                            onOpenLogin()
-                        }
-                    }
-                ),
+                .padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AvatarBadge(
-                character = if (profileLoggedIn) {
-                    profileName.trim().firstOrNull()?.toString() ?: "账"
-                } else {
-                    "账"
-                },
-                size = 48.dp
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (profileLoggedIn && profileName.isNotBlank()) profileName else "未登录",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            // 信息区：未登录时支持点击跳转登录，与右侧关闭按钮并列解耦（避免嵌套 clickable 冲突）
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (profileLoggedIn) {
+                            Modifier
+                        } else {
+                            Modifier.clickable(onClickLabel = "去登录") {
+                                onDismiss()
+                                onOpenLogin()
+                            }
+                        }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AvatarBadge(
+                    character = if (profileLoggedIn) {
+                        profileName.trim().firstOrNull()?.toString() ?: "账"
+                    } else {
+                        "账"
+                    },
+                    size = 48.dp
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (profileLoggedIn) "已登录" else "登录后可云端同步账单",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (profileLoggedIn && profileName.isNotBlank()) profileName else "未登录",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (profileLoggedIn) "已登录" else "登录后可云端同步账单",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
             }
             // 右上角关闭：IconButton 保证 ≥48dp 触控 + 读屏「关闭」（体验审查 P2，原 28dp 触点过小）
             IconButton(
@@ -272,7 +275,7 @@ private fun DrawerContent(
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     // 「✕」字形对读屏无意义：整体语义收敛为「关闭」
-                    modifier = Modifier.clearAndSetSemantics { contentDescription = "关闭" }
+                    modifier = Modifier.semantics { contentDescription = "关闭" }
                 )
             }
         }

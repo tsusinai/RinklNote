@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -34,29 +35,32 @@ fun rememberRinklTopBarHeight(): Dp {
 
 /**
  * 无边框悬浮顶栏容器：内容固定在统一高度内，背景内容滚动到顶栏下方时由 [scrimAlpha] 渐显暗底。
+ * 函数式签名推迟到 Draw 阶段测算，避免滚动蒙层动画期间调用方每帧全量重组。
  */
 @Composable
 fun RinklTopBar(
-    scrimAlpha: Float,
+    scrimAlpha: () -> Float,
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = 8.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        if (scrimAlpha > 0f) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val alpha = scrimAlpha()
+                if (alpha > 0f) {
+                    drawRect(
+                        brush = Brush.verticalGradient(
                             colors = listOf(
-                                Color.Black.copy(alpha = 0.30f * scrimAlpha),
+                                Color.Black.copy(alpha = 0.30f * alpha),
                                 Color.Transparent
                             )
                         )
                     )
-            )
-        }
+                }
+            }
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -68,3 +72,17 @@ fun RinklTopBar(
         )
     }
 }
+
+/** 兼容旧重载：传常量 Float 时自动包装为 Lambda，不破坏既有调用点。 */
+@Composable
+fun RinklTopBar(
+    scrimAlpha: Float,
+    modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 8.dp,
+    content: @Composable BoxScope.() -> Unit
+) = RinklTopBar(
+    scrimAlpha = { scrimAlpha },
+    modifier = modifier,
+    horizontalPadding = horizontalPadding,
+    content = content
+)

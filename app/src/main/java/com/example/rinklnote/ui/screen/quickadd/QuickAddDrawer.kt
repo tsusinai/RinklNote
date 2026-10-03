@@ -34,10 +34,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -622,7 +624,7 @@ private fun CategorySection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(240.dp)
+            .heightIn(min = 200.dp, max = 280.dp)
             .clip(shape)
             .then(applyCardGlass(shape))
             .padding(10.dp)
@@ -653,7 +655,7 @@ private fun CategorySection(
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            items(categories, key = { it.id }) { category ->
+            items(categories, key = { it.id }, contentType = { "category_quick_add" }) { category ->
                 Column {
                     CategoryRow(
                         category = category,
@@ -832,14 +834,19 @@ private fun AccountSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Icon(
-                painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
-                contentDescription = if (hidden) "显示余额" else "隐藏余额",
+            Box(
                 modifier = Modifier
-                    .size(15.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     .clickable { BalancePrivacy.toggle() },
-                tint = Color.Unspecified
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
+                    contentDescription = if (hidden) "显示余额" else "隐藏余额",
+                    modifier = Modifier.size(16.dp),
+                    tint = Color.Unspecified
+                )
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
         RinklDivider(endInset = 6.dp)

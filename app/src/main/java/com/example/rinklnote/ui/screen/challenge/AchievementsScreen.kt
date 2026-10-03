@@ -100,9 +100,11 @@ fun AchievementsScreen(onBack: () -> Unit) {
         DefaultHazeBackground(hazeState = hazeState)
 
         if (!state.isLoading && state.hasAnyBill) {
-            val badges = deriveAchievementBadges(state)
-            val unlocked = badges.filter { it.unlocked }
-            val locked = badges.filterNot { it.unlocked }
+            val badges = remember(state) { deriveAchievementBadges(state) }
+            val unlocked = remember(badges) { badges.filter { it.unlocked } }
+            val locked = remember(badges) { badges.filterNot { it.unlocked } }
+            val unlockedRows = remember(unlocked) { unlocked.chunked(3) }
+            val lockedRows = remember(locked) { locked.chunked(3) }
 
             LazyColumn(
                 state = listState,
@@ -139,15 +141,21 @@ fun AchievementsScreen(onBack: () -> Unit) {
 
                 // 已点亮陈列（3 列网格）。
                 item(key = "unlocked-label") { SectionSticker(text = "已点亮 ${unlocked.size}") }
-                val unlockedRows = unlocked.chunked(3)
-                items(unlockedRows.size) { rowIndex ->
+                items(
+                    unlockedRows.size,
+                    key = { "unlocked_${unlockedRows[it].firstOrNull()?.id ?: it}" },
+                    contentType = { "badge_row" }
+                ) { rowIndex ->
                     BadgeGridRow(rowItems = unlockedRows[rowIndex], onPick = { selected = it })
                 }
 
                 // 待点亮陈列（3 列网格，灰度）。
                 item(key = "locked-label") { SectionSticker(text = "待点亮 ${locked.size}") }
-                val lockedRows = locked.chunked(3)
-                items(lockedRows.size) { rowIndex ->
+                items(
+                    lockedRows.size,
+                    key = { "locked_${lockedRows[it].firstOrNull()?.id ?: it}" },
+                    contentType = { "badge_row" }
+                ) { rowIndex ->
                     BadgeGridRow(rowItems = lockedRows[rowIndex], onPick = { selected = it })
                 }
 

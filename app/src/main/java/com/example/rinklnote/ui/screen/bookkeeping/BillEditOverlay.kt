@@ -381,7 +381,7 @@ private fun CategoryEditor(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(categories, key = { it.id }) { category ->
+            items(categories, key = { it.id }, contentType = { "category_chip" }) { category ->
                 PrimaryCategoryChip(
                     category = category,
                     selected = selectedCategory?.id == category.id,

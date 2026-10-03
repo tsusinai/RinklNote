@@ -124,7 +124,7 @@ fun ChallengeArenaScreen(
                     )
                 }
 
-                items(cards.size) { index ->
+                items(cards.size, key = { cards[it].type }, contentType = { "arena_card" }) { index ->
                     ArenaCardItem(
                         card = cards[index],
                         pair = cardPairs[index],

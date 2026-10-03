@@ -23,8 +23,8 @@ import com.example.rinklnote.util.Money
 @Composable
 fun RollingAmountText(
     amountMinor: Long,
-    modifier: Modifier = Modifier,
     color: Color,
+    modifier: Modifier = Modifier,
     fontSize: TextUnit = 16.sp,
     fontWeight: FontWeight = FontWeight.Bold,
     trailingSpace: String = ""
@@ -32,6 +32,7 @@ fun RollingAmountText(
     val formatted = Money.formatPlain(amountMinor) + trailingSpace
     AnimatedContent(
         targetState = amountMinor to formatted,
+        modifier = modifier,
         transitionSpec = {
             if (targetState.first > initialState.first) {
                 // 金额增加：由下向上滑入
@@ -53,8 +54,7 @@ fun RollingAmountText(
             fontWeight = fontWeight,
             color = color,
             maxLines = 1,
-            softWrap = false,
-            modifier = modifier
+            softWrap = false
         )
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,8 +43,11 @@ import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.rememberPressHaptics
 import dev.chrisbanes.haze.HazeState
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.chrisbanes.haze.hazeEffect
 
+@androidx.compose.runtime.Immutable
 data class KeypadContextItem(
     val label: String,
     val iconRes: Int,
@@ -193,8 +197,9 @@ private fun AmountDisplay(
     val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = modifier
-            .height(38.dp)
-            .clip(shape),
+            .heightIn(min = 38.dp)
+            .clip(shape)
+            .padding(vertical = 2.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -216,8 +221,9 @@ private fun TypeToggle(
     Box(
         modifier = Modifier
             .width(64.dp)
-            .height(38.dp)
+            .heightIn(min = 38.dp)
             .clip(shape)
+            .padding(vertical = 2.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -319,14 +325,19 @@ private fun InlineRemarkField(
 private fun KeyButton(
     text: String,
     textSize: Int = 20,
+    contentDescriptionText: String? = if (text == "⌫") "退格" else null,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(15.dp)
     Box(
         modifier = Modifier
             .width(85.dp)
-            .height(36.dp)
+            .heightIn(min = 36.dp)
             .clip(shape)
+            .then(
+                if (contentDescriptionText != null) Modifier.semantics { contentDescription = contentDescriptionText }
+                else Modifier
+            )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -352,7 +363,7 @@ private fun ConfirmButton(
     Box(
         modifier = Modifier
             .width(85.dp)
-            .height(36.dp)
+            .heightIn(min = 36.dp)
             .clip(shape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

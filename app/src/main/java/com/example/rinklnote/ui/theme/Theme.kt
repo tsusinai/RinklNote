@@ -10,6 +10,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.rinklnote.ui.util.DisplayPreferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
@@ -112,7 +115,12 @@ fun RinklNoteTheme(
         }
     }
 
-    CompositionLocalProvider(LocalRinklColors provides rinklColors) {
+    val overlayEnabled by DisplayPreferences.cardOverlayEnabled.collectAsStateWithLifecycle()
+
+    CompositionLocalProvider(
+        LocalRinklColors provides rinklColors,
+        LocalCardOverlayEnabled provides overlayEnabled
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

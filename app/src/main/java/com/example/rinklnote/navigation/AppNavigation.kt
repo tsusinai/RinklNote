@@ -23,6 +23,10 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.isActive
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -324,13 +328,16 @@ fun AppNavigation(app: RinklNoteApp) {
         factory = AiTokenViewModel.Factory(app.apiService)
     )
 
-    // Periodic auto-sync while logged in (respects the auto-sync setting). The
-    // QQ-bound check was removed — syncing works whether or not QQ is bound. The
-    // loop restarts whenever login state or the setting changes.
-    LaunchedEffect(authState.isLoggedIn, autoSync) {
-        while (authState.isLoggedIn && autoSync) {
-            app.syncManager.sync()
-            delay(AUTO_SYNC_INTERVAL_MS)
+    // Periodic auto-sync while logged in (respects the auto-sync setting).
+    // repeatOnLifecycle 保证仅在应用处于前台活跃(RESUMED)状态时轮询，退后台/锁屏时自动挂起，消除后台电量与流量消耗。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(authState.isLoggedIn, autoSync, lifecycleOwner) {
+        if (!authState.isLoggedIn || !autoSync) return@LaunchedEffect
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive) {
+                app.syncManager.sync()
+                delay(AUTO_SYNC_INTERVAL_MS)
+            }
         }
     }
 
@@ -1039,12 +1046,12 @@ fun AppNavigation(app: RinklNoteApp) {
                         CropMode.BACKGROUND
                     }
                     if (uriStr.isNotBlank()) {
-                        val scope = rememberCoroutineScope()
                         BackgroundCropScreen(
                             imageUri = Uri.parse(uriStr),
                             cropMode = cropMode,
                             onConfirm = { path ->
-                                scope.launch {
+                                // 持久化任务由 navScope 承载，防止 popBackStack 卸载页面后局部 scope 被即刻 Cancel 导致保存失败
+                                navScope.launch {
                                     if (cropMode == CropMode.AVATAR) {
                                         // 头像：交给个人资料页 VM（未登录落本地，登录则压缩上传）
                                         personalProfileVM.onEvent(

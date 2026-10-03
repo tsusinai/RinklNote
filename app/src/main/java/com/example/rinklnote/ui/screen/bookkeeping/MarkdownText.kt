@@ -3,6 +3,7 @@ package com.example.rinklnote.ui.screen.bookkeeping
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -26,12 +27,16 @@ fun MarkdownText(
     fontSize: TextUnit = 12.sp,
     lineHeight: TextUnit = 16.sp
 ) {
+    val rendered = remember(text) { renderMarkdown(text) }
     BasicText(
-        text = renderMarkdown(text),
+        text = rendered,
         modifier = modifier,
         style = TextStyle(color = color, fontSize = fontSize, lineHeight = lineHeight)
     )
 }
+
+private val ORDERED_CHECK_REGEX = Regex("""^\d+[.)]\s+\S+""")
+private val ORDERED_EXTRACT_REGEX = Regex("""^(\d+[.)])\s+(.*)$""")
 
 private fun renderMarkdown(text: String): AnnotatedString = buildAnnotatedString {
     val lines = text.trim().lines()
@@ -50,8 +55,7 @@ private fun renderMarkdown(text: String): AnnotatedString = buildAnnotatedString
     }
 }
 
-private fun isOrdered(line: String): Boolean =
-    Regex("""^\d+[.)]\s+\S+""").matches(line)
+private fun isOrdered(line: String): Boolean = ORDERED_CHECK_REGEX.matches(line)
 
 private fun AnnotatedString.Builder.heading(content: String, level: Int) {
     val size = when (level) {
@@ -70,7 +74,7 @@ private fun AnnotatedString.Builder.bullet(content: String) {
 }
 
 private fun AnnotatedString.Builder.ordered(line: String) {
-    val match = Regex("""^(\d+[.)])\s+(.*)$""").find(line)
+    val match = ORDERED_EXTRACT_REGEX.find(line)
     if (match != null) {
         append(match.groupValues[1] + " ")
         appendInline(match.groupValues[2])

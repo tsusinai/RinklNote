@@ -137,7 +137,7 @@ fun AiScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
         ) {
-            items(messagesWithDay, key = { it.first.id }) { (msg, day, showDivider) ->
+            items(messagesWithDay, key = { it.first.id }, contentType = { if (it.third) "chat_bubble_with_date" else "chat_bubble" }) { (msg, day, showDivider) ->
                 if (showDivider) {
                     DateDivider(date = day)
                 }

@@ -43,6 +43,8 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
+private val OCR_DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
 /**
  * 小票 OCR 二级流（快速记账抽屉「拍摄小票」chip 唤起）：
  * 拍照 / 相册选图 → ML Kit 端上识别 → 金额 / 日期 / 商家候选 chips → 点选预填。
@@ -146,11 +148,15 @@ internal fun ReceiptOcrDialog(
                     }
 
                     else -> {
+                        val amountChips = remember(candidates.amounts) {
+                            candidates.amounts.map { Money.toYuanInputString(Money.yuanToMinor(it)) }
+                        }
+                        val dateChips = remember(candidates.dates) {
+                            candidates.dates.map { it.format(OCR_DATE_FORMATTER) }
+                        }
                         OcrCandidateGroup(
                             label = "金额",
-                            chips = candidates.amounts.map {
-                                Money.toYuanInputString(Money.yuanToMinor(it))
-                            },
+                            chips = amountChips,
                             picked = pickedAmount,
                             onPick = { value ->
                                 pickedAmount = value
@@ -159,8 +165,8 @@ internal fun ReceiptOcrDialog(
                         )
                         OcrCandidateGroup(
                             label = "日期",
-                            chips = candidates.dates.map { it.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) },
-                            picked = pickedDate?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                            chips = dateChips,
+                            picked = pickedDate?.format(OCR_DATE_FORMATTER),
                             onPick = { value ->
                                 val date = LocalDate.parse(value)
                                 pickedDate = date

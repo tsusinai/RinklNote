@@ -48,6 +48,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -83,11 +84,10 @@ fun BillCard(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
-    val dragging = dragHost.dragging
-    val isSourceDay = dragging?.date == date
-    val draggedId = dragging?.billId ?: -1L
+    val isSourceDay = dragHost.draggedDate == date
+    val draggedId = dragHost.draggedBillId ?: -1L
     val gap = if (isSourceDay) dragHost.insertionIndex?.coerceIn(0, bills.size - 1) else null
-    val rowHeightPx = dragging?.rowHeightPx ?: 0f
+    val rowHeightPx = dragHost.dragging?.rowHeightPx ?: 0f
     // 被拖行在日账单流中的原始槽位：拖动中必须保持组合（销毁会中断 pointerInput 手势流），
     // 仅折叠高度 + 视觉隐藏，由页面层 ghost 代替显示。
     val sourceIndex = if (isSourceDay) bills.indexOfFirst { it.id == draggedId } else -1
@@ -104,6 +104,7 @@ fun BillCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .semantics(mergeDescendants = true) {}
                 // 日期头整行可点：进入「当天账单」页（只加在头部，不碰行内长按拖动手势）
                 .clickable { onOpenDay(date) },
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -349,6 +350,7 @@ internal fun BillRowContent(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

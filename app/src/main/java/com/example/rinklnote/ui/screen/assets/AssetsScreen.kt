@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
@@ -140,7 +142,7 @@ fun AssetsScreen(
             item(key = "total") {
                 TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden)
             }
-            items(state.accounts, key = { it.id }) { account ->
+            items(state.accounts, key = { it.id }, contentType = { "account_item" }) { account ->
                 AccountCard(
                     account = account,
                     hidden = balanceHidden,
@@ -154,7 +156,7 @@ fun AssetsScreen(
 
         // 顶栏固定在页面顶部，压在背景/列表内容之上（对齐首页 TopBar）。
         AssetsTopBar(
-            scrimAlpha = topBarScrimAlpha,
+            scrimAlpha = { topBarScrimAlpha },
             hasBackground = backgroundUri != null,
             listScrolled = listScrolled,
             canReconcileAll = state.accounts.isNotEmpty(),
@@ -259,7 +261,7 @@ fun AssetsScreen(
 /** 资产页悬浮顶栏：左「对账」（全部对账）+ 居中「资产管理」标题 + 右「新建」入口。触摸目标均 ≥ 44dp。 */
 @Composable
 private fun AssetsTopBar(
-    scrimAlpha: Float,
+    scrimAlpha: () -> Float,
     hasBackground: Boolean,
     listScrolled: Boolean,
     canReconcileAll: Boolean,
@@ -282,7 +284,7 @@ private fun AssetsTopBar(
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp),
+                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -387,31 +389,43 @@ private fun AccountCard(
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .clickable { currentOnClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .then(applyCardGlass(RoundedCornerShape(15.dp))),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AccountIcon(
-            iconKey = account.iconKey,
-            colorHex = account.iconColor,
-            size = 32.dp
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = account.name,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = if (hidden) "***" else Money.formatPlain(account.balanceMinor),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        IconButton(onClick = { currentOnMenu() }) {
+        // 卡片主体（点击修改余额）与右侧操作菜单解耦为兄弟节点，消除嵌套 clickable 手势竞争
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { currentOnClick() }
+                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AccountIcon(
+                iconKey = account.iconKey,
+                colorHex = account.iconColor,
+                size = 32.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = account.name,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = if (hidden) "***" else Money.formatPlain(account.balanceMinor),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        IconButton(
+            onClick = { currentOnMenu() },
+            modifier = Modifier
+                .padding(end = 6.dp)
+                .semantics { contentDescription = "账户操作菜单" }
+        ) {
             Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

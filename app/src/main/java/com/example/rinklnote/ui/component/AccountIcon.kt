@@ -59,8 +59,8 @@ fun accountColor(hex: String): Color {
 fun AccountIcon(
     iconKey: String,
     colorHex: String,
-    size: Dp = 40.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp
 ) {
     val color = accountColor(colorHex)
     Box(

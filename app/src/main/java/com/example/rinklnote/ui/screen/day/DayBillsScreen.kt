@@ -224,6 +224,7 @@ fun DayBillsScreen(
 // ---------------------------------------------------------------------------
 
 /** 当天账单页状态：账单由仓库 Flow 实时观察，软删（deleted=1）不会出现在结果里。 */
+@androidx.compose.runtime.Immutable
 data class DayBillsState(
     val loading: Boolean = true,
     val bills: List<Bill> = emptyList()

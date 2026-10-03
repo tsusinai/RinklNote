@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
+import com.example.rinklnote.ui.theme.LocalCardOverlayEnabled
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.util.DisplayPreferences
 import dev.chrisbanes.haze.HazeState
@@ -78,8 +79,8 @@ val RinklCardFrostedStyle: HazeStyle = HazeStyle(
  */
 @Composable
 fun applyCardGlass(shape: Shape): Modifier {
-    // 蒙版开关：collectAsState 读取（DisplayPreferences 由 MainActivity 从 DataStore 桥接进来）。
-    val overlayEnabled by DisplayPreferences.cardOverlayEnabled.collectAsState()
+    // 蒙版开关：从全局 CompositionLocal 同步读取，避免每个卡片启动独立 Flow 收集
+    val overlayEnabled = LocalCardOverlayEnabled.current
     // 明暗判断不用 isSystemInDarkTheme：App 支持「设置 → 深色模式」在应用内强制 LIGHT/DARK，
     // 系统明暗可能与实际渲染主题相反；当前主题 background 的亮度在三种模式下都如实反映明暗。
     val overlayColor = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) {

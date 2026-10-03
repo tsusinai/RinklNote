@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
@@ -37,14 +40,16 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
  * 全 App 需要「分组小标题 + 设置行」的卡片都应当用它。
  *
  * @param title 分组小标题，`null` 表示不显示
+ * @param modifier 外部修饰符
  */
 @Composable
 fun SettingsGroupCard(
     title: String? = null,
+    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
@@ -78,6 +83,7 @@ fun SettingsGroupCard(
  * @param labelColor 标签文字色（如「退出登录」用 error 色）
  * @param onClick 非 `null` 时整行可点，且右侧自动补「>」箭头
  * @param trailing 右侧自定义内容（如 `Switch`）；给了它就不再画「>」箭头
+ * @param modifier 外部修饰符
  */
 @Composable
 fun SettingsRow(
@@ -87,11 +93,15 @@ fun SettingsRow(
     value: String? = null,
     labelColor: Color = MaterialTheme.colorScheme.onSurface,
     onClick: (() -> Unit)? = null,
-    trailing: (@Composable () -> Unit)? = null
+    trailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                if (onClick != null) role = Role.Button
+            }
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),

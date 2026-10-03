@@ -164,7 +164,7 @@ fun PlanScreen(
                 item(key = "entry-category-budgets") {
                     CategoryBudgetEntryRow(onClick = onOpenCategoryBudgets)
                 }
-                items(state.categoryBudgets, key = { it.categoryId }) { category ->
+                items(state.categoryBudgets, key = { it.categoryId }, contentType = { "category_budget_card" }) { category ->
                     CategoryBudgetCard(
                         category = category,
                         onClick = {
@@ -195,7 +195,7 @@ fun PlanScreen(
 
         // 悬浮顶栏：居中「计划」标题 + scrim（对齐首页 TopBar，但预算页无额外操作，左右留空）。
         PlanTopBar(
-            scrimAlpha = topBarScrimAlpha,
+            scrimAlpha = { topBarScrimAlpha },
             hasBackground = backgroundUri != null,
             listScrolled = listScrolled
         )
@@ -204,7 +204,7 @@ fun PlanScreen(
 
 /** 预算页悬浮顶栏：极简，仅居中「计划」标题 + 渐隐 scrim（tab 内页无返回键，左右留空）。 */
 @Composable
-private fun PlanTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolled: Boolean, modifier: Modifier = Modifier) {
+private fun PlanTopBar(scrimAlpha: () -> Float, hasBackground: Boolean, listScrolled: Boolean, modifier: Modifier = Modifier) {
     // 文字色三态：有背景→白；无背景→自定义主题「顶栏标题色」（默认=字体色），滚动后略淡
     val textColor = when {
         hasBackground -> Color.White
@@ -248,19 +248,22 @@ private fun TotalBudgetCard(
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            // 整卡只保留一个语义点击节点：动作名按状态区分（未设=设置，已设=编辑）。
-            // 卡内「设置 ›」是纯视觉提示（无独立 clickable），读屏时随卡片合并播报。
-            .clickable(
-                onClickLabel = if (budget == null) "设置本月预算" else "编辑本月预算",
-                role = Role.Button
-            ) { onClick() }
             .padding(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // 主卡片区可点（跳转编辑/设置预算）；超支行动按钮作为兄弟节点并列，避免嵌套 clickable 竞争
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClickLabel = if (budget == null) "设置本月预算" else "编辑本月预算",
+                    role = Role.Button
+                ) { onClick() }
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             Text("本月预算", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             if (budget == null) {
                 // 未设预算：主色「设置 ›」入口，比原纯文本更有点击暗示。
@@ -342,14 +345,7 @@ private fun TotalBudgetCard(
                     Spacer(modifier = Modifier.height(10.dp))
                     DailyAllowanceBlock(advice = advice)
                 }
-                DailyBudgetStatus.OVER -> {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    // 查看支出明细 → 路由 month-detail；调整预算 → 卡片原有点击流（budget-edit）。
-                    OverBudgetActions(
-                        onOpenMonthDetail = onOpenMonthDetail,
-                        onEditBudget = onClick
-                    )
-                }
+                DailyBudgetStatus.OVER -> Unit
                 DailyBudgetStatus.ZERO_BUDGET -> {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -371,6 +367,16 @@ private fun TotalBudgetCard(
             }
         }
     }
+
+    // 超支行动入口：与卡片主点击区并列，避免嵌套 clickable 竞争
+    if (budget != null && state.dailyAdvice.status == DailyBudgetStatus.OVER) {
+        Spacer(modifier = Modifier.height(10.dp))
+        OverBudgetActions(
+            onOpenMonthDetail = onOpenMonthDetail,
+            onEditBudget = onClick
+        )
+    }
+}
 }
 
 /**
@@ -491,9 +497,10 @@ private fun LastMonthSurplusRow(surplusMinor: Long) {
 internal fun PlanCategoryIcon(
     iconRes: Int,
     size: Dp,
-    contentDescription: String?
+    contentDescription: String?,
+    modifier: Modifier = Modifier
 ) {
-    Box(modifier = Modifier.size(size)) {
+    Box(modifier = modifier.size(size)) {
         Image(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,

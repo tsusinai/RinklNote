@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -38,9 +39,10 @@ import com.example.rinklnote.util.Money
 @SuppressLint("DefaultLocale")
 @Composable
 fun SummaryBar(
-    currentMonth: Int = com.example.rinklnote.util.today().monthValue,
     totalExpense: Long,
     totalIncome: Long,
+    modifier: Modifier = Modifier,
+    currentMonth: Int = com.example.rinklnote.util.today().monthValue,
     aiSummary: String? = null,
     aiSummaryLoading: Boolean = false
 ) {
@@ -63,7 +65,7 @@ fun SummaryBar(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
             .rinkShadow(RoundedCornerShape(15.dp))
@@ -77,7 +79,9 @@ fun SummaryBar(
         // 各段 softWrap=false（体验审查 P2）：大字体/窄屏下金额绝不被拆成两行。
         val incomeColor = LocalRinklColors.current.incomeColor
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

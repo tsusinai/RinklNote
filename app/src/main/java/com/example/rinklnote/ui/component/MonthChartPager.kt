@@ -166,9 +166,11 @@ private fun PiePage(
         return
     }
     val textMeasurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Color.White, fontSize = 9.sp)
-    val layouts = slices.map {
-        if (it.pct >= 0.06f) textMeasurer.measure(AnnotatedString("${(it.pct * 100).roundToInt()}%"), labelStyle) else null
+    val labelStyle = remember { TextStyle(color = Color.White, fontSize = 9.sp) }
+    val layouts = remember(slices, textMeasurer) {
+        slices.map {
+            if (it.pct >= 0.06f) textMeasurer.measure(AnnotatedString("${(it.pct * 100).roundToInt()}%"), labelStyle) else null
+        }
     }
 
     Row(

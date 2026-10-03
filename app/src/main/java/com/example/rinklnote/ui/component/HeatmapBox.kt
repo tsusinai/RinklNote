@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -80,8 +81,8 @@ private fun heatRangeTotals(dailyExpense: Map<Int, Float>, daysInMonth: Int): Li
  */
 @Composable
 fun HeatmapBox(
-    modifier: Modifier = Modifier,
     heatmap: MonthHeatmap,
+    modifier: Modifier = Modifier,
     onDetailClick: (() -> Unit)? = null,
     initiallyExpanded: Boolean = false,
     selectedDay: Int? = null,
@@ -205,6 +206,9 @@ fun HeatmapBox(
                 val rows = (totalCells + 6) / 7
                 val cellShape = RoundedCornerShape(6.dp)
 
+                val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+                val emptyCellColor = if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else EmptyBlue
+
                 for (r in 0 until rows) {
                     Row(modifier = Modifier.fillMaxWidth()) {
                         for (c in 0 until 7) {
@@ -212,7 +216,7 @@ fun HeatmapBox(
                             if (day in 1..heatmap.daysInMonth) {
                                 val amount = heatmap.dailyExpense[day] ?: 0f
                                 val intensity = (amount / maxExpense).coerceIn(0f, 1f)
-                                val bg = lerp(EmptyBlue, hotColor, intensity)
+                                val bg = lerp(emptyCellColor, hotColor, intensity)
                                 val textColor =
                                     if (intensity > 0.55f) Color.White else MaterialTheme.colorScheme.onSurface
                                 val dayTap = onDayTap

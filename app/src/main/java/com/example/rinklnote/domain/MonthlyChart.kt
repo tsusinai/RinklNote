@@ -11,6 +11,7 @@ import java.time.Instant
  */
 
 /** 饼图切片：分类名 + 金额（分） + 占比(0..1)。 */
+@androidx.compose.runtime.Immutable
 data class PieSlice(val name: String, val amount: Long, val pct: Float)
 
 /** 单月支出按分类占比 → 切片；>6 类时取前 5 + 「其他」，小项归一。 */
@@ -31,6 +32,7 @@ fun buildPieSlices(expense: List<Bill>): List<PieSlice> {
 }
 
 /** 单月图表聚合数据：每日支出（分）、分类占比、当月日序列、序列最大值。随当月账单算一次，供 UI 渲染。 */
+@androidx.compose.runtime.Immutable
 data class MonthDetailData(
     val dayAmounts: Map<Int, Long>,
     val pieSlices: List<PieSlice>,

@@ -75,6 +75,7 @@ fun VoiceInputBar(
     api: ApiService?,
     onResult: (String) -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
     continuous: Boolean = false
 ) {
     val context = LocalContext.current.applicationContext
@@ -197,7 +198,7 @@ fun VoiceInputBar(
     val preview = remember(liveText) { VoiceParser.parse(liveText) }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(start = 24.dp, end = 24.dp, bottom = 56.dp) // clear the 32dp bottom bar + 8dp margin
             .rinkShadow(RoundedCornerShape(24.dp))

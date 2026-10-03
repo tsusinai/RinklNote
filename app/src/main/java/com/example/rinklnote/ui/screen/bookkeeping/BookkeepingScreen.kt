@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,9 +58,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
@@ -301,7 +304,7 @@ fun BookkeepingScreen(
         // 顶栏固定在页面顶部：不随 LazyColumn 滚动，压在照片/横幅/列表内容之上。
         TopBar(
             monthLabel = monthLabel,
-            scrimAlpha = topBarScrimAlpha,
+            scrimAlpha = { topBarScrimAlpha },
             hasBackground = backgroundUri != null,
             listScrolled = listScrolled,
             offset = state.selectedMonthOffset,
@@ -316,7 +319,7 @@ fun BookkeepingScreen(
         )
 
         // FAB：常态 = 加账单；拖动中变删除区（命中时放大 + 红色高亮），松手删除
-        val isDragging = dragHost.dragging != null
+        val isDragging = dragHost.isDragging
         val overDelete = dragHost.isOverDelete
         val fabScale by animateFloatAsState(if (overDelete) 1.18f else 1f, label = "fabScale")
         Box(
@@ -371,7 +374,7 @@ fun BookkeepingScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp)
-                        .absoluteOffset(y = with(density) { ghostTop.toDp() })
+                        .offset { IntOffset(0, (d.pointerY - d.grabOffsetY - screenOriginY).roundToInt()) }
                         .graphicsLayer {
                             scaleX = 1.05f
                             scaleY = 1.05f
@@ -440,7 +443,7 @@ private fun DayBanner(headerBg: Int) {
 @Composable
 private fun TopBar(
     monthLabel: String,
-    scrimAlpha: Float,
+    scrimAlpha: () -> Float,
     hasBackground: Boolean,
     listScrolled: Boolean,
     offset: Int,

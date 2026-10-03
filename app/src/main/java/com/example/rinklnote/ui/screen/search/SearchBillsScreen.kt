@@ -356,7 +356,7 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
             Spacer(modifier = Modifier.width(8.dp))
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     // 「✕」是字符不是图标：语义上补「清空搜索词」，避免读屏读出符号名。
                     .semantics { contentDescription = "清空搜索词" }
                     .clickable { onQueryChanged("") },
