@@ -214,12 +214,16 @@ class BillService {
         date: Long?,
         sortOrder: Long? = null,
         latitude: Double? = null,
-        longitude: Double? = null
+        longitude: Double? = null,
+        // 账单来源（2026-10-03 自动记账）：白名单内才采信（App 推送的真实来源），
+        // null / 未知值回落 "WEB"（旧客户端 / Web 端行为不变）。
+        source: String? = null
     ): BillDTO {
         require(amountMinor > 0) { "金额必须大于0" }
         require(billType == "EXPENSE" || billType == "INCOME") { "账单类型不合法" }
         require(ownsAccount(userId, accountId)) { "账户不存在" }
         val now = System.currentTimeMillis()
+        val resolvedSource = if (source in CLIENT_SOURCES) source!! else "WEB"
         val billDate = date ?: LocalDate.now(ZoneId.of("Asia/Shanghai"))
             .atStartOfDay(ZoneId.of("Asia/Shanghai"))
             .toInstant()
@@ -237,7 +241,7 @@ class BillService {
                 it[BillsTable.accountId] = accountId
                 it[BillsTable.remark] = remark
                 it[BillsTable.date] = billDate
-                it[BillsTable.billSource] = "WEB"
+                it[BillsTable.billSource] = resolvedSource
                 it[BillsTable.createdAt] = now
                 it[BillsTable.updatedAt] = now
                 it[BillsTable.sortOrder] = sortOrder
@@ -250,7 +254,7 @@ class BillService {
             id = billId, amountMinor = amountMinor, amount = Money.fromMinor(amountMinor), billType = billType,
             categoryId = categoryId, categoryName = categoryName,
             subCategoryName = subCategoryName, accountId = accountId,
-            remark = remark, date = billDate, source = "WEB",
+            remark = remark, date = billDate, source = resolvedSource,
             createdAt = now, updatedAt = now, sortOrder = sortOrder,
             latitude = latitude, longitude = longitude
         )
@@ -809,6 +813,11 @@ class BillService {
                 it[AccountsTable.balance] = 0.0
             }
         }
+    }
+
+    companion object {
+        /** POST /api/bills 允许客户端声明的来源白名单（自动记账审计口径，2026-10-03）。 */
+        private val CLIENT_SOURCES = setOf("APP", "QQ", "AUTO")
     }
 
     data class MonthStats(

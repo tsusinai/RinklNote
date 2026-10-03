@@ -7,6 +7,7 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.example.rinklnote.RinklNoteApp
+import com.example.rinklnote.data.repository.CaptureRepository
 import com.example.rinklnote.util.PayNotificationParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -104,12 +105,31 @@ class PayNotifyListenerService : NotificationListenerService() {
             recentKeys[dedupeKey] = now
         }
 
-        val parsed = PayNotificationParser.parse(title, text)
-        NotificationHelper.showQuickAddSuggestion(
-            context = applicationContext,
-            amountMinor = parsed.amountMinor,
-            billType = parsed.billType,
-            merchant = parsed.merchant
-        )
+        val occurredAt = sbn.postTime
+        val context = applicationContext
+        scope.launch {
+            val outcome = try {
+                (context as RinklNoteApp).captureRepository.capture(sbn.packageName, title, text, occurredAt)
+            } catch (_: Exception) {
+                null // 管线异常静默：不打断监听服务，退回通用入口
+            }
+            val parsed = PayNotificationParser.parse(title, text)
+            when (outcome) {
+                is CaptureRepository.CaptureOutcome.Pending -> NotificationHelper.showCaptureConfirm(
+                    context, outcome.captureId, outcome.amountMinor, parsed.billType, outcome.merchant
+                )
+                // Booked（静默入账/并入已有账单）与 Duplicate（同一笔的重发通知）保持安静：
+                // 对账走暮检卡与自动记账页。解析不出金额 / 无账户 / 管线异常 →
+                // 维持既有「记一笔」通用入口（不丢线索）。
+                is CaptureRepository.CaptureOutcome.Duplicate,
+                is CaptureRepository.CaptureOutcome.Booked -> Unit
+                else -> NotificationHelper.showQuickAddSuggestion(
+                    context = context,
+                    amountMinor = parsed.amountMinor,
+                    billType = parsed.billType,
+                    merchant = parsed.merchant
+                )
+            }
+        }
     }
 }

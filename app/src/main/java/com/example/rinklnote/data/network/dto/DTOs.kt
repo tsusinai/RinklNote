@@ -152,7 +152,9 @@ data class CreateBillRequest(
     val sortOrder: Long? = null, // 同日内显式排序名次（拖动重排）
     // 经纬度（度）：用户主动打点才有值；null 时服务端存 NULL（清除打点同样靠传 null 生效）。
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    // 账单来源（2026-10-03 自动记账）：APP/QQ/AUTO；旧客户端不发 → 服务端回落 WEB。
+    val source: String? = null
 )
 
 @Serializable

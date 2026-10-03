@@ -60,6 +60,26 @@ interface BillDao {
     @Query("SELECT COUNT(*) FROM bills WHERE server_id IS NULL OR dirty = 1")
     suspend fun countUnsynced(): Long
 
+    // ── 自动记账捕获去重与渐进信任统计（2026-10-03 方案 C）──
+
+    /**
+     * 去重置换候选：窗口内同金额的未删账单（created_at 为落账时刻，
+     * 捕获即落账时与支付时刻同源；商户相似度在 Kotlin 侧过滤）。
+     */
+    @Query(
+        "SELECT * FROM bills WHERE deleted = 0 AND amount_minor = :amountMinor " +
+            "AND created_at >= :from AND created_at <= :to ORDER BY created_at DESC"
+    )
+    suspend fun findByAmountInWindow(amountMinor: Long, from: Long, to: Long): List<Bill>
+
+    /** 渐进信任：AUTO 账单累计笔数（含已删）。 */
+    @Query("SELECT COUNT(*) FROM bills WHERE source = 'AUTO'")
+    suspend fun countAutoTotal(): Int
+
+    /** 渐进信任：AUTO 账单保留笔数（未删）。 */
+    @Query("SELECT COUNT(*) FROM bills WHERE source = 'AUTO' AND deleted = 0")
+    suspend fun countAutoKept(): Int
+
     // Net effect of a single account's bills: income adds, expense subtracts. Used by the
     // account-level "对账" (reconcile) so a balance can be recomputed from its own records.
     @Query(

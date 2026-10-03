@@ -64,6 +64,9 @@ class ButlerCareService(
         /** 总额预算在去重 key 里使用的占位名（文案展示层用「总预算」，两者分离）。 */
         const val TOTAL_BUDGET_KEY = "__TOTAL__"
 
+        /** 自动记账来源（App 端支付捕获入账，2026-10-03 方案 C），暮检对账段按此过滤。 */
+        const val SOURCE_AUTO = "AUTO"
+
         /** 亮灯档位阈值（百分比整数）：85% 黄灯 / 100% 花完。 */
         const val LEVEL_WARN_PCT = 85L
         const val LEVEL_FULL_PCT = 100L
@@ -237,7 +240,18 @@ class ButlerCareService(
                 val expense = todayBills.filter { it.billType == "EXPENSE" }.sumOf { it.amountMinor }
                 val income = todayBills.filter { it.billType == "INCOME" }.sumOf { it.amountMinor }
                 val incomePart = if (income > 0) "（收入 ¥${Money.format(income)}）" else ""
-                "🌙 今天记了 ${todayBills.size} 笔，支出 ¥${Money.format(expense)}$incomePart，都记全了嘛～ 晚安啦"
+                val base = "🌙 今天记了 ${todayBills.size} 笔，支出 ¥${Money.format(expense)}$incomePart，都记全了嘛～"
+                // 自动记账对账段（2026-10-03 方案 C）：App 端捕获静默入账（source=AUTO）的账单
+                // 同步上来后在此列清单供事后审计；商户取备注（自动记账落商户），空则回分类名。
+                val autoBills = todayBills.filter { it.source == SOURCE_AUTO }
+                val autoPart = if (autoBills.isEmpty()) "" else {
+                    val items = autoBills.take(3).joinToString("、") {
+                        "${it.remark?.takeIf { r -> r.isNotBlank() } ?: it.categoryName} ¥${Money.format(it.amountMinor)}"
+                    }
+                    val suffix = if (autoBills.size > 3) " 等${autoBills.size}笔" else ""
+                    "\n其中 ${autoBills.size} 笔是小盘自动记的：$items$suffix。有不对的回「撤销」，或来 App 改～"
+                }
+                "$base$autoPart 晚安啦"
             }
         }
     } catch (e: Exception) {

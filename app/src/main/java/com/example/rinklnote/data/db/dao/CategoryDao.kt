@@ -24,6 +24,10 @@ interface CategoryDao {
     @Query("SELECT id FROM categories WHERE name = :name")
     suspend fun getIdByName(name: String): Long?
 
+    /** 自动记账捕获管线用：按名取整行（需要 id + billType 权威口径）。 */
+    @Query("SELECT * FROM categories WHERE name = :name LIMIT 1")
+    suspend fun getByName(name: String): Category?
+
     @Insert
     suspend fun insertSubCategory(subCategory: SubCategory): Long
 

@@ -99,6 +99,7 @@ fun MoreDrawer(
     onOpenAbout: () -> Unit,
     onOpenMultiCurrency: () -> Unit = {},
     onOpenChallenges: () -> Unit = {},
+    onOpenAutoCapture: () -> Unit = {},
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
@@ -162,6 +163,7 @@ fun MoreDrawer(
                     onOpenImport = onOpenImport,
                     onOpenMultiCurrency = onOpenMultiCurrency,
                     onOpenChallenges = onOpenChallenges,
+                    onOpenAutoCapture = onOpenAutoCapture,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout
                 )
@@ -192,6 +194,7 @@ private fun DrawerContent(
     onOpenImport: () -> Unit,
     onOpenMultiCurrency: () -> Unit,
     onOpenChallenges: () -> Unit,
+    onOpenAutoCapture: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -314,6 +317,17 @@ private fun DrawerContent(
             },
             label = "多币种",
             onClick = closeThen(onDismiss, onOpenMultiCurrency)
+        )
+        MoreDrawerRow(
+            icon = { tint ->
+                Icon(
+                    painter = painterResource(R.drawable.ic_notification),
+                    contentDescription = null,
+                    tint = tint
+                )
+            },
+            label = "自动记账",
+            onClick = closeThen(onDismiss, onOpenAutoCapture)
         )
         MoreDrawerRow(
             icon = { tint ->

@@ -34,6 +34,8 @@ data class CreateBillRequest(
     val date: Long? = null,
     val baseUpdatedAt: Long? = null, // 条件 PUT：带则要求等于服务端 updatedAt，否则 409
     val sortOrder: Long? = null, // 同日内显式排序名次（App 端拖动重排）
+    // 账单来源（2026-10-03 自动记账）：APP/QQ/AUTO 白名单内才采信，null/未知回落 WEB（旧客户端不发，忽略）。
+    val source: String? = null,
     // 经纬度（度）：仅用户主动打点的账单才有值；null = 未打点（老客户端不发，忽略即可）。
     val latitude: Double? = null,
     val longitude: Double? = null
@@ -239,7 +241,8 @@ fun Route.billRoutes(billService: BillService, nluService: NLUService? = null) {
                         date = body.date,
                         sortOrder = body.sortOrder,
                         latitude = body.latitude,
-                        longitude = body.longitude
+                        longitude = body.longitude,
+                        source = body.source
                     )
                     call.respond(HttpStatusCode.Created, bill)
                 } catch (e: IllegalArgumentException) {

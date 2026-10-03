@@ -12,6 +12,8 @@ import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.BillRepositoryImpl
 import com.example.rinklnote.data.repository.BudgetRepository
 import com.example.rinklnote.data.repository.BudgetRepositoryImpl
+import com.example.rinklnote.data.repository.CaptureRepository
+import com.example.rinklnote.data.repository.CaptureRepositoryImpl
 import com.example.rinklnote.data.repository.ChatRepository
 import com.example.rinklnote.data.repository.ChatRepositoryImpl
 import com.example.rinklnote.data.repository.ChallengeRepository
@@ -69,6 +71,8 @@ class RinklNoteApp : Application() {
     val challengeRepository: ChallengeRepository by lazy { ChallengeRepositoryImpl(database) }
     val chatRepository: ChatRepository by lazy { ChatRepositoryImpl(database) }
     val placeRepository: PlaceRepository by lazy { PlaceRepositoryImpl(database.placeDao()) }
+    // 自动记账捕获管线（2026-10-03 方案 C）：支付通知 → 解析/去重 → 确认或静默落账。
+    val captureRepository: CaptureRepository by lazy { CaptureRepositoryImpl(database, settingsManager) }
 
     // 主屏小组件点分类 / 深链 rinklnote://add → 欲预填快速记账抽屉的参数；
     // MainActivity 从 Intent extra / deep-link URI 装入，AppNavigation 消费后清空。
@@ -80,7 +84,8 @@ class RinklNoteApp : Application() {
     }
 
     // 应用级作用域：只承载启动时的种子数据填充等一次性任务，App 结束时统一取消。
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // 通知动作广播（自动记账随手确认）也复用它做短任务。
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()

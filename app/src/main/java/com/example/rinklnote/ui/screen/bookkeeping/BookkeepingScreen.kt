@@ -113,6 +113,8 @@ fun BookkeepingScreen(
     onOpenMultiCurrency: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onOpenChallenges: () -> Unit = {},
+    // 「更多」抽屉功能项：自动记账（路由 auto-capture，2026-10-03 方案 C）由主会话接线
+    onOpenAutoCapture: () -> Unit = {},
     // 未登录时「更多」抽屉头部即登录入口（路由 showLogin 浮层由主会话接线）
     onOpenLogin: () -> Unit = {},
     // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
@@ -394,6 +396,7 @@ fun BookkeepingScreen(
             onOpenMultiCurrency = onOpenMultiCurrency,
             onOpenSearch = onOpenSearch,
             onOpenChallenges = onOpenChallenges,
+            onOpenAutoCapture = onOpenAutoCapture,
             onOpenLogin = onOpenLogin,
             onOpenSettings = onMoreClick,
             onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页

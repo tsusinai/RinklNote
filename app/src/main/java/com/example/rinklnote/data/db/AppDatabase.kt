@@ -21,13 +21,15 @@ import com.example.rinklnote.data.db.entity.BillTemplate
 import com.example.rinklnote.data.db.entity.Budget
 import com.example.rinklnote.data.db.entity.Challenge
 import com.example.rinklnote.data.db.entity.Category
+import com.example.rinklnote.data.db.dao.BillCaptureDao
+import com.example.rinklnote.data.db.entity.BillCapture
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.data.db.entity.Place
 import com.example.rinklnote.data.db.entity.SubCategory
 
 @Database(
-    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class, Challenge::class, Place::class],
-    version = 18,
+    entities = [Bill::class, Category::class, SubCategory::class, Account::class, BillTemplate::class, Budget::class, ChatMessage::class, Challenge::class, Place::class, BillCapture::class],
+    version = 19,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -35,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun billDao(): BillDao
     abstract fun categoryDao(): CategoryDao
     abstract fun accountDao(): AccountDao
+    abstract fun billCaptureDao(): BillCaptureDao
     abstract fun billTemplateDao(): BillTemplateDao
     abstract fun budgetDao(): BudgetDao
     abstract fun challengeDao(): ChallengeDao
@@ -343,13 +346,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v19：bill_captures 支付捕获台账（2026-10-03 自动记账方案 C）。
+         * 纯端内表、不参与同步；state / occurred_at 各建单列索引（对账清单与去重窗口查询）。
+         */
+        private val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS bill_captures (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        package_name TEXT NOT NULL,
+                        notif_title TEXT,
+                        notif_text TEXT,
+                        amount_minor INTEGER,
+                        bill_type TEXT NOT NULL,
+                        merchant TEXT,
+                        occurred_at INTEGER NOT NULL,
+                        state TEXT NOT NULL,
+                        bill_id INTEGER,
+                        created_at INTEGER NOT NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_bill_captures_state` ON bill_captures (`state`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_bill_captures_occurred_at` ON bill_captures (`occurred_at`)")
+            }
+        }
+
         private fun buildDatabase(context: Context): AppDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "rinklnote.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19)
                 // 不再挂 fallbackToDestructiveMigration 兜底：MIGRATION_1_2 … 17_18 全链路已覆盖，
                 // 未覆盖路径应升级期报错暴露（宁可崩溃也不静默清库）。
                 .build()

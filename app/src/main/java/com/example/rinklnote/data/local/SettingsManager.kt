@@ -37,6 +37,12 @@ class SettingsManager(private val context: Context) {
         private val KEY_DAILY_REPORT_QQ_BOT = booleanPreferencesKey("daily_report_qq_bot")
         // 支付通知监听记账：默认关闭；开启还须用户在系统里授予「通知使用权」，两道闸缺一不可。
         private val KEY_PAY_NOTIFY_ENABLED = booleanPreferencesKey("pay_notify_enabled")
+        // 自动记账模式（2026-10-03 方案 C）：确认模式为默认，静默模式经渐进信任解锁后显式开启。
+        private val KEY_AUTO_CAPTURE_MODE = stringPreferencesKey("auto_capture_mode")
+
+        /** 自动记账模式词表。 */
+        const val AUTO_CAPTURE_MODE_CONFIRM = "CONFIRM"
+        const val AUTO_CAPTURE_MODE_SILENT = "SILENT"
         // 小组件预设金额快捷 chip（整数分，逗号分隔，取前 2 个）；默认 ¥10/¥50。
         private val KEY_QUICK_AMOUNTS = stringPreferencesKey("widget_quick_amounts")
 
@@ -113,6 +119,9 @@ class SettingsManager(private val context: Context) {
     /** 支付通知监听记账开关：默认 false（关闭）。实际生效还需系统「通知使用权」已授予。 */
     val payNotifyEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_PAY_NOTIFY_ENABLED] ?: false }
 
+    /** 自动记账模式：CONFIRM（捕获→确认，默认）/ SILENT（捕获→静默入账，渐进信任解锁后显式开启）。 */
+    val autoCaptureMode: Flow<String> = context.settingsDataStore.data.map { it[KEY_AUTO_CAPTURE_MODE] ?: AUTO_CAPTURE_MODE_CONFIRM }
+
     /** 自定义主题的 10 个颜色槽；未自定义的槽不会出现在 map 里。 */
     val customThemeColors: Flow<Map<RinklThemeSlot, Color>> = context.settingsDataStore.data.map { prefs ->
         buildMap {
@@ -172,6 +181,12 @@ class SettingsManager(private val context: Context) {
 
     suspend fun setPayNotifyEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[KEY_PAY_NOTIFY_ENABLED] = enabled }
+    }
+
+    /** 切换自动记账模式（CONFIRM / SILENT；非法值忽略）。 */
+    suspend fun setAutoCaptureMode(mode: String) {
+        if (mode != AUTO_CAPTURE_MODE_CONFIRM && mode != AUTO_CAPTURE_MODE_SILENT) return
+        context.settingsDataStore.edit { it[KEY_AUTO_CAPTURE_MODE] = mode }
     }
 
     /** 小组件快捷金额：整数分列表（最多取前 2 个；空/非法输入回落默认 ¥10/¥50）。 */

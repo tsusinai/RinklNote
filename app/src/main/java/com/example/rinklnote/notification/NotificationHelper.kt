@@ -96,6 +96,61 @@ object NotificationHelper {
         NotificationManagerCompat.from(context).notify((System.currentTimeMillis() % 100000).toInt(), notification)
     }
 
+    /**
+     * 自动记账「确认模式」的随手确认通知（2026-10-03 方案 C）：
+     * 「记上」直接落库（source=AUTO），「忽略」丢弃——不用进 App 就完成处置。
+     * 动作经 [CaptureActionReceiver] 广播落地；通知 id 用 captureId（同一条捕获重发时替换而非堆积）。
+     */
+    fun showCaptureConfirm(context: Context, captureId: Long, amountMinor: Long, billType: String, merchant: String?) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) return
+        }
+
+        fun actionIntent(action: String): PendingIntent = PendingIntent.getBroadcast(
+            context,
+            ((captureId % 100000) and 0xFFFF).toInt() + if (action == CaptureActionReceiver.ACTION_CONFIRM) 1 else 2,
+            Intent(context, CaptureActionReceiver::class.java).apply {
+                this.action = action
+                putExtra(CaptureActionReceiver.EXTRA_CAPTURE_ID, captureId)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val sign = if (billType == "INCOME") "+" else "-"
+        val title = if (billType == "INCOME") "自动记账 · 收入" else "自动记账"
+        val text = buildString {
+            append(sign).append(Money.format(amountMinor))
+            merchant?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
+            append("，记上这笔吗？")
+        }
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_PAY_NOTIFY)
+            .setSmallIcon(android.R.drawable.ic_menu_add)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .addAction(0, "记上", actionIntent(CaptureActionReceiver.ACTION_CONFIRM))
+            .addAction(0, "忽略", actionIntent(CaptureActionReceiver.ACTION_IGNORE))
+            // 点通知本体进 App（对账底座在自动记账页）；无深链时回落主界面
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context, ((captureId % 100000) and 0xFFFF).toInt() + 3,
+                    context.packageManager.getLaunchIntentForPackage(context.packageName),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context).notify(captureId.toInt(), notification)
+    }
+
+    /** 撤掉某条捕获的确认通知（已在页内处置 / 落账时同步清理）。 */
+    fun cancelCaptureConfirm(context: Context, captureId: Long) {
+        NotificationManagerCompat.from(context).cancel(captureId.toInt())
+    }
+
     fun showDailyReport(context: Context, report: DailyReport) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)

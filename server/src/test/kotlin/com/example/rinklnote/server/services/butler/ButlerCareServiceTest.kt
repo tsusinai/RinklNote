@@ -95,6 +95,23 @@ class ButlerCareServiceTest {
     /** 业务时区某日 0 点 epoch 毫秒（与实现里 bills.date 口径一致）。 */
     private fun dayStart(d: LocalDate): Long = d.atStartOfDay(ZONE).toInstant().toEpochMilli()
 
+    /** 带来源与备注的账单（自动记账对账段用例造数，source 走 createWebBill 新参）。 */
+    private fun sourcedBill(amountMinor: Long, categoryName: String, source: String, remark: String?, date: Long) {
+        val category = billService.getCategories().first { it.name == categoryName }
+        billService.createWebBill(
+            userId = USER_ID,
+            amountMinor = amountMinor,
+            billType = category.billType,
+            categoryId = category.id,
+            categoryName = category.name,
+            subCategoryName = null,
+            accountId = billService.accountIdFor(USER_ID),
+            remark = remark,
+            date = date,
+            source = source
+        )
+    }
+
     private fun monthStartOf(now: LocalDateTime): Long = dayStart(now.toLocalDate().withDayOfMonth(1))
 
     /** 带显式日期的账单（billType 与分类类型一致）。 */
@@ -370,6 +387,48 @@ class ButlerCareServiceTest {
             assertTrue(text2!!.contains("记了 1 笔"))
             assertTrue(text2.contains("支出 ¥20.00"))
             assertFalse(text2.contains("收入"))
+        }
+    }
+
+    @Test
+    fun `暮检列出AUTO自动记账对账段且商户取备注`() {
+        runBlocking {
+            val now = LocalDateTime.of(2026, 10, 15, 22, 0)
+            sourcedBill(1_800L, "三餐", "AUTO", "瑞幸咖啡", dayStart(now.toLocalDate()))
+            sourcedBill(2_500L, "日用", "AUTO", "全家便利店", dayStart(now.toLocalDate()))
+            expenseBill(3_000L, "交通", dayStart(now.toLocalDate())) // 手动记账：不进对账段
+            val text = newCare(now).eveningNudge(USER_ID)
+            assertNotNull(text)
+            assertTrue(text!!.contains("记了 3 笔"))
+            assertTrue(text.contains("小盘自动记的"))
+            assertTrue(text.contains("瑞幸咖啡 ¥18.00"))
+            assertTrue(text.contains("全家便利店 ¥25.00"))
+            assertFalse(text.contains("交通"))
+        }
+    }
+
+    @Test
+    fun `暮检AUTO对账段超3笔折叠计数`() {
+        runBlocking {
+            val now = LocalDateTime.of(2026, 10, 15, 22, 0)
+            sourcedBill(1_000L, "三餐", "AUTO", "店A", dayStart(now.toLocalDate()))
+            sourcedBill(2_000L, "三餐", "AUTO", "店B", dayStart(now.toLocalDate()))
+            sourcedBill(3_000L, "三餐", "AUTO", "店C", dayStart(now.toLocalDate()))
+            sourcedBill(4_000L, "三餐", "AUTO", "店D", dayStart(now.toLocalDate()))
+            val text = newCare(now).eveningNudge(USER_ID)
+            assertNotNull(text)
+            assertTrue(text!!.contains("等4笔"))
+        }
+    }
+
+    @Test
+    fun `暮检无AUTO账单不带对账段`() {
+        runBlocking {
+            val now = LocalDateTime.of(2026, 10, 15, 22, 0)
+            expenseBill(2_000L, "三餐", dayStart(now.toLocalDate()))
+            val text = newCare(now).eveningNudge(USER_ID)
+            assertNotNull(text)
+            assertFalse(text!!.contains("小盘自动记的"))
         }
     }
 

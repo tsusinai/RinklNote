@@ -113,6 +113,8 @@ import com.example.rinklnote.ui.screen.map.BillMapScreen
 import com.example.rinklnote.ui.screen.plan.BudgetEditScreen
 import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
+import com.example.rinklnote.ui.screen.autocapture.AutoCaptureScreen
+import com.example.rinklnote.ui.screen.autocapture.AutoCaptureViewModel
 import com.example.rinklnote.ui.screen.search.BillSearchViewModel
 import com.example.rinklnote.ui.screen.search.SearchBillsScreen
 import com.example.rinklnote.ui.screen.day.DayBillsScreen
@@ -722,6 +724,16 @@ fun AppNavigation(app: RinklNoteApp) {
                         onBack = { navController.popBackStack() }
                     )
                 }
+                composable("auto-capture") {
+                    // 自动记账（2026-10-03 方案 C）：支付捕获的权限/模式/台账与随手确认
+                    val autoCaptureVM: AutoCaptureViewModel = viewModel(
+                        factory = AutoCaptureViewModel.Factory(app.captureRepository, app.settingsManager)
+                    )
+                    AutoCaptureScreen(
+                        viewModel = autoCaptureVM,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
                 composable(
                     route = "bill-search",
                     // 长按快捷方式「搜账单」深链：rinklnote://bill-search（NavHost 自动消费）
@@ -841,6 +853,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenMultiCurrency = { navController.navigate("multi-currency") },
                         onOpenSearch = { navController.navigate("bill-search") },
                         onOpenChallenges = { navController.navigate("challenges") },
+                        onOpenAutoCapture = { navController.navigate("auto-capture") },
                         onOpenLogin = { showLogin = true },
                         onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") },
                         // 拖拽删除撤销（体验审查 P1）：与 bill-edit 删除路径同一恢复闭包（软删恢复 + 反馈）。

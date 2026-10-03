@@ -41,7 +41,14 @@ object VoiceParser {
         "转卖" to "二手转卖", "闲鱼" to "二手转卖", "二手" to "二手转卖", "出售" to "二手转卖",
         "压岁钱" to "红包礼金", "红包" to "红包礼金", "礼金" to "红包礼金",
         "工资" to "工资", "奖金" to "工资", "兼职" to "兼职", "理财" to "理财",
-        "利息" to "理财", "基金" to "理财", "股票" to "理财"
+        "利息" to "理财", "基金" to "理财", "股票" to "理财",
+        // 品牌词（2026-10-03 自动记账捕获管线追加）：支付通知的商户名几乎都是品牌，
+        // 与服务端 RuleBasedParser 品牌词对齐（只增不改，不影响既有 parse 顺序）。
+        "瑞幸" to "三餐", "星巴克" to "三餐", "蜜雪冰城" to "三餐", "库迪" to "三餐",
+        "麦当劳" to "三餐", "肯德基" to "三餐", "汉堡王" to "三餐", "必胜客" to "三餐",
+        "海底捞" to "三餐", "喜茶" to "三餐", "奈雪" to "三餐", "美团外卖" to "三餐", "饿了么" to "三餐",
+        "滴滴" to "交通", "哈啰" to "交通", "高德" to "交通",
+        "京东" to "网购", "拼多多" to "网购", "天猫" to "网购"
     )
 
     fun parse(text: String): VoiceResult {
@@ -57,19 +64,26 @@ object VoiceParser {
             amount = Regex("""(\d+\.?\d*)""").find(text)?.groupValues?.get(1)?.toDoubleOrNull()
         }
 
-        var categoryName: String? = null
-        for ((keyword, cat) in categories) {
-            if (text.contains(keyword)) {
-                categoryName = cat
-                break
-            }
-        }
+        var categoryName: String? = inferCategory(text)
 
         return VoiceResult(
             amount = amount,
             categoryName = categoryName,
             remark = text
         )
+    }
+
+    /**
+     * 关键词 → 分类名推断（自动记账捕获管线复用，2026-10-03 方案 C）：
+     * 商户/通知文本里命中任一分类关键词即返回分类名；未命中返回 null（调用方自行兜底）。
+     */
+    fun inferCategory(text: String): String? {
+        for ((keyword, cat) in categories) {
+            if (text.contains(keyword)) {
+                return cat
+            }
+        }
+        return null
     }
 
     // 中文数字字符集（小写 + 大写财务数字 + 零/两/廿），用于正则匹配与数值归一。

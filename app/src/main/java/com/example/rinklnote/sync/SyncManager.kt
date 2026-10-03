@@ -684,7 +684,9 @@ private fun Bill.toRequest() = CreateBillRequest(
     sortOrder = sortOrder,
     // 经纬度：仅打点账单有值；null 上传即服务端存 NULL（PUT 全量替换语义）。
     latitude = latitude,
-    longitude = longitude
+    longitude = longitude,
+    // 账单来源透传（自动记账 source=AUTO 供服务端暮检对账；旧口径回落 WEB）
+    source = this.source.value
 )
 
 private fun TemplateDTO.toEntity() = BillTemplate(
