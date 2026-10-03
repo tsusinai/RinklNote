@@ -97,6 +97,7 @@ import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AccountEditorScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
+import com.example.rinklnote.PendingQuickAdd
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.challenge.AchievementsScreen
@@ -418,12 +419,14 @@ fun AppNavigation(app: RinklNoteApp) {
         navController.navigate("bookkeeping") { launchSingleTop = true }
         when {
             pending.voice -> startVoice(VoiceTarget.QUICK_ADD)
+            pending.amount != null || pending.categoryName != null || pending.remark != null ->
+                // 深链 / 复制记账：金额/分类名/备注/类型 → 应用完整预填。
+                quickAddVM.applyQuickAddPrefill(pending)
             pending.categoryId != null ->
                 // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
                 quickAddVM.preselectCategory(pending.categoryId)
             else ->
-                // 深链：金额/分类名/备注/类型 → 应用完整预填。
-                quickAddVM.applyQuickAddPrefill(pending)
+                openDrawer()
         }
         app.setPendingQuickAdd(null)
     }
@@ -730,6 +733,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         factory = AutoCaptureViewModel.Factory(app.captureRepository, app.settingsManager)
                     )
                     AutoCaptureScreen(
+                        backgroundUri = appBackgroundUri,
+                        hazeState = hazeState,
                         viewModel = autoCaptureVM,
                         onBack = { navController.popBackStack() }
                     )
@@ -836,6 +841,8 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
                 composable("bookkeeping") {
                     val authState by authVM.state.collectAsStateWithLifecycle()
+                    val autoCapturePendingCount by app.captureRepository.observePendingCount()
+                        .collectAsStateWithLifecycle(initialValue = 0)
                     BookkeepingScreen(
                         onOpenDrawer = openDrawer,
                         onFinanceClick = { navigateTo("assets") },
@@ -854,10 +861,24 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenSearch = { navController.navigate("bill-search") },
                         onOpenChallenges = { navController.navigate("challenges") },
                         onOpenAutoCapture = { navController.navigate("auto-capture") },
+                        pendingCaptureCount = autoCapturePendingCount,
                         onOpenLogin = { showLogin = true },
                         onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") },
                         // 拖拽删除撤销（体验审查 P1）：与 bill-edit 删除路径同一恢复闭包（软删恢复 + 反馈）。
-                        onUndoDelete = { undoDelete(it) }
+                        onUndoDelete = { undoDelete(it) },
+                        // 卡片右滑「再来一笔」：预填快速记账抽屉，用户可微调后一步保存
+                        onCopyBill = { bill ->
+                            app.setPendingQuickAdd(
+                                PendingQuickAdd(
+                                    amount = Money.formatPlain(bill.amountMinor),
+                                    categoryId = bill.categoryId,
+                                    categoryName = bill.categoryName,
+                                    remark = bill.remark,
+                                    billType = bill.billType.value
+                                )
+                            )
+                            openDrawer()
+                        }
                     )
 
                 }

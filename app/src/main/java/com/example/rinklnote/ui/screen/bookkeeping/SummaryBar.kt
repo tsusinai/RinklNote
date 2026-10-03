@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.component.RollingAmountText
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.util.Money
@@ -95,13 +96,10 @@ fun SummaryBar(
                 maxLines = 1,
                 softWrap = false
             )
-            Text(
-                text = "${Money.formatPlain(totalExpense)}  ",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+            RollingAmountText(
+                amountMinor = totalExpense,
                 color = MaterialTheme.colorScheme.tertiary,
-                maxLines = 1,
-                softWrap = false
+                trailingSpace = "  "
             )
             Text(
                 text = "收入",
@@ -111,13 +109,10 @@ fun SummaryBar(
                 maxLines = 1,
                 softWrap = false
             )
-            Text(
-                text = "${Money.formatPlain(totalIncome)}  ",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+            RollingAmountText(
+                amountMinor = totalIncome,
                 color = incomeColor,
-                maxLines = 1,
-                softWrap = false
+                trailingSpace = "  "
             )
             if (hasSummary) {
                 Spacer(modifier = Modifier.weight(1f))

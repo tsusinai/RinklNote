@@ -122,7 +122,11 @@ fun BookkeepingScreen(
     onOpenDay: (Long) -> Unit = {},
     // 拖拽删除撤销（体验审查 P1）：收到删除前快照，接 AppNavigation 的 undoDelete
     // （软删恢复 + 反馈），与 bill-edit 删除路径同一恢复闭包。
-    onUndoDelete: (Bill) -> Unit = {}
+    onUndoDelete: (Bill) -> Unit = {},
+    // 账单卡片右滑「再来一笔」回调
+    onCopyBill: (Bill) -> Unit = {},
+    // 待处理自动记账笔数（角标提示）
+    pendingCaptureCount: Int = 0
 ) {
     val horizonalPadding = 10.dp
 
@@ -284,7 +288,8 @@ fun BookkeepingScreen(
                             onEditBill(bill)
                         },
                         onDragFinished = onDragFinished,
-                        onOpenDay = onOpenDay
+                        onOpenDay = onOpenDay,
+                        onCopyBill = onCopyBill
                     )
                     Spacer(modifier = Modifier.height(horizonalPadding))
                 }
@@ -306,7 +311,8 @@ fun BookkeepingScreen(
             onOpenDrawer = onOpenDrawer,
             onFinanceClick = onFinanceClick,
             onOpenMoreDrawer = { showMoreDrawer = true },
-            onAiClick = onAiClick
+            onAiClick = onAiClick,
+            pendingCaptureCount = pendingCaptureCount
         )
 
         // FAB：常态 = 加账单；拖动中变删除区（命中时放大 + 红色高亮），松手删除
@@ -397,6 +403,7 @@ fun BookkeepingScreen(
             onOpenSearch = onOpenSearch,
             onOpenChallenges = onOpenChallenges,
             onOpenAutoCapture = onOpenAutoCapture,
+            pendingCaptureCount = pendingCaptureCount,
             onOpenLogin = onOpenLogin,
             onOpenSettings = onMoreClick,
             onOpenAbout = onMoreClick, // 「关于」暂同「设置」跳「我的」页，后续可接独立关于页
@@ -444,6 +451,7 @@ private fun TopBar(
     onFinanceClick: () -> Unit,
     onOpenMoreDrawer: () -> Unit,
     onAiClick: () -> Unit,
+    pendingCaptureCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     // 文字色三态：有背景→白（靠 scrim/照片衬托）；无背景→自定义主题「顶栏标题色」（默认=字体色），滚动后略淡
@@ -458,19 +466,33 @@ private fun TopBar(
         horizontalPadding = 16.dp,
         modifier = modifier
     ) {
-        // 更多 → 「更多」抽屉；AI → AI 记账（金融/登记在右列）
+        // 更多 → 「更多」抽屉（待处理计数>0 时挂红点提示）；AI → AI 记账（金融/登记在右列）
         Row(
             modifier = Modifier.align(Alignment.CenterStart),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_more_menu),
-                contentDescription = "更多",
+            Box(
                 modifier = Modifier
                     .size(30.dp)
                     .clickable(onClick = onOpenMoreDrawer),
-                tint = iconColor
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_menu),
+                    contentDescription = if (pendingCaptureCount > 0) "更多，有 $pendingCaptureCount 条待处理自动记账" else "更多",
+                    modifier = Modifier.size(30.dp),
+                    tint = iconColor
+                )
+                if (pendingCaptureCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.error)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(8.dp))
             Icon(
                 painter = painterResource(R.drawable.ic_ai),

@@ -3,12 +3,14 @@ package com.example.rinklnote.ui.component
 import java.util.Locale
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,20 +35,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.screen.bookkeeping.BillDragHost
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -67,6 +78,8 @@ fun BillCard(
     onDragFinished: () -> Unit,
     // 日期头整行点击 → 打开「当天账单」页（默认空实现：未接线时点了无反应，不影响既有调用）
     onOpenDay: (Long) -> Unit = {},
+    // 卡片右滑「再来一笔」回调（默认空实现）
+    onCopyBill: (Bill) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -136,12 +149,13 @@ fun BillCard(
                 label = "rowShift"
             )
             key(bill.id) {
-                DraggableBillRow(
+                SwipeableBillRow(
                     bill = bill,
                     date = date,
                     isDragged = isDragged,
                     dragHost = dragHost,
                     onEdit = onEdit,
+                    onCopyBill = onCopyBill,
                     onDragFinished = onDragFinished,
                     modifier = Modifier
                         .then(if (isDragged) Modifier.height(0.dp) else Modifier)
@@ -150,6 +164,110 @@ fun BillCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * 包装行：右滑「再来一笔」手势层。
+ * 向右滑动超过阈值（64dp）松手触发复制记账，露出「再来一笔」操作背景并伴随轻触震动；
+ * 水平滑动事件优先消费（change.consume），避免与外层 Tab 切换手势冲突；
+ * 长按纵向拖动排序/删除手势在内层保留，互不影响。
+ */
+@Composable
+private fun SwipeableBillRow(
+    bill: Bill,
+    date: Long,
+    isDragged: Boolean,
+    dragHost: BillDragHost,
+    onEdit: (Bill) -> Unit,
+    onCopyBill: (Bill) -> Unit,
+    onDragFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val maxSwipePx = with(LocalDensity.current) { 88.dp.toPx() }
+    val triggerPx = with(LocalDensity.current) { 64.dp.toPx() }
+    val swipeOffsetAnim = remember { Animatable(0f) }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+    ) {
+        // 背景层：向右滑动时露出的操作底色与图标提示
+        if (swipeOffsetAnim.value > 0f) {
+            val progress = (swipeOffsetAnim.value / triggerPx).coerceIn(0f, 1f)
+            val colors = LocalRinklColors.current
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(colors.themeColor.copy(alpha = 0.12f * progress))
+                    .padding(start = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "再来一笔",
+                    tint = colors.themeColor.copy(alpha = progress),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "再来一笔",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.themeColor.copy(alpha = progress)
+                )
+            }
+        }
+
+        // 内容层：拖动中禁用水平滑动手势
+        val isDraggingActive = isDragged || dragHost.dragging != null
+        DraggableBillRow(
+            bill = bill,
+            date = date,
+            isDragged = isDragged,
+            dragHost = dragHost,
+            onEdit = onEdit,
+            onDragFinished = onDragFinished,
+            modifier = Modifier
+                .offset { IntOffset(swipeOffsetAnim.value.roundToInt(), 0) }
+                .pointerInput(bill.id, isDraggingActive) {
+                    if (isDraggingActive) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            if (dragAmount > 0 || swipeOffsetAnim.value > 0) {
+                                change.consume()
+                                val next = (swipeOffsetAnim.value + dragAmount).coerceIn(0f, maxSwipePx)
+                                coroutineScope.launch { swipeOffsetAnim.snapTo(next) }
+                            }
+                        },
+                        onDragEnd = {
+                            val triggered = swipeOffsetAnim.value >= triggerPx
+                            if (triggered) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onCopyBill(bill)
+                            }
+                            coroutineScope.launch {
+                                swipeOffsetAnim.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                )
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                swipeOffsetAnim.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                )
+                            }
+                        }
+                    )
+                }
+        )
     }
 }
 

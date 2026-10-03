@@ -486,6 +486,37 @@ class QuickAddViewModelTest {
         assertTrue(vm.state.value.suggestionRestorable)
     }
 
+    // ── 智能预填（I1：时段偏好 + 历史最高频 + 默认账户）──
+
+    @Test
+    fun `抽屉打开时自动预选默认账户与分类`() = runTest(dispatcher) {
+        val vm = newVM()
+        assertNull(vm.state.value.selectedAccount)
+        assertNull(vm.state.value.selectedCategory)
+
+        vm.onEvent(QuickAddEvent.DrawerOpened)
+        advanceUntilIdle()
+
+        // 默认账户预选（首个账户或桶账户）
+        assertNotNull(vm.state.value.selectedAccount)
+        assertEquals(1L, vm.state.value.selectedAccount?.id)
+        // 智能分类预选（三餐或首个）
+        assertNotNull(vm.state.value.selectedCategory)
+    }
+
+    @Test
+    fun `智能分类预选在无时段匹配时可命中历史高频分类`() = runTest(dispatcher) {
+        val vm = newVM()
+        repo.frequentCategoryId = 2L // 交通
+
+        val cats = listOf(
+            Category(1, "居家", "home", BillType.EXPENSE),
+            Category(2, "交通", "transport", BillType.EXPENSE)
+        )
+        val resolved = vm.resolveSmartCategoryPrefill(cats)
+        assertNotNull(resolved)
+    }
+
     /** Minimal repository fake — no Room, drives state via MutableStateFlow. */
     private class FakeBillRepository : BillRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(
@@ -505,6 +536,9 @@ class QuickAddViewModelTest {
             addedBills += bill
             return ++nextId
         }
+
+        var frequentCategoryId: Long? = null
+        override suspend fun getMostFrequentExpenseCategoryId(since: Long): Long? = frequentCategoryId
 
         override fun observeAllBills(): Flow<List<Bill>> = flowOf(emptyList())
         override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> =

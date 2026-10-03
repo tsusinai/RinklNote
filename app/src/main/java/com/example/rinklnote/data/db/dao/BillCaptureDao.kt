@@ -23,6 +23,10 @@ interface BillCaptureDao {
     @Query("SELECT * FROM bill_captures WHERE state = 'PENDING' ORDER BY occurred_at DESC")
     fun observePending(): Flow<List<BillCapture>>
 
+    /** 待确认笔数（首页角标实时响应）。 */
+    @Query("SELECT COUNT(*) FROM bill_captures WHERE state = 'PENDING'")
+    fun observePendingCount(): Flow<Int>
+
     /** 捕获记录页：最近 50 条（全状态，按发生时间倒序）。 */
     @Query("SELECT * FROM bill_captures ORDER BY occurred_at DESC LIMIT 50")
     fun observeRecent(): Flow<List<BillCapture>>

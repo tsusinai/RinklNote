@@ -64,6 +64,8 @@ interface CaptureRepository {
     /** 对账底座：待确认清单 / 最近捕获记录。 */
     fun observePending(): Flow<List<BillCapture>>
     fun observeRecent(): Flow<List<BillCapture>>
+    /** 待处理笔数（首页角标实时响应）。 */
+    fun observePendingCount(): Flow<Int>
 
     /** 渐进信任统计（suggestSilent 用）。 */
     data class TrustStats(val captureBooked: Int, val autoTotal: Int, val autoKept: Int)
@@ -144,6 +146,8 @@ class CaptureRepositoryImpl(
     override fun observePending(): Flow<List<BillCapture>> = db.billCaptureDao().observePending()
 
     override fun observeRecent(): Flow<List<BillCapture>> = db.billCaptureDao().observeRecent()
+
+    override fun observePendingCount(): Flow<Int> = db.billCaptureDao().observePendingCount()
 
     override suspend fun trustStats(): CaptureRepository.TrustStats =
         CaptureRepository.TrustStats(

@@ -202,6 +202,9 @@ internal class BillRepositoryImpl(
         )
     }
 
+    override suspend fun getMostFrequentExpenseCategoryId(since: Long): Long? =
+        billDao.getMostFrequentExpenseCategoryId(since)
+
     override suspend fun insertAccount(account: Account): Long = accountDao.insert(account)
     override suspend fun updateAccount(account: Account) = accountDao.update(account)
     override suspend fun updateAccountLocal(account: Account) = accountDao.update(account)

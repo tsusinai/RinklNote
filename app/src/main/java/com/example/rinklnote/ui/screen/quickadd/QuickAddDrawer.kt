@@ -232,8 +232,9 @@ private fun DrawerContent(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
 
-    // Fetch smart suggestion once when the drawer opens
+    // Fetch smart suggestion and trigger smart prefill once when the drawer opens
     LaunchedEffect(Unit) {
+        viewModel.onEvent(QuickAddEvent.DrawerOpened)
         val s = viewModel.state.value
         if (s.suggestion == null && !s.suggestionDismissed) {
             viewModel.loadSuggestion()

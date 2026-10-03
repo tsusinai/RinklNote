@@ -100,6 +100,7 @@ fun MoreDrawer(
     onOpenMultiCurrency: () -> Unit = {},
     onOpenChallenges: () -> Unit = {},
     onOpenAutoCapture: () -> Unit = {},
+    pendingCaptureCount: Int = 0,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
@@ -164,6 +165,7 @@ fun MoreDrawer(
                     onOpenMultiCurrency = onOpenMultiCurrency,
                     onOpenChallenges = onOpenChallenges,
                     onOpenAutoCapture = onOpenAutoCapture,
+                    pendingCaptureCount = pendingCaptureCount,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout
                 )
@@ -195,6 +197,7 @@ private fun DrawerContent(
     onOpenMultiCurrency: () -> Unit,
     onOpenChallenges: () -> Unit,
     onOpenAutoCapture: () -> Unit,
+    pendingCaptureCount: Int,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
 ) {
@@ -327,6 +330,24 @@ private fun DrawerContent(
                 )
             },
             label = "自动记账",
+            badge = if (pendingCaptureCount > 0) {
+                {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.error)
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (pendingCaptureCount > 99) "99+" else pendingCaptureCount.toString(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                }
+            } else null,
             onClick = closeThen(onDismiss, onOpenAutoCapture)
         )
         MoreDrawerRow(
@@ -369,6 +390,7 @@ private fun DrawerContent(
 private fun MoreDrawerRow(
     icon: @Composable (Color) -> Unit,
     label: String,
+    badge: @Composable (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val iconTint = LocalRinklColors.current.iconButtonColor
@@ -393,6 +415,10 @@ private fun MoreDrawerRow(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
+        if (badge != null) {
+            badge()
+            Spacer(modifier = Modifier.width(6.dp))
+        }
         Icon(
             painter = painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,

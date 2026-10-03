@@ -80,6 +80,10 @@ interface BillDao {
     @Query("SELECT COUNT(*) FROM bills WHERE source = 'AUTO' AND deleted = 0")
     suspend fun countAutoKept(): Int
 
+    /** 快速记账智能预填：查询指定日期以来记账频次最高的支出分类 ID。 */
+    @Query("SELECT category_id FROM bills WHERE deleted = 0 AND bill_type = 'EXPENSE' AND date >= :since GROUP BY category_id ORDER BY COUNT(*) DESC LIMIT 1")
+    suspend fun getMostFrequentExpenseCategoryId(since: Long): Long?
+
     // Net effect of a single account's bills: income adds, expense subtracts. Used by the
     // account-level "对账" (reconcile) so a balance can be recomputed from its own records.
     @Query(

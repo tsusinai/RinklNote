@@ -194,6 +194,9 @@ sealed interface QuickAddEvent {
 
     /** 关闭常去地点建议（本次打点内不再打扰）。 */
     data object DismissPlaceSuggestion : QuickAddEvent
+
+    /** 抽屉打开：触发智能预填（默认账户 + 时段/历史最高频分类）。 */
+    data object DrawerOpened : QuickAddEvent
 }
 
 sealed interface QuickAddEffect {
@@ -246,6 +249,10 @@ class QuickAddViewModel(
                 }
                 pendingPreselectId = null
                 applyPendingPrefillIfReady()
+                if (pendingSmartPrefill) {
+                    pendingSmartPrefill = false
+                    applySmartPrefill(cats)
+                }
             }
         }
         viewModelScope.launch {
@@ -325,6 +332,7 @@ class QuickAddViewModel(
             is QuickAddEvent.OcrMerchantPicked -> _state.update { it.copy(remark = event.merchant) }
             is QuickAddEvent.PlaceSuggestionClick -> onPlaceSuggestionClick()
             is QuickAddEvent.DismissPlaceSuggestion -> _state.update { it.copy(placeSuggestion = null) }
+            is QuickAddEvent.DrawerOpened -> onDrawerOpened()
         }
     }
 
@@ -371,6 +379,65 @@ class QuickAddViewModel(
 
     // 深链预填参数：expense/income 分类冷启动尚未加载时暂存，待加载到位后再应用。
     private var pendingPrefill: PendingQuickAdd? = null
+
+    // 智能预填：分类冷启动未到位时标记，加载到位后补触发预填
+    private var pendingSmartPrefill: Boolean = false
+
+    private fun onDrawerOpened() {
+        val s = _state.value
+        // 1. 默认账户自动预选（优先无账户桶，兜底首个真实账户）
+        val targetAccount = s.selectedAccount ?: defaultAccount(s.accounts)
+        if (targetAccount != null && s.selectedAccount == null) {
+            _state.update { it.copy(selectedAccount = targetAccount) }
+        }
+
+        // 2. 支出分类智能预选（仅在尚未选择分类且处于支出模式时触发）
+        if (s.selectedCategory == null && s.billType == BillType.EXPENSE) {
+            if (s.expenseCategories.isNotEmpty()) {
+                applySmartPrefill(s.expenseCategories)
+            } else {
+                pendingSmartPrefill = true
+            }
+        }
+    }
+
+    private fun applySmartPrefill(cats: List<Category>) {
+        viewModelScope.launch {
+            val prefilled = resolveSmartCategoryPrefill(cats)
+            if (prefilled != null) {
+                _state.update { curr ->
+                    if (curr.selectedCategory == null && curr.billType == BillType.EXPENSE) {
+                        curr.copy(selectedCategory = prefilled)
+                    } else curr
+                }
+            }
+        }
+    }
+
+    internal suspend fun resolveSmartCategoryPrefill(categories: List<Category>): Category? {
+        if (categories.isEmpty()) return null
+        val now = java.time.LocalTime.now(bookkeepingZone())
+        val hour = now.hour
+        val timeKeywords = when (hour) {
+            in 6..9 -> listOf("早餐", "早点", "早饭", "三餐", "餐饮")
+            in 11..13 -> listOf("午餐", "午饭", "中餐", "三餐", "餐饮")
+            in 17..20 -> listOf("晚餐", "晚饭", "夜宵", "三餐", "餐饮")
+            else -> null
+        }
+        if (timeKeywords != null) {
+            for (kw in timeKeywords) {
+                val match = categories.firstOrNull { it.name.contains(kw) }
+                if (match != null) return match
+            }
+        }
+        val thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+        val frequentId = repository.getMostFrequentExpenseCategoryId(thirtyDaysAgo)
+        if (frequentId != null) {
+            val match = categories.firstOrNull { it.id == frequentId }
+            if (match != null) return match
+        }
+        return categories.firstOrNull()
+    }
 
     private fun onDigit(digit: String) {
         _state.update { current ->

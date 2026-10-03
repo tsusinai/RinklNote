@@ -71,6 +71,8 @@ interface BillRepository {
     suspend fun getActiveAccounts(): List<Account> = emptyList()
     /** 某天（[dayStart, dayEnd)）未删除账单，供导入按「同日 + 同额 + 同分类」查重。 */
     suspend fun getBillsByDay(dayStart: Long, dayEnd: Long): List<Bill> = emptyList()
+    /** 智能预填：查询指定时间以来最高频的支出分类 ID。 */
+    suspend fun getMostFrequentExpenseCategoryId(since: Long): Long? = null
 
 
     // Accounts — reactive source + per-user CRUD/sync

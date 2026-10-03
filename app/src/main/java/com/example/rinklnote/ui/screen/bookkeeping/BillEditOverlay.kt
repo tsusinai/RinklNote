@@ -128,7 +128,6 @@ fun BillEditOverlay(
     var selectedSubCategory by remember(bill.id) { mutableStateOf<SubCategory?>(null) }
     var pendingSubName by remember(bill.id) { mutableStateOf(bill.subCategoryName) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
     // 位置打点：编辑既有账单可补打/清除；初值来自账单本身（保存时按当前值全量覆盖）
     var location by remember(bill.id) { mutableStateOf(bill.toLocationTag()) }
@@ -263,7 +262,7 @@ fun BillEditOverlay(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { showDeleteConfirm = true }) {
+                    TextButton(onClick = onDelete) {
                         Text("删除", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                     }
                     TextButton(enabled = canSave, onClick = { if (canSave) onConfirm(editedBill) }) {
@@ -349,16 +348,6 @@ fun BillEditOverlay(
                     showDatePicker = false
                 },
                 onDismiss = { showDatePicker = false }
-            )
-        }
-
-        if (showDeleteConfirm) {
-            DeleteBillDialog(
-                onConfirm = {
-                    showDeleteConfirm = false
-                    onDelete()
-                },
-                onDismiss = { showDeleteConfirm = false }
             )
         }
 
@@ -774,28 +763,6 @@ private fun SectionHeader(title: String, hint: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-}
-
-@Composable
-private fun DeleteBillDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("删除这笔账单？") },
-        text = { Text("删除后会从本地和云端移除，确认后可在提示条中撤销。") },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 @Composable
