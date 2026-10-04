@@ -118,7 +118,7 @@ fun AutoCaptureScreen(
                     )
                     RinklDivider()
                     SettingsRow(
-                        label = "自动记账总开关",
+                        label = "自动记账",
                         value = "监听微信/支付宝/银行支付通知",
                         trailing = {
                             Switch(
