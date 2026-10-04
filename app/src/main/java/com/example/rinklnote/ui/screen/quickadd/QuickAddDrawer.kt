@@ -114,14 +114,11 @@ import com.example.rinklnote.ui.viewmodel.SuggestionSource
 import kotlinx.coroutines.launch
 
 /**
- * 抽屉自适应宽度（体验审查 P1）：固定 200dp 在内容变多后过窄，改为可读上限 320dp、
- * 小屏按屏宽 0.88 占比收缩（避免贴满遮住主页面）。快捷记账与「更多」抽屉同款。
+ * 抽屉宽度：还原为固定 200dp 窄面板（用户 2026-10-04 拍板还原，避免遮挡主页面）。
+ * 内容（标签行/账户行/chips）已按窄宽排布校验。
  */
 @Composable
-private fun adaptiveDrawerWidth(): Dp {
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    return minOf(320.dp, screenWidth * 0.88f)
-}
+private fun adaptiveDrawerWidth(): Dp = 200.dp
 
 /** 跳系统设置的本应用详情页（定位权限/定位服务关闭时「去设置」用）。 */
 private fun openAppSettings(context: android.content.Context) {
@@ -879,12 +876,15 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
                 colorHex = account.iconColor,
                 size = 30.dp
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
         }
+        // 窄面板（200dp）下名称与金额可能贴死：保底 6dp 间距
+        Spacer(modifier = Modifier.width(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (hidden) "***" else Money.format(account.balanceMinor), fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.width(8.dp))
+            // 窄面板下余额降为 14sp：避免挤出右侧选中圆点（主金额展示在下方金额框）
+            Text(if (hidden) "***" else Money.format(account.balanceMinor), fontSize = 14.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.width(6.dp))
             // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
             val dotColor by animateColorAsState(
                 targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
