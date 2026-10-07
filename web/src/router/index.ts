@@ -33,6 +33,7 @@ const adminChildren = [
 ]
 
 const routes = [
+  { path: '/defense', name: 'defense', component: () => import('../views/Defense.vue'), meta: { title: '项目答辩' } },
   { path: '/', name: 'landing', component: () => import('../views/Landing.vue'), meta: { title: '记一笔' } },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { title: '登录' } },
   { path: '/console', name: 'console', component: () => import('../views/console/ConsoleLayout.vue'), children: consoleChildren },
