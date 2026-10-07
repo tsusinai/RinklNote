@@ -1,146 +1,293 @@
-# RinklNote 记一笔
+<div align="center">
 
-个人记账应用，双端一体（Android App + Ktor 服务端），全链路支持自然语言与 AI 洞察。
-所有 UI 与注释统一使用中文。
+<img src="web/public/pwa-192.png" alt="RinklNote 小盘应用图标" width="96" height="96" />
 
-## 这是什么
+<h1>RinklNote · 记一笔</h1>
 
-- **客户端**：Android 单 Activity + Jetpack Compose + Material 3，本地 Room 存储，随时离线记账。
-- **服务端**：Ktor + Exposed + PostgreSQL（测试用 H2），提供账号、跨端同步、NLU 记账、AI 洞察与多通道记账机器人（QQ / 飞书 / 企业微信 / 订阅号）。
-- **端到端**：核心记账 | 多端双向同步 | 语音/文本自然语言记账 | 月度总结/异常/习惯提醒 | QQ 微信机器人。
+<p>随手记账，跨端同步，用 AI 看懂自己的消费。</p>
 
-本库是一个 Gradle 多模块 Monorepo：
+<p><strong>Android App · Ktor Server · Vue Web Console</strong></p>
 
-```
+<p>
+  <a href="#亮点">功能亮点</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#架构与数据流">系统架构</a> ·
+  <a href="#部署">部署指南</a> ·
+  <a href="#文档索引">详细文档</a>
+</p>
+
+</div>
+
+---
+
+RinklNote 是一套**离线优先的个人记账系统**。Android 负责日常随手记账，Web 提供浏览器控制台，服务端连接多端数据与 AI 能力；也可以通过 QQ、飞书、企业微信和订阅号机器人记账。
+
+仓库采用 Gradle 多模块 + npm 独立构建的 Monorepo 结构，UI 文案与代码注释统一使用中文。
+
+## 亮点
+
+| 方向 | 能力 |
+|---|---|
+| 记账 | 手动、语音、自然语言、模板、CSV 导入、小票 OCR、位置打点与分享图 |
+| 规划 | 月度预算、分类预算、账户、挑战计划、成就与主题 |
+| 洞察 | 月度总结、异常提醒、习惯建议、自然问账、账单教练 |
+| 同步 | 离线优先、增量同步、软删除、Last-Writer-Wins、乐观锁 |
+| 多端 | Android、Web 控制台、QQ、飞书、企业微信、订阅号 |
+| 安全 | JWT、管理员守卫、机器人验签、限流、敏感配置掩码 |
+
+金额在三端统一使用整数分作为权威格式，业务时区统一为 `Asia/Shanghai`。
+
+### 各端分工
+
+| 入口 | 适合做什么 | 说明 |
+|---|---|---|
+| Android | 日常记账、预算、地图、挑战与桌面小组件 | 本地 Room 支持离线记账 |
+| Web | 浏览、搜索、图表、账户与设置 | PWA 缓存应用壳，业务 API 需要联网 |
+| QQ / 飞书 / 企业微信 | 自然语言记账、问账与推送 | 绑定账户后使用，主动推送按飞书 → 企业微信 → QQ 选择通道 |
+| 订阅号 | 消息记账与被动回复 | 不参与主动推送调度 |
+
+## 项目结构
+
+```text
 RinklNote/
-├─ app/      Android 客户端（Kotlin + Compose + Room）
-├─ server/   Ktor 服务端（含 QQ 机器人、LLM 洞察）
-└─ docs/     设计/计划/使用文档
+├─ app/       Android 客户端（Kotlin + Compose + Room）
+├─ server/    Ktor 服务端（Netty + Exposed + JWT）
+├─ web/       Vue 3 + Vite + Pinia Web 控制台
+├─ resource/  图标等静态资源
+├─ docs/      使用、技术、审查和阶段文档
+├─ FEATURES.md
+├─ AGENTS.md
+└─ gradle/libs.versions.toml
 ```
+
+源码入口：
+
+- Android：`app/src/main/java/com/example/rinklnote/`
+- Server：`server/src/main/kotlin/com/example/rinklnote/server/Application.kt`
+- Web：`web/src/`
+- Room schema：`app/schemas/`
 
 ## 技术栈
 
-| 端 | 技术 |
-|---|------|
-| App | Kotlin 2.0.21 · Jetpack Compose（BOM 2024.09）· Material 3 · Room 2.6.1 (KSP) · Retrofit/OkHttp · kotlinx-serialization · minSdk 28 / target 36 |
-| Server | Ktor Server (Netty) · Exposed · kotlinx-serialization · JWT (HMAC256) · jBCrypt · HikariCP · PostgreSQL / H2 · DeepSeek LLM |
-| 测试 | JUnit 4 · AndroidX Test · Espresso · Compose UI Test |
+| 模块 | 技术 |
+|---|---|
+| Android | Kotlin 2.0.21、Jetpack Compose、Material 3、Room 2.6.1、KSP、Retrofit、DataStore、Coil、osmdroid |
+| Server | Kotlin/JVM 17、Ktor 2.3.13、Netty、Exposed 0.51.1、HikariCP、PostgreSQL/H2、JWT、jBCrypt、BouncyCastle |
+| Web | Vue 3.5、Vite 6、TypeScript 5.6、Pinia、Vue Router、ECharts、Vitest |
+| 构建 | Gradle 8.13、Android Gradle Plugin 8.13、npm |
 
-版本号统一在 `gradle/libs.versions.toml`，不要硬编码。
+依赖版本统一维护在 `gradle/libs.versions.toml`，不要在模块构建文件中硬编码版本。
 
-## 客户端 (app)
+## 快速开始
 
-**架构**：MVVM + Repository，无 DI 框架。`RinklNoteApp.kt` 是服务定位器，lazy 创建数据库/仓库/令牌/设置/网络/同步单例，供各 `ViewModel.Factory` 注入。
+### 1. 准备 Gradle 环境
 
-- 数据流：`AppDatabase → BillRepository → ViewModel(StateFlow) → Compose(collectAsStateWithLifecycle)`
-- 导航：`HorizontalPager` 三页（计划 / 记账 / 资产）+ AI 页，自定义底部导航栏，非 Navigation Compose。
-- 事件：每个 ViewModel 定义了 `@Immutable State` + sealed `Event`，通过 `onEvent(...)` 分发；一次性副作用用 `Channel`（如 `QuickAddEffect`）。
+需要 Android SDK 36、兼容的 JDK，以及 Node.js / npm。Android 最低支持 Android 9（API 28）；Gradle Wrapper 已包含在仓库中。
 
-**核心页面/流程**
-- 记账页：按日分组的「一天一张卡」列表，每张卡含日期头 + 星期 + 当日净额，行内可滑动删除（滑出删除按钮 → 二次确认弹窗）。支持月切换（前后翻月）。
-- 快捷记账抽屉（QuickAddDrawer）：自定义数字键盘（无系统 IME）、支出/收入切换、一级分类 + 二级子分类（长按触发）、备注、常用模板；两段式确认可防误触。
-- 编辑页（BillEditOverlay）：一级分类为行、点开展开二级子分类，两张独立卡（分类 / 账户）+ 底部键盘，切换收支类型时重置分类并收起二级。
-- 计划页：本月预算卡（进度条 / 已花 / 剩余天数 / 超预算提示），点卡片弹出预算键盘。
-- 资产页：账户卡片（微信/支付宝/默认），增/改名/改余额/删除。
-- AI 页：对话式记账（「午餐28元」）与问账（「上个月交通花了多少」），自动注入本月总结 / 异常提醒 / 习惯提醒；语音输入（SpeechRecognizer）。
-- 图表：`ChartBox` 单 Canvas 绘制折线/柱状，`Animatable` 动画，10 天窗口。
+Windows 本机使用 Android Studio 自带 JBR（当前为 JDK 21），并设置独立缓存目录，避免系统 JDK 24 与用户路径中的撇号影响测试。以下路径按自己的安装位置调整：
 
-**金额与日期**：业务时区统一 `Asia/Shanghai`（`DateUtil.bookkeepingZone()`）。`Bill.date` 只存「当日 0 点」作为天分组键。注意：金额用 `Double`（见「已知债务」）。
-
-**测试**：
-```bash
-./gradlew test                     # 全部 JVM 单元测试（离线）
-./gradlew connectedAndroidTest     # 仪器测试（需设备/模拟器）
-./gradlew lint                     # Android Lint
+```powershell
+$env:JAVA_HOME = 'D:/Codes/AndroidStudio/jbr'
+$env:GRADLE_USER_HOME = 'D:/Codes/RinklNote/.gradle-home'
+$env:ANDROID_USER_HOME = 'D:/Codes/RinklNote/.android-home'
 ```
 
-## 服务端 (server)
+在 Android Studio 中配置 SDK，或在不提交到 Git 的 `local.properties` 中设置 `sdk.dir`。App 编译目标为 JVM 11，Server 编译目标为 JVM 17。
 
-**入口**：`server/src/main/kotlin/com/example/rinklnote/server/ApplicationKt.kt`，Ktor Netty，默认端口 `8080`（`PORT` 可配）。
+### 2. 构建 Android 与 Server
 
-**配置 / 环境变量**（`Application.kt`、`plugins/Database.kt`）：
-
-| 变量 | 用途 | 默认 |
-|------|------|------|
-| `PORT` | HTTP 端口 | 8080 |
-| `JWT_SECRET` | JWT 签名密钥（强密钥，缺失 fail-fast） | 必填 |
-| `JWT_ISSUER` / `JWT_AUDIENCE` | JWT 校验 | rinklnote-server / rinklnote-app |
-| `WEBHOOK_SECRET` | QQ Bot 消息验签；Ed25519 公钥 | 强密钥 |
-| `DATABASE_URL` | JDBC URL（Postgres；H2 用于测试） | `jdbc:h2:mem:rinklnote` |
-| `database.user` / `database.password` | Postgres 凭据 | rinklnote / rinklnote |
-| `DEEPSEEK_API_KEY` | LLM 解析/总结 | 必填 |
-| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | LLM 端点/模型 | api.deepseek.com / deepseek-chat |
-| `LLM_TIMEOUT_MS` | LLM 超时 | 10000 |
-| `LEARNING_INTERVAL_MIN` | 关键词自学习刷新间隔 | 60 |
-| `ANOMALY_THRESHOLD` | 异常支出增幅阈值 | 1.5 |
-| `ASR_API_KEY` / `ASR_BASE_URL` / `ASR_MODEL` / `ASR_TIMEOUT_MS` | 语音转文字（可选，未配置则 App 走本地识别） | whisper-1 |
-
-> **多通道机器人配置不在环境变量里**：QQ / 飞书 / 企业微信 / 订阅号的凭证（AppID、Secret、Token、Encrypt Key 等）统一存服务端 `bot_config` KV 表，在 Web 控制台「设置 → 多通道机器人」卡片中配置并掩码回显；环境变量只保留 `WEBHOOK_SECRET`（旧 QQ 共享密钥协议遗留）。
-
-数据库启动时对缺失列/索引自动迁移（`SchemaUtils.createMissingTablesAndColumns` + 迁移脚本），并 `seedIfNeeded` 幂等填充默认分类/账户。
-
-**运行**：
-```bash
-./gradlew :server:run             # 开发运行（读 env 或 application.conf 兜底）
-./gradlew :server:test            # 服务端单元测试
+```powershell
+./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
+./gradlew :app:testDebugUnitTest
+./gradlew :server:test
+./gradlew :server:installDist
 ```
 
-**部署（简）**：打 JVM 包后以 systemd 管理，注入上述 env；DB 用 PostgreSQL。详见 `docs/`。
+### 3. 安装并构建 Web
 
-### API 端点
+```powershell
+cd web
+npm ci
+npm run typecheck
+npm run test
+npm run build
+npm run dev
+```
 
-认证（JWT 保护除健康检查外的业务接口）：`/api/auth/*`
-- `POST /api/auth/register`、`POST /api/auth/login`
-- `GET /api/auth/me`、`POST /api/auth/password`、`GET/PUT /api/auth/ai`（AI 主动推送开关）
+开发服务器默认运行在 `http://localhost:5173`，Vite 已将 `/api` 代理到本地 Ktor 服务的 `8080` 端口。构建产物位于 `web/dist/`，可用 `npm run preview` 预览静态页面。
 
-账单：`/api/bills/*`
-- `POST /api/bills`（上传）、`GET /api/bills/sync`（分页增量拉取）
-- `GET/PUT/DELETE /api/bills/{id}`（单条，PUT 为条件更新）、`POST /api/bills/parse`（NLU 解析）、`POST /api/bills/transcribe`（ASR）
+Android 本地联调需要调整 `RetrofitClient.BASE_URL`：模拟器使用 `http://10.0.2.2:8080/`，真机使用开发机的局域网地址。当前默认值指向部署服务器。
 
-账户 / 预算 / 模板：`/api/accounts`、`/api/budgets`、`/api/templates`
+<details>
+<summary><strong>更多验证命令</strong></summary>
 
-洞察（AI）：`/api/insights/*`
-- `GET /api/insights/monthly?month=YYYY-MM`（月度总结）
-- `GET /api/insights/anomaly`（异常提醒）、`POST /api/insights/query`（自然问账）
-- `GET /api/insights/suggest`、`GET/PUT /api/insights/suggest-config`（习惯推荐与配置）
-- `GET /api/insights/habit`（习惯提醒）
+```powershell
+./gradlew :app:installDebug             # 安装到已连接设备
+./gradlew :app:connectedAndroidTest     # 仪器测试，需要设备或模拟器
+./gradlew :app:lint
+./gradlew :server:test --tests 'com.example.rinklnote.server.MoneyTest'
+```
 
-QQ / 飞书 / 企微 / 订阅号机器人（配置均存 `bot_config` 表，经 Web 控制台「设置 → 多通道机器人」卡片管理，不走环境变量）：
+</details>
 
-- 管理面（JWT，三通道同构：status / config / bind / unbind / bind-status）：`/api/qq-bot/*`、`/api/feishu-bot/*`、`/api/wecom-bot/*`
-- 官方回调 webhook：`POST /api/qq/bot/webhook`（QQ 官方 Bot API v2，Ed25519 验签）、`POST /api/feishu/bot/webhook`（飞书事件订阅，challenge + Encrypt Key 加密）、`GET/POST /api/wecom/bot/webhook`（企微智能机器人，echostr + AES-256-CBC）、`GET/POST /api/mp/bot/webhook`（微信订阅号，echostr 验证 + 5 秒被动回复，**只收不推**）
-- 推送调度：日报 / 提醒按 飞书 > 企业微信 > QQ 取第一个已绑定通道主动推送；订阅号无推送能力不参与
-- `/api/qq/webhook/*`：**已废弃**的旧共享密钥协议，仅为未知外部旧客户端保留运行，新接入勿用
+## 本地运行 Server
 
-## LLM / NLU
+Server 启动会拒绝空值或仓库中的默认 JWT 密钥。配置真实的 DeepSeek API Key 后才能使用 LLM 解析与洞察。使用 H2 的本地示例：
 
-- **NLU**：规则 + LLM 双引擎。`RuleBasedParser` 兜底本地规则，`DefaultNLUService` 优先用户自定义关键词 > 系统默认 > LLM fallback；`LearningService` 记录修正反馈供自学习。
-- **洞察**：`InsightService` 月度总结、异常、自然问账、习惯推荐。自然问账会解析用户提到的月份（`resolveYearMonth`：8月/八月/上个月/去年8月/2026-03），仅把该目标月的聚合（分类+金额+日期 TOP 汇总）喂给 LLM。
-- **隐私约束（NFR）**：只给 LLM 送「分类 + 金额 + 日期」聚合，绝不送备注或未聚合明细。
+```powershell
+$jwtBytes = New-Object byte[] 32
+$jwtGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$jwtGenerator.GetBytes($jwtBytes)
+$jwtGenerator.Dispose()
+$env:JWT_SECRET = [Convert]::ToBase64String($jwtBytes)
+$env:DEEPSEEK_API_KEY = '你的 DeepSeek API Key'
+$env:DATABASE_URL = 'jdbc:h2:file:D:/Codes/RinklNote/.gradle-home/local-data/h2;DB_CLOSE_DELAY=-1'
+./gradlew :server:run
+```
 
-## 数据模型
+默认监听 `8080`，可通过 `PORT` 修改。生产环境请使用 PostgreSQL 或持久化 H2，并把密钥放入受控的 systemd EnvironmentFile，不要提交到 Git。
 
-- **Room（App，version 10）**：`bills`、`categories`、`sub_categories`、`accounts`、`bill_templates`、`budgets`、`chat_messages`，外键 bills→categories/accounts。首次启动 `seedIfNeeded` 填 7 支出 + 4 收入分类（含子分类）与 3 账户。
-- **服务端（Exposed）**：`users`、`categories`、`sub_categories`、`accounts`、`bills`、`voice_keywords`、`correction_log`、`bot_config`、`bill_templates`、`budgets`、`webhook_events`、`push_log`。`users` 表含多通道 bot 身份列（均可空 + 唯一索引）：`qq_openid`、`feishu_open_id`、`wechat_openid`（订阅号）、`wecom_userid`（企业微信），一个账号可同时绑定多个通道，推送时按优先级取第一个已绑定通道。
+<details>
+<summary><strong>服务端环境变量一览</strong></summary>
 
-## 数据同步
+| 变量 | 必需 | 说明 |
+|---|:---:|---|
+| `PORT` |  | HTTP 端口，默认 `8080` |
+| `JWT_SECRET` | ✓ | JWT 签名密钥，拒绝空值和预置占位值 |
+| `JWT_ISSUER` / `JWT_AUDIENCE` |  | JWT issuer/audience，默认 `rinklnote-server` / `rinklnote-app` |
+| `DATABASE_URL` |  | JDBC 地址；配置文件默认 PostgreSQL |
+| `DATABASE_USER` / `DATABASE_PASSWORD` |  | PostgreSQL 凭据；当前 H2 分支不读取这两项 |
+| `DEEPSEEK_API_KEY` | ✓ | NLU fallback 与 AI 洞察 |
+| `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` |  | LLM 地址和模型 |
+| `LLM_TIMEOUT_MS` |  | LLM 超时，默认 `10000` |
+| `ASR_API_KEY` / `ASR_BASE_URL` / `ASR_MODEL` / `ASR_TIMEOUT_MS` |  | Whisper 语音转写，可选 |
+| `ADMIN_IDENTITIES` |  | 管理员手机号或 userId，逗号分隔 |
+| `LEARNING_INTERVAL_MIN` |  | 关键词学习周期，默认 `60` 分钟 |
+| `ANOMALY_THRESHOLD` |  | 异常支出增幅阈值，默认 `1.5` |
+| `MAIL_INGEST_USER_ID`、`MAIL_IMAP_*` |  | 全部配置后启用邮件账单入账 |
 
-- 双向、本地优先，**Last-Writer-Wins** 处理冲突：本地写入标记 `dirty`，编辑/删除为软删除（`deleted=1,dirty=1`）。
-- 每行带 `updated_at` / `base_updated_at` / `server_id`：上传时写 `server_id` 去重，拉取用 `updated_at` 增量；条件 PUT 依赖 `base_updated_at` 做乐观锁。
-- Android 记账/改单后自动 `pushBill` 尽力推送；服务端增量 `bills/sync` 分页拉取（含编辑与删除墓碑）。
+邮件入账至少需要 `MAIL_INGEST_USER_ID`、`MAIL_IMAP_HOST`、`MAIL_IMAP_USER`、`MAIL_IMAP_PASSWORD`；可选 `MAIL_IMAP_PORT`（默认 993）、`MAIL_INGEST_INTERVAL_MS` 和 `MAIL_SENDER_WHITELIST`。
 
-## 文档
+</details>
 
-- 使用/功能与问答：`docs/使用文档.md`
-- 技术 / 数据流 / 细节：`docs/技术文档.md`
-- 功能现状与升级规划：`FEATURES.md`
-- 设计与计划（superpowers specs/plans）：`docs/superpowers/*`
-- 各阶段 PRD / 方案（QQ 机器人、AI 语音、多端同步、QQ openid 开户等）：`docs/阶段*.md`
+QQ、飞书、企业微信和订阅号凭据通过 Web 设置页保存到 `bot_config` 表，并以掩码形式回显。
+
+## 架构与数据流
+
+```mermaid
+flowchart LR
+    A[Android · Room 本地账本] -->|JWT / 增量同步| S[Ktor 服务端]
+    W[Web · Vue 控制台] -->|JWT / REST API| S
+    B[QQ / 飞书 / 企微 / 订阅号] -->|验签回调或网关| S
+    S --> D[(PostgreSQL / H2)]
+    S --> N[规则解析 + LLM]
+    S --> I[聚合洞察与推送调度]
+```
+
+### Android
+
+```text
+AppDatabase → Repository → ViewModel(StateFlow) → Compose UI
+```
+
+Android 使用单 Activity、MVVM + Repository 和手动依赖注入。导航由 Jetpack Navigation Compose 的 `NavHost` 编排，启动页是记账页，底部 Tab 为计划、记账、资产和我的。
+
+`MoreDrawer` 统一进入地图、导入、多币种、搜索和 Rk 省钱计划。Room 当前版本为 18，`MIGRATION_1_2` 到 `MIGRATION_17_18` 均已登记，不使用破坏性迁移兜底。
+
+## Web 路由
+
+- `/`：产品落地页
+- `/login`：登录与注册
+- `/console/*`：账单、资产、图表、记账和设置控制台
+- `/admin`：管理员只读面板，无权限时返回 404
+
+App 内 WebView 深链必须使用 `/console/*` 前缀。
+
+## API 分区
+
+账户与账单等业务 API 使用 JWT。注册、登录和分类列表公开；机器人回调使用通道验签，`/api/ai` 的个人助手接口使用个人 Token，头像静态资源通过 `/uploads/*` 暴露。
+
+| 路径 | 内容 |
+|---|---|
+| `/api/auth/*` | 注册、登录、用户资料、头像、改密、AI 与日报设置 |
+| `/api/bills/*` | 账单 CRUD、分类、账户、搜索、增量同步、NLU、语音转写 |
+| `/api/accounts`、`/api/budgets`、`/api/templates` | 账户、预算、模板 |
+| `/api/challenges`、`/api/rates` | 挑战计划、汇率 |
+| `/api/insights/*`、`/api/ai/*` | AI 洞察、自然问账、个人 Token |
+| `/api/corrections`、`/api/keywords` | 修正反馈、自定义关键词 |
+| `/api/qq-bot/*`、`/api/feishu-bot/*`、`/api/wecom-bot/*` | 机器人管理与绑定 |
+| `/api/qq/bot/webhook`、`/api/feishu/bot/webhook`、`/api/wecom/bot/webhook`、`/api/mp/bot/webhook` | 官方机器人回调 |
+| `/api/admin/*` | 管理员只读运维数据 |
+
+旧 QQ 共享密钥协议和 QQ 登录码端点已经下线，新接入请使用当前 Bot webhook 和绑定流程。
+
+## 数据约定
+
+- 金额：Android `amountMinor: Long`、Server `amount_minor BIGINT`、Web `amountMinor`。
+- 兼容：API 保留旧版 `amount` 元字段，始终序列化输出供旧客户端读取。
+- 时间：`Bill.date` 保存业务时区当天零点，用于按日分组。
+- 同步：本地优先 + Last-Writer-Wins；编辑、删除使用软删除墓碑；增量拉取依赖 `updated_at`；条件 PUT 使用 `base_updated_at` 乐观锁。
+- 隐私约定：账单洞察只允许发送分类、金额、日期的聚合结果；自然问账已按日期和分类聚合最近支出。关键词自学习仍存在原始修正文本外发风险，详见下方已知事项。
+
+## 部署
+
+服务端使用 `installDist` 生成完整发行目录：
+
+```bash
+./gradlew :server:installDist --no-daemon --console=plain
+tar -czf rinklnote-server.tar.gz -C server/build/install server
+scp rinklnote-server.tar.gz <deploy-host>:/tmp/
+```
+
+上传前后核对 SHA-256，然后按部署环境完成以下步骤：
+
+1. 停止 `rinklnote.service`，备份数据库和当前发行目录。
+2. 解压新发行包，保留原有 `uploads/` 与数据目录；恢复 `bin/server` 的执行权限和服务用户所有权。
+3. 使用受控环境变量启动服务，检查日志、端口、接口和公网反向代理。
+
+部署后检查（以下路径对应现有 systemd 部署）：
+
+```bash
+sudo systemctl is-active rinklnote
+sudo journalctl -u rinklnote -n 50 --no-pager
+curl -i http://127.0.0.1:8080/api/bills/categories
+curl -i http://127.0.0.1:8080/api/auth/me
+```
+
+Web 部署上传完整 `web/dist/`，Nginx 将 `/api` 和 `/uploads` 代理到 Ktor，并将 SPA 深链回退到 `index.html`。详细步骤见 [`docs/deploy-checklist-2026-09-18.md`](docs/deploy-checklist-2026-09-18.md)。
+
+<details>
+<summary><strong>遇到 502 Bad Gateway 时</strong></summary>
+
+先确认 Ktor 是否启动并监听 8080，再检查 Nginx 上游配置：
+
+```bash
+sudo systemctl status rinklnote --no-pager
+sudo journalctl -u rinklnote -n 100 --no-pager
+ss -ltnp | grep ':8080'
+curl -i http://127.0.0.1:8080/api/bills/categories
+sudo nginx -t
+```
+
+分类接口正常应返回 200；未登录访问 `/api/auth/me` 应返回 401。`systemctl is-active` 只说明进程状态，验收仍需实际请求接口。
+
+</details>
+
+## 文档索引
+
+- [功能现状与升级规划](FEATURES.md)
+- [使用文档](docs/使用文档.md)
+- [技术文档](docs/技术文档.md)
+- [金额精度迁移方案](docs/金额精度迁移方案.md)
+- [前后端审查报告](docs/前后端审查报告-2026-09-29.md)
+- [部署清单](docs/deploy-checklist-2026-09-18.md)
+- `docs/superpowers/specs/` 与 `docs/superpowers/plans/`：历史设计与实施计划
 
 ## 已知债务 / 待办
 
-- 金额用 `Double`，存在浮点漂移与符号判定误差 → 应改整数分或 `BigDecimal`。
-- 隐私 NFR 有风险点：`InsightService.naturalQueryContext`、`LearningService.processCorrections` 疑似把未聚合明细/原始 utterance 发给 LLM，应核查并聚合化。
-- 服务端 `BillRoutes` 条件 PUT 的乐观锁未并入 UPDATE 的 WHERE，存在并发丢更新；QQ 用户改密码对 `password_hash==null` 会异常。
-- `fallbackToDestructiveMigration`（App）→ 应补真实 Migration；`VoiceParser` 语音解析未自动选中分类（老 bug）。
-- 详情见全局审查记录与 `FEATURES.md`。
+- 2026-09-29 的 Server 回归测试中，注册限流让共享 `127.0.0.1` 的多个用例收到 429，测试隔离待完善；Web 同次构建出现 Charts chunk 超过 500 kB 的提示。具体证据见审查报告，后续状态以实际验证为准。
+- `LearningService.processCorrections` 仍会把 `originalText` 放入 LLM 提示词，尚未满足上述隐私约定。
+- 旧版金额兼容字段和语音/OCR 等外部边界仍使用 `Double`，核心账单存储和同步不受影响。
+- 邮件入账依赖 IMAP SEEN 标记判重，尚无 Message-ID 台账。
+- 生产环境的 PostgreSQL 迁移、机器人真实回调、邮件入账和恢复演练需要按部署清单单独验收。
