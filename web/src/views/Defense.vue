@@ -19,6 +19,7 @@ const storyStages = [
 const notes = ref(false)
 const presenting = ref(false)
 const fullscreen = ref(false)
+const transitionDirection = ref<'next' | 'prev'>('next')
 const elapsed = ref(0)
 const running = ref(false)
 const message = ref('')
@@ -31,6 +32,7 @@ let accumulated = 0
 const time = computed(() => `${String(Math.floor(elapsed.value / 60)).padStart(2, '0')}:${String(elapsed.value % 60).padStart(2, '0')}`)
 function go(index: number) {
   if (index < 0 || index >= slides.length) return
+  if (index !== current.value) transitionDirection.value = index > current.value ? 'next' : 'prev'
   overview.value?.close()
   void router.replace({ query: { ...route.query, page: String(index + 1) } })
 }
@@ -85,7 +87,7 @@ function printDeck() { window.print() }
     <main class="defense-main">
       <header class="defense-toolbar"><div class="toolbar-breadcrumb"><Icon name="book" :size="17" /><span>项目答辩</span><span>/</span><b>{{ slide.title }}</b></div><div class="toolbar-actions"><button class="d-button overview-button" @click="overview?.showModal()"><Icon name="grid" :size="16" /><span>总览</span></button><button class="d-button print-button" @click="printDeck"><Icon name="print" :size="16" /><span>导出 / 打印</span></button><button class="d-button d-primary" @click="togglePresent"><Icon :name="presenting ? 'close' : 'play'" :size="15" /><span>{{ presenting ? '结束演示' : '开始演示' }}</span></button></div></header>
       <div class="defense-workspace"><div class="workspace-heading"><div><span class="status-dot"></span><b>RinklNote 项目答辩</b><span class="workspace-subtitle">从一笔记录，看见更好的生活</span></div><div class="story-progress" aria-label="答辩故事线"><button v-for="stage in storyStages" :key="stage.label" :class="{ active: current >= stage.start && current <= stage.end, passed: current > stage.end }" :aria-label="'跳转到' + stage.label" @click="go(stage.start)"><i></i><span>{{ stage.label }}</span></button></div><span>{{ String(current + 1).padStart(2, '0') }} <span class="light-text">/ 12</span></span></div>
-        <div class="slide-frame"><DefenseSlide :key="current" :index="current" @next="go(current + 1)" @jump="go" /></div>
+        <div class="slide-frame" :class="`slide-${transitionDirection}`"><DefenseSlide :key="current" :index="current" @next="go(current + 1)" @jump="go" /></div>
         <div class="playback-bar"><div><Icon name="clock" :size="16" /><span class="timer">{{ time }}</span><button class="icon-button" :aria-label="running ? '暂停计时' : '开始计时'" :title="running ? '暂停计时' : '开始计时'" @click="toggleTimer"><Icon :name="running ? 'pause' : 'play'" :size="14" /></button><button class="icon-button" aria-label="重置计时" title="重置计时" @click="resetTimer"><Icon name="sync" :size="14" /></button></div><div class="page-controls"><button class="icon-button" :disabled="current === 0" aria-label="上一页" @click="go(current - 1)"><Icon name="left" :size="19" /></button><span>{{ current + 1 }} <span class="light-text">/ 12</span></span><button class="icon-button" :disabled="current === 11" aria-label="下一页" @click="go(current + 1)"><Icon name="right" :size="19" /></button></div><div><button class="d-button notes-toggle" :aria-expanded="notes" aria-controls="speaker-notes" @click="notes = !notes"><Icon name="note" :size="16" />演讲备注</button><button class="icon-button" :aria-label="presenting ? '退出演示模式' : '全屏演示'" @click="togglePresent"><Icon name="expand" :size="17" /></button></div></div>
         <section v-if="notes" id="speaker-notes" class="speaker-notes"><b>{{ String(current + 1).padStart(2, '0') }} · {{ slide.title }}</b><p>{{ slide.note }}</p></section>
         <div v-if="message" class="defense-message" role="status">{{ message }}<button class="icon-button" aria-label="关闭提示" @click="message = ''"><Icon name="close" :size="14" /></button></div>
