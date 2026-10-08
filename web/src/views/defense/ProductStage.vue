@@ -9,6 +9,7 @@ import Icon from './DefenseIcon.vue'
       <div class="phone-top"><span>9:41</span><span>▰</span></div>
       <div class="mock-heading">收支统计 <Icon name="chart" :size="16" /></div>
       <span class="mock-muted">2026 年 9 月 · 演示</span>
+      <div class="mock-photo"><img src="/defense/tree.jpg" alt="收支统计界面中的自然背景" /></div>
       <div class="donut"><div><small>本月支出</small><b>2,680<span>.00</span></b></div></div>
       <div class="mock-legend"><span>● 餐饮</span><span>● 购物</span><span>● 交通</span></div>
       <div class="mock-bars"><i v-for="(h, i) in [32, 52, 43, 76, 58, 92, 64]" :key="i" :style="{ height: `${h}%` }"></i></div>
@@ -18,6 +19,7 @@ import Icon from './DefenseIcon.vue'
       <div class="phone-top"><span>9:41</span><div class="phone-island"></div><span>▰</span></div>
       <div class="mock-heading">记一笔 <span class="mock-avatar">R</span></div>
       <div class="month-row"><span>2026 年 9 月⌄</span><Icon name="grid" :size="15" /></div>
+      <div class="mock-photo"><img src="/defense/moon.jpg" alt="记账首页中的湖畔背景" /></div>
       <div class="balance-card"><span>本月支出</span><strong><small>¥</small> 2,680<small>.00</small></strong><div><span>收入 ¥ 6,000.00</span><span>结余 ¥ 3,320.00</span></div></div>
       <div class="budget-line"><Icon name="leaf" :size="14" /><span>预算还剩 46%，保持好节奏</span></div>
       <div class="day-label">今天 <span>9 月 18 日，星期五</span></div>
