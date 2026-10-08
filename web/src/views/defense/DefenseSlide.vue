@@ -41,19 +41,35 @@ function sample(text: string) { utterance.value = text; saved.value = false; dem
           <div class="panel-label"><Icon name="phone" /> Android · 现场记录主链路</div>
           <h3>让手机成为最短输入路径</h3>
           <p>Compose + Material 3 · 状态驱动响应式界面</p>
-          <div class="panel-screen-shots">
-            <div class="screen-shot-card">
-              <img src="/screenshots/home.png" alt="Android 记账主页" />
-              <span>主页 · 按日卡片与月汇总</span>
-            </div>
-            <div class="screen-shot-card">
-              <img src="/screenshots/quickadd.png" alt="快速记账键盘" />
-              <span>定制键盘 · 一步确认落库</span>
-            </div>
+          <div class="android-shot-grid" aria-label="Android 真实功能截屏预览">
+            <figure class="android-shot">
+              <div class="android-shot-status"><span>10:08</span><span>▰</span></div>
+              <div class="android-shot-viewport">
+                <img src="/screenshots/home.png" alt="RinklNote 记账主页流水截屏" class="real-mcp-shot" />
+              </div>
+              <div class="android-shot-card">
+                <b>10月实机流水</b>
+                <span>支出 <strong>¥79.00</strong></span>
+                <span>收入 <em>¥0.00</em></span>
+              </div>
+              <figcaption>主页 · 按日卡片与月汇总热力图</figcaption>
+            </figure>
+            <figure class="android-shot">
+              <div class="android-shot-status"><span>10:08</span><span>▰</span></div>
+              <div class="android-shot-viewport">
+                <img src="/screenshots/quickadd.png" alt="RinklNote 快速记账键盘截屏" class="real-mcp-shot" />
+              </div>
+              <div class="android-shot-card">
+                <b>定制数字键盘</b>
+                <span>输入 <strong>¥28.50</strong></span>
+                <span>一步确认落库</span>
+              </div>
+              <figcaption>快捷记账 · 自研键盘一步入账</figcaption>
+            </figure>
           </div>
           <ul>
-            <li>底部稳定导航（记账 / 计划 / 资产 / 我的）</li>
-            <li>本地 Room 毫秒级写库，无网络延迟感</li>
+            <li>底部稳定导航保持记账、计划、资产、我的上下文</li>
+            <li>本地 Room 毫秒级写入，弱网与断网环境体验不中断</li>
           </ul>
         </div>
         <div class="technical-panel dark-panel">
