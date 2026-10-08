@@ -255,7 +255,7 @@ curl -i http://127.0.0.1:8080/api/bills/categories
 curl -i http://127.0.0.1:8080/api/auth/me
 ```
 
-Web 部署上传完整 `web/dist/`，Nginx 将 `/api` 和 `/uploads` 代理到 Ktor，并将 SPA 深链回退到 `index.html`。详细步骤见 [`docs/deploy-checklist-2026-09-18.md`](docs/deploy-checklist-2026-09-18.md)。
+Web 部署上传完整 `web/dist/`，Nginx 将 `/api` 和 `/uploads` 代理到 Ktor，并将 SPA 深链回退到 `index.html`。服务端步骤见 [`docs/deploy-checklist-2026-09-18.md`](docs/deploy-checklist-2026-09-18.md)，Android 答辩演示页步骤见 [`docs/答辩PPT部署文档.md`](docs/答辩PPT部署文档.md)。
 
 <details>
 <summary><strong>遇到 502 Bad Gateway 时</strong></summary>
@@ -282,6 +282,7 @@ sudo nginx -t
 - [金额精度迁移方案](docs/金额精度迁移方案.md)
 - [前后端审查报告](docs/前后端审查报告-2026-09-29.md)
 - [部署清单](docs/deploy-checklist-2026-09-18.md)
+- [Android 答辩 PPT 部署文档](docs/答辩PPT部署文档.md)
 - `docs/superpowers/specs/` 与 `docs/superpowers/plans/`：历史设计与实施计划
 
 ## 已知债务 / 待办
