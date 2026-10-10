@@ -579,7 +579,7 @@ private fun TemplatesSection(
             .fillMaxWidth()
             .clip(shape)
             .then(applyCardGlass(shape))
-            .padding(10.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -629,7 +629,7 @@ private fun CategorySection(
             .heightIn(min = 200.dp, max = 280.dp)
             .clip(shape)
             .then(applyCardGlass(shape))
-            .padding(10.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -638,7 +638,7 @@ private fun CategorySection(
             Text("标签", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                "长按 / 更多",
+                "点击展开",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -650,7 +650,7 @@ private fun CategorySection(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
-        RinklDivider(endInset = 6.dp)
+        RinklDivider(endInset = 0.dp)
         Spacer(modifier = Modifier.height(4.dp))
 
         // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
@@ -671,8 +671,12 @@ private fun CategorySection(
                     CategoryRow(
                         category = category,
                         isSelected = selectedCategory?.id == category.id,
-                        hasSubCategories = category.id in parentIdsWithSubs,
-                        onClick = { viewModel.onEvent(QuickAddEvent.SelectCategory(category)) },
+                        onClick = {
+                            viewModel.onEvent(QuickAddEvent.SelectCategory(category))
+                            if (category.id in parentIdsWithSubs) {
+                                viewModel.onEvent(QuickAddEvent.LongPressCategory(category))
+                            }
+                        },
                         onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
                     )
                     // 二级分类紧跟母标签正下方展示，左缘与标签文字对齐。
@@ -710,7 +714,6 @@ private fun CategorySection(
 private fun CategoryRow(
     category: Category,
     isSelected: Boolean,
-    hasSubCategories: Boolean,
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -718,7 +721,7 @@ private fun CategoryRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(vertical = 1.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -738,20 +741,6 @@ private fun CategoryRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            // 有二级分类的行尾显式入口（体验审查 P1：长按是隐藏手势，点「更多」等效呼出二级标签）
-            if (hasSubCategories) {
-                Spacer(modifier = Modifier.width(2.dp))
-                Text(
-                    "更多",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClickLabel = "展开二级标签", role = Role.Button, onClick = onLongPress)
-                        .padding(horizontal = 6.dp, vertical = 10.dp)
-                )
-            }
         }
         // Radio dot
         // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
@@ -837,7 +826,7 @@ private fun AccountSection(
             .fillMaxWidth()
             .clip(shape)
             .then(applyCardGlass(shape))
-            .padding(10.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -860,7 +849,7 @@ private fun AccountSection(
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
-        RinklDivider(endInset = 6.dp)
+        RinklDivider(endInset = 0.dp)
         Spacer(modifier = Modifier.height(4.dp))
         accounts.forEach { account ->
             AccountRow(
@@ -880,24 +869,40 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 2.dp),
+            .height(34.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             AccountIcon(
                 iconKey = account.iconKey,
                 colorHex = account.iconColor,
-                size = 30.dp
+                size = 28.dp
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(account.name, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                account.name,
+                fontSize = 15.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        // 窄面板（200dp）下名称与金额可能贴死：保底 6dp 间距
         Spacer(modifier = Modifier.width(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // 窄面板下余额降为 14sp：避免挤出右侧选中圆点（主金额展示在下方金额框）
-            Text(if (hidden) "***" else Money.format(account.balanceMinor), fontSize = 14.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                if (hidden) "***" else Money.format(account.balanceMinor),
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
             Spacer(modifier = Modifier.width(6.dp))
             // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
             val dotColor by animateColorAsState(
@@ -948,8 +953,7 @@ private fun CountBefore(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(58.dp)
+                .height(52.dp)
                 .pressScale(amountInteraction)
                 .clip(RoundedCornerShape(15.dp))
                 .then(applyCardGlass(RoundedCornerShape(15.dp)))
@@ -964,14 +968,16 @@ private fun CountBefore(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 Text(
                     text = "¥",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 12.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = state.amount.ifEmpty { "0.00" },
                     fontSize = 26.sp,
@@ -979,7 +985,9 @@ private fun CountBefore(
                     textAlign = TextAlign.Center,
                     // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
                     color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor,
-                    modifier = Modifier.width(140.dp)
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .width(140.dp)
                 )
             }
         }

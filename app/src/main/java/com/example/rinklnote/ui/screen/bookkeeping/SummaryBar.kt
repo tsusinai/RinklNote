@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -76,9 +77,13 @@ fun SummaryBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics(mergeDescendants = true) {},
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
                     text = "${currentMonth}月结余",
                     fontSize = 12.sp,
@@ -95,27 +100,17 @@ fun SummaryBar(
                     fontWeight = FontWeight.Bold
                 )
             }
-            if (hasSummary) {
-                Text("查看总结", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             SummaryMetric(
                 label = "支出",
                 amount = totalExpense,
                 color = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(86.dp)
             )
             SummaryMetric(
                 label = "收入",
                 amount = totalIncome,
                 color = incomeColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.width(86.dp)
             )
         }
 
@@ -156,14 +151,15 @@ private fun SummaryMetric(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = 0.08f))
-            .then(Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+            .height(72.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
     ) {
         Text(label, fontSize = 12.sp, color = color.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
         Spacer(modifier = Modifier.height(2.dp))
         RollingAmountText(
             amountMinor = amount,
             color = color,
-            fontSize = 16.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
     }
