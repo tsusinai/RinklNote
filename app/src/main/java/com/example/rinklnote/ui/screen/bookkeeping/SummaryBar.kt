@@ -44,21 +44,13 @@ fun SummaryBar(
     modifier: Modifier = Modifier,
     currentMonth: Int = com.example.rinklnote.util.today().monthValue,
     aiSummary: String? = null,
-    aiSummaryLoading: Boolean = false
+    aiSummaryLoading: Boolean = false,
+    onOpenDetail: (() -> Unit)? = null
 ) {
     // 展开/收起状态：默认收起，点击卡片切换。仅有总结内容时才可交互。
     var expanded by remember { mutableStateOf(false) }
     val hasSummary = aiSummary != null
     val interactionSource = remember { MutableInteractionSource() }
-    val clickModifier = if (hasSummary) {
-        Modifier.clickable(
-            interactionSource = interactionSource,
-            indication = null
-        ) { expanded = !expanded }
-    } else {
-        Modifier
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -66,7 +58,6 @@ fun SummaryBar(
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .then(clickModifier)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // 结余作为视觉主指标，收支作为辅助指标，避免首页第一行塞入过多数字。
@@ -76,6 +67,17 @@ fun SummaryBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (onOpenDetail != null) {
+                        Modifier.clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = onOpenDetail
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
                 .semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -124,6 +126,16 @@ fun SummaryBar(
             Column {
                 Spacer(modifier = Modifier.height(8.dp))
                 MarkdownText(text = aiSummary.orEmpty())
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "收起总结",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable(
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) { expanded = false }
+                )
             }
         }
 
@@ -133,7 +145,12 @@ fun SummaryBar(
             Text(
                 text =  if (aiSummaryLoading)"AI 正在整理本月总结…" else "AI总结完成，点击查看",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clickable(
+                    enabled = hasSummary,
+                    interactionSource = interactionSource,
+                    indication = null
+                ) { expanded = true }
             )
         }
     }
@@ -151,16 +168,22 @@ private fun SummaryMetric(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = 0.08f))
-            .height(72.dp)
-            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .height(48.dp)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.Center
     ) {
-        Text(label, fontSize = 12.sp, color = color.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
-        Spacer(modifier = Modifier.height(2.dp))
-        RollingAmountText(
-            amountMinor = amount,
-            color = color,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontSize = 12.sp, color = color.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
+            RollingAmountText(
+                amountMinor = amount,
+                color = color,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }

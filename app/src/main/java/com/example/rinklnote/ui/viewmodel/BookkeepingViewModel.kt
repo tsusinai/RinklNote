@@ -92,6 +92,8 @@ sealed interface BookkeepingEvent {
     /** 首页下拉刷新：拉一次服务端同步，再重算当月合计。 */
     data object PullRefresh : BookkeepingEvent
     data class EditBill(val bill: Bill) : BookkeepingEvent
+    /** 从首页直接进入新建账单编辑页；可选模板用于「再来一笔」。 */
+    data class NewBill(val template: Bill? = null) : BookkeepingEvent
     data object CancelEdit : BookkeepingEvent
     data class ConfirmEdit(val bill: Bill) : BookkeepingEvent
     data class DeleteBill(val bill: Bill) : BookkeepingEvent
@@ -146,6 +148,7 @@ class BookkeepingViewModel(
             is BookkeepingEvent.Refresh -> collectBills()
             is BookkeepingEvent.PullRefresh -> pullRefresh()
             is BookkeepingEvent.EditBill -> _editState.update { it.copy(editingBill = event.bill) }
+            is BookkeepingEvent.NewBill -> startNewBill(event.template)
             is BookkeepingEvent.CancelEdit -> _editState.update { it.copy(editingBill = null) }
             is BookkeepingEvent.ConfirmEdit -> confirmEdit(event.bill)
             is BookkeepingEvent.DeleteBill -> deleteBill(event.bill)
@@ -250,9 +253,47 @@ class BookkeepingViewModel(
     private fun confirmEdit(bill: Bill) {
         val dirtyBill = bill.copy(dirty = true, updatedAt = System.currentTimeMillis())
         viewModelScope.launch {
-            repository.updateBill(dirtyBill)
-            syncManager?.let { launch { it.pushBill(dirtyBill) } }
+            if (dirtyBill.id == 0L) {
+                val savedId = repository.addBill(dirtyBill.copy(createdAt = dirtyBill.createdAt.takeIf { it > 0L } ?: System.currentTimeMillis()))
+                val saved = dirtyBill.copy(id = savedId)
+                syncManager?.let { launch { it.pushBill(saved) } }
+            } else {
+                repository.updateBill(dirtyBill)
+                syncManager?.let { launch { it.pushBill(dirtyBill) } }
+            }
             _editState.update { it.copy(editingBill = null) }
+        }
+    }
+
+    private fun startNewBill(template: Bill?) {
+        val type = template?.billType ?: BillType.EXPENSE
+        val categories = if (type == BillType.INCOME) _editState.value.incomeCategories else _editState.value.expenseCategories
+        val category = template?.let { source ->
+            categories.firstOrNull { it.id == source.categoryId }
+        } ?: categories.firstOrNull()
+        val account = template?.let { source ->
+            _editState.value.accounts.firstOrNull { it.id == source.accountId }
+        } ?: _editState.value.accounts.firstOrNull()
+        val todayStart = today().atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+        _editState.update {
+            it.copy(
+                editingBill = Bill(
+                    id = 0L,
+                    amountMinor = template?.amountMinor ?: 0L,
+                    billType = type,
+                    categoryId = category?.id ?: template?.categoryId ?: 0L,
+                    categoryName = category?.name ?: template?.categoryName.orEmpty(),
+                    subCategoryName = template?.subCategoryName,
+                    accountId = account?.id ?: template?.accountId ?: 0L,
+                    remark = template?.remark,
+                    // 「再来一笔」只复用金额/分类等内容，日期始终落在今天。
+                    date = todayStart,
+                    createdAt = System.currentTimeMillis(),
+                    source = template?.source ?: com.example.rinklnote.domain.Source.APP,
+                    latitude = template?.latitude,
+                    longitude = template?.longitude
+                )
+            )
         }
     }
 

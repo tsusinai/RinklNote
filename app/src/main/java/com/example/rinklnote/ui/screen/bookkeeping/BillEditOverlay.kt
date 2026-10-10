@@ -262,8 +262,12 @@ fun BillEditOverlay(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDelete) {
-                        Text("删除", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                    TextButton(onClick = if (bill.id == 0L) onCancel else onDelete) {
+                        Text(
+                            text = if (bill.id == 0L) "取消" else "删除",
+                            color = if (bill.id == 0L) topBarTextColor else MaterialTheme.colorScheme.error,
+                            fontSize = 14.sp
+                        )
                     }
                     TextButton(enabled = canSave, onClick = { if (canSave) onConfirm(editedBill) }) {
                         Text(

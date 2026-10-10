@@ -260,7 +260,8 @@ fun BookkeepingScreen(
                     totalIncome = state.totalIncome,
                     currentMonth = today().plusMonths(state.selectedMonthOffset.toLong()).monthValue,
                     aiSummary = if (isCurrentMonth) state.aiSummary else null,
-                    aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false
+                    aiSummaryLoading = if (isCurrentMonth) state.aiSummaryLoading else false,
+                    onOpenDetail = onMonthDetailClick
                 )
             }
 

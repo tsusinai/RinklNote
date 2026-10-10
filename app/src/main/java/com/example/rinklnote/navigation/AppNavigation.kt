@@ -7,7 +7,6 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -88,20 +87,16 @@ import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.network.RetrofitClient
 import com.example.rinklnote.ui.component.AppBackground
 import com.example.rinklnote.ui.component.BillFeedback
-import com.example.rinklnote.ui.component.KeypadContextItem
-import com.example.rinklnote.ui.component.NumericKeypad
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import com.example.rinklnote.ui.component.LocalRinklFeedback
 import com.example.rinklnote.ui.component.RinklSnackbarHost
 import com.example.rinklnote.ui.component.VoiceInputBar
-import com.example.rinklnote.ui.component.accountColor
 import com.example.rinklnote.ui.component.rememberRinklFeedbackController
 import com.example.rinklnote.ui.screen.ai.AiScreen
 import com.example.rinklnote.ui.screen.assets.AccountEditorScreen
 import com.example.rinklnote.ui.screen.assets.AssetsScreen
 import com.example.rinklnote.ui.screen.bookkeeping.BillEditOverlay
-import com.example.rinklnote.PendingQuickAdd
 import com.example.rinklnote.ui.screen.bookkeeping.BookkeepingScreen
 import com.example.rinklnote.ui.screen.bookkeeping.MonthDetailOverlay
 import com.example.rinklnote.ui.screen.challenge.AchievementsScreen
@@ -132,11 +127,8 @@ import com.example.rinklnote.ui.screen.profile.PersonalProfileEvent
 import com.example.rinklnote.ui.screen.profile.PersonalProfileScreen
 import com.example.rinklnote.ui.screen.profile.PersonalProfileViewModel
 import com.example.rinklnote.ui.screen.profile.ProfileScreen
-import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
-import com.example.rinklnote.ui.util.accountIconRes
-import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.ui.viewmodel.AiViewModel
 import com.example.rinklnote.ui.viewmodel.AiTokenViewModel
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
@@ -148,7 +140,6 @@ import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
-import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.today
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
@@ -217,7 +208,6 @@ fun AppNavigation(app: RinklNoteApp) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    var quickAddSurface by remember { mutableStateOf(QuickAddSurface.Closed) }
     var showLogin by remember { mutableStateOf(false) }
     var showBotBind by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
@@ -235,30 +225,6 @@ fun AppNavigation(app: RinklNoteApp) {
         }
     }
 
-    // 抽屉与输入法严格串行：退出动画结束后才展示下一层，避免同时叠在记账页上。
-    LaunchedEffect(quickAddSurface) {
-        when (quickAddSurface) {
-            QuickAddSurface.DrawerToKeypad -> {
-                delay(Motion.DurationDrawer.toLong())
-                quickAddSurface = quickAddSurface.onTransitionFinished()
-            }
-            QuickAddSurface.KeypadToDrawer -> {
-                delay(Motion.DurationSheet.toLong())
-                quickAddSurface = quickAddSurface.onTransitionFinished()
-            }
-            else -> Unit
-        }
-    }
-
-    val openDrawer: () -> Unit = {
-        quickAddSurface = quickAddSurface.openDrawer()
-    }
-    val requestKeypad: () -> Unit = {
-        quickAddSurface = quickAddSurface.onAmountTap()
-    }
-    val dismissKeypad: () -> Unit = {
-        quickAddSurface = quickAddSurface.onKeypadDismissed()
-    }
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val tabWidth = screenWidth / tabs.size
@@ -270,6 +236,12 @@ fun AppNavigation(app: RinklNoteApp) {
     val quickAddVM: QuickAddViewModel = viewModel(
         factory = QuickAddViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService, app.placeRepository)
     )
+    // 新增账单直接进入完整编辑页，避免再打开侧边快捷抽屉。
+    val openBillEditor: (Bill?) -> Unit = { template ->
+        quickAddVM.reset()
+        bookkeepingVM.onEvent(BookkeepingEvent.NewBill(template))
+        navController.navigate("bill-edit")
+    }
     val assetsVM: AssetsViewModel = viewModel(
         factory = AssetsViewModel.Factory(app.accountRepository, app.syncManager)
     )
@@ -346,7 +318,6 @@ fun AppNavigation(app: RinklNoteApp) {
     // currentRoute 只在真实导航后变化，不必像 pager 那样再靠 currentPage 补齐预组合副作用。)
     LaunchedEffect(currentRoute) {
         if (currentRoute != "bookkeeping") {
-            quickAddSurface = QuickAddSurface.Closed
             voiceActive = false
             voiceBookedCount = 0
             voiceConfirm = null
@@ -368,7 +339,6 @@ fun AppNavigation(app: RinklNoteApp) {
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            quickAddSurface = QuickAddSurface.Closed
             voiceActive = true
         } else {
             // 权限拒绝反馈走结构化 Snackbar（体验审查 P1）：拒绝后还能再弹系统弹窗
@@ -401,7 +371,6 @@ fun AppNavigation(app: RinklNoteApp) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            quickAddSurface = QuickAddSurface.Closed
             voiceActive = true
         } else {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -412,28 +381,19 @@ fun AppNavigation(app: RinklNoteApp) {
     val endVoiceSession: () -> Unit = {
         voiceActive = false
         voiceTarget = VoiceTarget.QUICK_ADD
-        quickAddSurface = QuickAddSurface.Closed
         voiceBookedCount = 0
         voiceConfirm = null
         quickAddVM.reset()
     }
 
-    // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并打开 QuickAdd 抽屉应用预填。
-    // 起点即 "bookkeeping"，导航到同 start 路由不会触发上面「离开记账页才关抽屉」的效果，故时序安全。
-    // 长按快捷方式「语音记账」深链带 voice=1：落记账页后直接进语音条（不开预填抽屉）。
+    // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并直接进入账单编辑页。
+    // 长按快捷方式「语音记账」深链带 voice=1：落记账页后直接进语音条。
     LaunchedEffect(pendingQuickAdd) {
         val pending = pendingQuickAdd ?: return@LaunchedEffect
         navController.navigate("bookkeeping") { launchSingleTop = true }
         when {
             pending.voice -> startVoice(VoiceTarget.QUICK_ADD)
-            pending.amount != null || pending.categoryName != null || pending.remark != null ->
-                // 深链 / 复制记账：金额/分类名/备注/类型 → 应用完整预填。
-                quickAddVM.applyQuickAddPrefill(pending)
-            pending.categoryId != null ->
-                // 小组件：仅带分类 id → 复用现有预选通路（行为不变）。
-                quickAddVM.preselectCategory(pending.categoryId)
-            else ->
-                openDrawer()
+            else -> openBillEditor(null)
         }
         app.setPendingQuickAdd(null)
     }
@@ -461,7 +421,7 @@ fun AppNavigation(app: RinklNoteApp) {
     // 才挂载手势——浮层在途（Drawer/Keypad/两种过渡态）时横滑不应切走页面。四个主页内部
     // 没有横向滚动手势子组件（横向 Pager/LazyRow 只在二级页 month-detail / bill-edit，
     // 那些路由本就不挂此手势），无需再按路由禁用。
-    val tabSwipeModifier = if (currentTabIndex >= 0 && quickAddSurface == QuickAddSurface.Closed) {
+    val tabSwipeModifier = if (currentTabIndex >= 0) {
         Modifier.pointerInput(currentTabIndex) {
             var dragDistance = 0f
             detectHorizontalDragGestures(
@@ -500,7 +460,6 @@ fun AppNavigation(app: RinklNoteApp) {
                     // 同步失败仍保留本机）替代；这里只负责关抽屉与刷新（一步确认语义不变）。
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
-                    quickAddSurface = QuickAddSurface.Closed
                 }
                 is QuickAddEffect.FinalConfirmFailed -> {
                     // 校验失败类一次性提示：自动消失，不打断继续输入。
@@ -525,23 +484,9 @@ fun AppNavigation(app: RinklNoteApp) {
                 is BillFeedback.SyncFailedRetained ->
                     feedbackController.show(fb) { navScope.launch { app.syncManager.sync() } }
                 is BillFeedback.SavedLocally ->
-                    feedbackController.show(fb) {
-                        // 「继续记账」：重开记账抽屉（reset 已清空上笔状态）；仅在记账页生效。
-                        if (currentRoute == "bookkeeping") quickAddSurface = QuickAddSurface.Drawer
-                    }
+                    feedbackController.show(fb)
                 else -> feedbackController.show(fb)
             }
-        }
-    }
-
-    // Back handler：输入法返回抽屉；抽屉或过渡态直接关闭/回退。
-    BackHandler(enabled = quickAddSurface != QuickAddSurface.Closed) {
-        quickAddSurface = when (quickAddSurface) {
-            QuickAddSurface.Drawer -> QuickAddSurface.Closed
-            QuickAddSurface.Keypad -> QuickAddSurface.Keypad.onKeypadDismissed()
-            QuickAddSurface.DrawerToKeypad -> QuickAddSurface.Drawer
-            QuickAddSurface.KeypadToDrawer -> QuickAddSurface.Keypad
-            QuickAddSurface.Closed -> QuickAddSurface.Closed
         }
     }
 
@@ -851,7 +796,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     val autoCapturePendingCount by app.captureRepository.observePendingCount()
                         .collectAsStateWithLifecycle(initialValue = 0)
                     BookkeepingScreen(
-                        onOpenDrawer = openDrawer,
+                        onOpenDrawer = { openBillEditor(null) },
                         onFinanceClick = { navigateTo("assets") },
                         onMoreClick = { navigateTo("profile") },
                         onAiClick = { navigateTo("ai") },
@@ -875,16 +820,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         onUndoDelete = { undoDelete(it) },
                         // 卡片右滑「再来一笔」：预填快速记账抽屉，用户可微调后一步保存
                         onCopyBill = { bill ->
-                            app.setPendingQuickAdd(
-                                PendingQuickAdd(
-                                    amount = Money.formatPlain(bill.amountMinor),
-                                    categoryId = bill.categoryId,
-                                    categoryName = bill.categoryName,
-                                    remark = bill.remark,
-                                    billType = bill.billType.value
-                                )
-                            )
-                            openDrawer()
+                            openBillEditor(bill)
                         }
                     )
 
@@ -1078,78 +1014,6 @@ fun AppNavigation(app: RinklNoteApp) {
                     // 只有铺了自选背景才玻璃化：没有背景图时毛玻璃无从采样，会露出灰调兜底色。
                     hazeState = hazeState.takeIf { appBackgroundUri != null },
                     onTabClick = onTabClick
-                )
-            }
-        }
-
-        // QuickAdd Drawer overlay
-        QuickAddDrawer(
-            isVisible = quickAddSurface.drawerVisible,
-            viewModel = quickAddVM,
-            // 有自选背景才给毛玻璃采样源：无背景时抽屉保持纯白实心（同 CustomBottomBar 的开关逻辑）。
-            backgroundUri = appBackgroundUri,
-            hazeState = hazeState.takeIf { appBackgroundUri != null },
-            onDismiss = {
-                quickAddSurface = QuickAddSurface.Closed
-                voiceActive = false
-                quickAddVM.reset()
-            },
-            onBillAdded = { bookkeepingVM.onEvent(BookkeepingEvent.Refresh) },
-            onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
-            onAmountTap = {
-                quickAddVM.resetConfirming()
-                requestKeypad()
-            }
-        )
-
-        // Numeric keypad overlay — 抽屉退出后再从底部接棒。
-        val quickAddState by quickAddVM.state.collectAsStateWithLifecycle()
-        AnimatedVisibility(
-            visible = quickAddSurface.keypadVisible,
-            enter = slideInVertically(
-                animationSpec = Motion.SheetEnter,
-                initialOffsetY = { it }
-            ),
-            exit = slideOutVertically(
-                animationSpec = Motion.SheetExit,
-                targetOffsetY = { it }
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { dismissKeypad() },
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                NumericKeypad(
-                    amount = quickAddState.amount,
-                    billType = quickAddState.billType.value,
-                    remark = quickAddState.remark,
-                    onDigit = { quickAddVM.onEvent(QuickAddEvent.Digit(it)) },
-                    onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },
-                    onBackspace = { quickAddVM.onEvent(QuickAddEvent.Backspace) },
-                    onToggleType = { quickAddVM.onEvent(QuickAddEvent.ToggleType) },
-                    onRemarkChange = {
-                        quickAddVM.onEvent(QuickAddEvent.RemarkChanged(it))
-                    },
-                    onConfirm = { quickAddVM.onEvent(QuickAddEvent.Confirm) },
-                    showTypeToggle = false,
-                    confirmEnabled = Money.parseMinor(quickAddState.amount) != null &&
-                        quickAddState.selectedCategory != null &&
-                        quickAddState.selectedAccount != null,
-                    contextItems = listOfNotNull(
-                        quickAddState.selectedCategory?.let {
-                            KeypadContextItem(it.name, categoryIconRes(it.name))
-                        },
-                        quickAddState.selectedAccount?.let {
-                            KeypadContextItem(
-                                label = it.name,
-                                iconRes = accountIconRes(it),
-                                iconTint = accountColor(it.iconColor)
-                            )
-                        }
-                    ),
-                    hazeState = hazeState.takeIf { appBackgroundUri != null }
                 )
             }
         }

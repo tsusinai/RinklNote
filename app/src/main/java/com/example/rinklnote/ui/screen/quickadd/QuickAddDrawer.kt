@@ -34,14 +34,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -149,7 +150,10 @@ fun QuickAddDrawer(
     // 无背景 → 纯白实心（毛玻璃无从采样，会露灰调兜底色）。
     val panelShape = RoundedCornerShape(18.dp)
     val panelSurface = if (hazeState != null) {
-        Modifier.hazeEffect(hazeState, RinklCardFrostedStyle)
+        // 照片背景下使用轻微冷灰蓝的半透明雾面，保留背景色彩层次，避免快捷栏像一块纯白贴纸。
+        Modifier
+            .hazeEffect(hazeState, RinklCardFrostedStyle)
+            .background(Color(0xFFF4F8FC).copy(alpha = 0.78f))
     } else {
         Modifier.background(MaterialTheme.colorScheme.surface)
     }
@@ -178,9 +182,8 @@ fun QuickAddDrawer(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .fillMaxHeight(0.88f)
+                    .fillMaxHeight()
                     .width(adaptiveDrawerWidth())
-                    .padding(vertical = 8.dp)
                     .clip(panelShape)
                     .then(panelSurface)
                     .then(applyCardGlass(panelShape))
@@ -243,6 +246,8 @@ private fun DrawerContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         // 可滚动内容区
@@ -254,7 +259,7 @@ private fun DrawerContent(
         ) {
             // Top bar
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -672,8 +677,9 @@ private fun CategorySection(
                         category = category,
                         isSelected = selectedCategory?.id == category.id,
                         onClick = {
+                            val shouldCollapse = showSubCategories && expandedParentId == category.id
                             viewModel.onEvent(QuickAddEvent.SelectCategory(category))
-                            if (category.id in parentIdsWithSubs) {
+                            if (category.id in parentIdsWithSubs && !shouldCollapse) {
                                 viewModel.onEvent(QuickAddEvent.LongPressCategory(category))
                             }
                         },
@@ -826,7 +832,7 @@ private fun AccountSection(
             .fillMaxWidth()
             .clip(shape)
             .then(applyCardGlass(shape))
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -836,7 +842,7 @@ private fun AccountSection(
             Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
             Box(
                 modifier = Modifier
-                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    .size(36.dp)
                     .clickable { BalancePrivacy.toggle() },
                 contentAlignment = Alignment.Center
             ) {
@@ -848,9 +854,9 @@ private fun AccountSection(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         RinklDivider(endInset = 0.dp)
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
         accounts.forEach { account ->
             AccountRow(
                 account = account,
@@ -869,7 +875,7 @@ private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, o
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .height(34.dp),
+            .height(32.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -994,18 +1000,23 @@ private fun CountBefore(
 
         Spacer(modifier = Modifier.height(4.dp))
         // 显式收支切换（体验审查 P1）：点击与长按等效，长按保留为快捷方式。
-        Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             TypeToggleChip(
                 label = "支出",
                 selected = isExpense,
                 selectedColor = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.weight(1f),
                 onSelect = { if (!isExpense) onToggleType() }
             )
-            Spacer(modifier = Modifier.width(6.dp))
             TypeToggleChip(
                 label = "收入",
                 selected = !isExpense,
                 selectedColor = LocalRinklColors.current.incomeColor,
+                modifier = Modifier.weight(1f),
                 onSelect = { if (isExpense) onToggleType() }
             )
         }
@@ -1020,6 +1031,7 @@ private fun TypeToggleChip(
     label: String,
     selected: Boolean,
     selectedColor: Color,
+    modifier: Modifier = Modifier,
     onSelect: () -> Unit
 ) {
     Text(
@@ -1027,14 +1039,16 @@ private fun TypeToggleChip(
         fontSize = 12.sp,
         fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
         color = if (selected) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
+        modifier = modifier
+            .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(
                 if (selected) selectedColor.copy(alpha = 0.14f)
                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
             )
             .clickable(onClickLabel = if (label == "支出") "切换为支出" else "切换为收入", role = Role.Button, onClick = onSelect)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        textAlign = TextAlign.Center
     )
 }
 
