@@ -115,6 +115,7 @@ import com.example.rinklnote.ui.screen.plan.CategoryBudgetScreen
 import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.autocapture.AutoCaptureScreen
 import com.example.rinklnote.ui.screen.autocapture.AutoCaptureViewModel
+import com.example.rinklnote.ui.screen.quickadd.ReceiptOcrDialog
 import com.example.rinklnote.ui.screen.search.BillSearchViewModel
 import com.example.rinklnote.ui.screen.search.SearchBillsScreen
 import com.example.rinklnote.ui.screen.day.DayBillsScreen
@@ -212,6 +213,8 @@ fun AppNavigation(app: RinklNoteApp) {
     var showBotBind by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
+    var showReceiptCapture by remember { mutableStateOf(false) }
+    var receiptCapturePicked by remember { mutableStateOf(false) }
     var showQqBotGuide by remember { mutableStateOf(false) }
     // 语音连续多笔：累计笔数 + 最近一笔的短暂确认提示。
     var voiceBookedCount by remember { mutableStateOf(0) }
@@ -797,6 +800,8 @@ fun AppNavigation(app: RinklNoteApp) {
                         .collectAsStateWithLifecycle(initialValue = 0)
                     BookkeepingScreen(
                         onOpenDrawer = { openBillEditor(null) },
+                        onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
+                        onCaptureBill = { receiptCapturePicked = false; showReceiptCapture = true },
                         onFinanceClick = { navigateTo("assets") },
                         onMoreClick = { navigateTo("profile") },
                         onAiClick = { navigateTo("ai") },
@@ -1034,6 +1039,17 @@ fun AppNavigation(app: RinklNoteApp) {
         }
         if (showBotBind) {
             BotBindPage(viewModel = authVM, onDismiss = { showBotBind = false })
+        }
+        if (showReceiptCapture) {
+            ReceiptOcrDialog(
+                onDismiss = {
+                    showReceiptCapture = false
+                    if (receiptCapturePicked) openBillEditor(null)
+                },
+                onPickAmount = { receiptCapturePicked = true; quickAddVM.onEvent(QuickAddEvent.OcrAmountPicked(it)) },
+                onPickDate = { receiptCapturePicked = true; quickAddVM.onEvent(QuickAddEvent.OcrDatePicked(it)) },
+                onPickMerchant = { receiptCapturePicked = true; quickAddVM.onEvent(QuickAddEvent.OcrMerchantPicked(it)) }
+            )
         }
 
         // Bottom floating voice bar — no full-screen page. Device recognizer streams

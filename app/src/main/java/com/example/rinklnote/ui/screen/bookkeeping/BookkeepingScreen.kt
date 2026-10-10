@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.absoluteOffset
@@ -51,6 +52,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -63,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
+import kotlin.math.abs
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
@@ -94,10 +97,41 @@ import com.example.rinklnote.util.toDayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 
+private enum class SliderDirection { LEFT, UP, RIGHT }
+
+@Composable
+private fun SliderGuide(
+    direction: SliderDirection,
+    label: String,
+    selected: Boolean,
+    modifier: Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(if (selected) 58.dp else 50.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+            )
+            .rinkShadow(CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
+    onVoiceInput: () -> Unit = {},
+    onCaptureBill: () -> Unit = {},
     onFinanceClick: () -> Unit,
     // 保留：抽屉「设置」项回调（跳「我的」页）。顶栏「更多」按钮已改为打开「更多」抽屉。
     onMoreClick: () -> Unit,
@@ -319,50 +353,67 @@ fun BookkeepingScreen(
             pendingCaptureCount = pendingCaptureCount
         )
 
-        // FAB：常态 = 加账单；拖动中变删除区（命中时放大 + 红色高亮），松手删除
+        // 灵动滑块：轻点进入编辑，长按后向上语音、向左编辑、向右拍摄小票。
         val isDragging = dragHost.isDragging
         val overDelete = dragHost.isOverDelete
         val fabScale by animateFloatAsState(if (overDelete) 1.18f else 1f, label = "fabScale")
+        var sliderArmed by remember { mutableStateOf(false) }
+        var sliderDirection by remember { mutableStateOf<SliderDirection?>(null) }
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
-                .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
-                .rinkShadow(CircleShape)
-                .size(56.dp)
-                .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .hazeEffect(hazeState, HazeMaterials.thin())
-                .clickable(enabled = !isDragging, onClickLabel = "增加账单") { onOpenDrawer() }
-                // 拖动中该区变身删除目标区（体验审查 P1 语义）：描述挪到容器上，避免与图标重复播报。
-                .then(
-                    if (isDragging) Modifier.semantics { contentDescription = "拖到此处删除" } else Modifier
-                ),
+                .size(width = 214.dp, height = 174.dp),
             contentAlignment = Alignment.Center
         ) {
-            Crossfade(targetState = isDragging, label = "fabIcon") { deleting ->
-                if (deleting) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_add_bill),
-                        contentDescription = "增加账单",
-                        tint = Color.Unspecified
-                    )
-                }
+            if (sliderArmed && !isDragging) {
+                SliderGuide(SliderDirection.LEFT, "编辑", sliderDirection == SliderDirection.LEFT, Modifier.align(Alignment.CenterStart).offset(x = 10.dp, y = 36.dp))
+                SliderGuide(SliderDirection.UP, "语音", sliderDirection == SliderDirection.UP, Modifier.align(Alignment.TopCenter).offset(y = 8.dp))
+                SliderGuide(SliderDirection.RIGHT, "拍摄", sliderDirection == SliderDirection.RIGHT, Modifier.align(Alignment.CenterEnd).offset(x = (-10).dp, y = 36.dp))
             }
-            if (overDelete) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
-                )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                    .size(56.dp)
+                    .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .hazeEffect(hazeState, HazeMaterials.thin())
+                    .pointerInput(isDragging) {
+                        if (isDragging) return@pointerInput
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { sliderArmed = true; sliderDirection = null },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                sliderDirection = when {
+                                    abs(amount.x) > abs(amount.y) && amount.x < 0 -> SliderDirection.LEFT
+                                    abs(amount.x) > abs(amount.y) && amount.x > 0 -> SliderDirection.RIGHT
+                                    amount.y < 0 -> SliderDirection.UP
+                                    else -> sliderDirection
+                                }
+                            },
+                            onDragEnd = {
+                                when (sliderDirection) {
+                                    SliderDirection.UP -> onVoiceInput()
+                                    SliderDirection.LEFT -> onOpenDrawer()
+                                    SliderDirection.RIGHT -> onCaptureBill()
+                                    null -> Unit
+                                }
+                                sliderArmed = false; sliderDirection = null
+                            },
+                            onDragCancel = { sliderArmed = false; sliderDirection = null }
+                        )
+                    }
+                    .clickable(enabled = !isDragging, onClickLabel = "灵动滑块") { onOpenDrawer() }
+                    .then(if (isDragging) Modifier.semantics { contentDescription = "拖到此处删除" } else Modifier),
+                contentAlignment = Alignment.Center
+            ) {
+                Crossfade(targetState = isDragging, label = "fabIcon") { deleting ->
+                    if (deleting) Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else Icon(painter = painterResource(R.drawable.ic_add_bill), contentDescription = "灵动滑块", tint = Color.Unspecified)
+                }
+                if (overDelete) Box(Modifier.matchParentSize().clip(CircleShape).background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f)))
             }
         }
 
