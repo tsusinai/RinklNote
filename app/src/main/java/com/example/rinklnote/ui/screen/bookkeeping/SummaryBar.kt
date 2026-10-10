@@ -2,11 +2,12 @@ package com.example.rinklnote.ui.screen.bookkeeping
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -34,7 +34,6 @@ import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.component.RollingAmountText
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rinkShadow
-import com.example.rinklnote.util.Money
 
 @SuppressLint("DefaultLocale")
 @Composable
@@ -50,11 +49,6 @@ fun SummaryBar(
     var expanded by remember { mutableStateOf(false) }
     val hasSummary = aiSummary != null
     val interactionSource = remember { MutableInteractionSource() }
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = Motion.Fade,
-        label = "chevron"
-    )
     val clickModifier = if (hasSummary) {
         Modifier.clickable(
             interactionSource = interactionSource,
@@ -74,60 +68,55 @@ fun SummaryBar(
             .then(clickModifier)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // 收入/支出合计行
-        // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
-        // 各段 softWrap=false（体验审查 P2）：大字体/窄屏下金额绝不被拆成两行。
+        // 结余作为视觉主指标，收支作为辅助指标，避免首页第一行塞入过多数字。
         val incomeColor = LocalRinklColors.current.incomeColor
+        val balance = totalIncome - totalExpense
+        val balanceColor = if (balance >= 0) incomeColor else MaterialTheme.colorScheme.tertiary
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "${currentMonth}月：",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                softWrap = false
-            )
-            Text(
-                text = "支出",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.tertiary,
-                maxLines = 1,
-                softWrap = false
-            )
-            RollingAmountText(
-                amountMinor = totalExpense,
-                color = MaterialTheme.colorScheme.tertiary,
-                trailingSpace = "  "
-            )
-            Text(
-                text = "收入",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = incomeColor,
-                maxLines = 1,
-                softWrap = false
-            )
-            RollingAmountText(
-                amountMinor = totalIncome,
-                color = incomeColor,
-                trailingSpace = "  "
-            )
-            if (hasSummary) {
-                Spacer(modifier = Modifier.weight(1f))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "▾",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp,
+                    text = "${currentMonth}月结余",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.rotate(chevronRotation)
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                RollingAmountText(
+                    amountMinor = balance,
+                    color = balanceColor,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
+            if (hasSummary) {
+                Text("查看总结", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SummaryMetric(
+                label = "支出",
+                amount = totalExpense,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.weight(1f)
+            )
+            SummaryMetric(
+                label = "收入",
+                amount = totalIncome,
+                color = incomeColor,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         // AI 当月总结建议：以 markdown 渲染，展示在卡片内、合计行下。
@@ -152,5 +141,30 @@ fun SummaryBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/** 首页摘要里的辅助指标，使用语义色做轻量底纹，让数字分组更容易扫读。 */
+@Composable
+private fun SummaryMetric(
+    label: String,
+    amount: Long,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(color.copy(alpha = 0.08f))
+            .then(Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+    ) {
+        Text(label, fontSize = 12.sp, color = color.copy(alpha = 0.82f), fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.height(2.dp))
+        RollingAmountText(
+            amountMinor = amount,
+            color = color,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }

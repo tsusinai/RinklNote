@@ -420,23 +420,28 @@ private fun AiSuggestionCard(
             // 固定：可见入口（不依赖长按猜测手势）；固定后 5 秒自动消失不再生效
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onTogglePin),
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(onContainer.copy(alpha = if (pinned) 0.14f else 0.06f))
+                    .clickable(onClickLabel = if (pinned) "取消固定建议" else "固定建议", onClick = onTogglePin),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "📌",
-                    fontSize = 13.sp,
-                    color = if (pinned) onContainer else onContainer.copy(alpha = 0.45f)
+                    text = "固",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (pinned) onContainer else onContainer.copy(alpha = 0.52f)
                 )
             }
+            Spacer(modifier = Modifier.width(2.dp))
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clickable(onClick = onDismiss),
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable(onClickLabel = "关闭建议", onClick = onDismiss),
                 contentAlignment = Alignment.Center
             ) {
-                Text("✕", fontSize = 14.sp, color = onContainer)
+                Text("×", fontSize = 18.sp, color = onContainer.copy(alpha = 0.78f))
             }
         }
         // 依据行：优先展示服务端解释，否则按推荐来源生成简短依据
@@ -628,11 +633,20 @@ private fun CategorySection(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("标签", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("长按或点「更多」呼出二级标签", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                "长按 / 更多",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -935,7 +949,7 @@ private fun CountBefore(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp)
-                .height(36.dp)
+                .height(58.dp)
                 .pressScale(amountInteraction)
                 .clip(RoundedCornerShape(15.dp))
                 .then(applyCardGlass(RoundedCornerShape(15.dp)))
@@ -950,18 +964,24 @@ private fun CountBefore(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            // 固定宽度 + 居中：金额位数增减时文本占位不变，数字不会横向跳动。
-            // 140dp 在 20sp Bold 下约容纳 9 位（"123456.78"），超出会被截断——
-            // 快捷记账金额上限远低于此，够用。
-            Text(
-                text = state.amount.ifEmpty { "0.00" },
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
-                color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor,
-                modifier = Modifier.width(140.dp)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "¥",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = state.amount.ifEmpty { "0.00" },
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
+                    color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor,
+                    modifier = Modifier.width(140.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -982,7 +1002,7 @@ private fun CountBefore(
             )
         }
         Spacer(modifier = Modifier.height(2.dp))
-        Text("点击输入金额", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("点击金额输入 · 长按切换收支", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

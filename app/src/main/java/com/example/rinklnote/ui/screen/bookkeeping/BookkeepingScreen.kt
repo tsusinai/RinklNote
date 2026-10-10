@@ -328,9 +328,10 @@ fun BookkeepingScreen(
                 .padding(bottom = 48.dp)
                 .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
                 .rinkShadow(CircleShape)
-                .size(51.dp)
+                .size(56.dp)
                 .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                 .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
                 .hazeEffect(hazeState, HazeMaterials.thin())
                 .clickable(enabled = !isDragging, onClickLabel = "增加账单") { onOpenDrawer() }
                 // 拖动中该区变身删除目标区（体验审查 P1 语义）：描述挪到容器上，避免与图标重复播报。
