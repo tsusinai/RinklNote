@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.rinklnote.MainActivity
+import com.example.rinklnote.R
 import com.example.rinklnote.data.repository.DailyReport
 import com.example.rinklnote.util.Money
 
@@ -85,7 +86,7 @@ object NotificationHelper {
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_PAY_NOTIFY)
-            .setSmallIcon(android.R.drawable.ic_menu_add)
+            .setSmallIcon(R.drawable.ic_brand_mono)
             .setContentTitle("记一笔")
             .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -127,7 +128,7 @@ object NotificationHelper {
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_PAY_NOTIFY)
-            .setSmallIcon(android.R.drawable.ic_menu_add)
+            .setSmallIcon(R.drawable.ic_brand_mono)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -170,23 +171,23 @@ object NotificationHelper {
         sb.appendLine("━━ 今日记账日报 ━━")
         sb.appendLine()
         if (report.totalExpense > 0) {
-            sb.appendLine("支出：￥%.2f".format(report.totalExpense))
+            sb.appendLine("支出：${Money.format(report.totalExpense)}")
             report.expenseCategories.take(3).forEach { cat ->
-                sb.appendLine("  · %s：￥%.2f".format(cat.categoryName, cat.total))
+                sb.appendLine("  · %s：%s".format(cat.categoryName, Money.format(cat.total)))
             }
         }
         if (report.totalIncome > 0) {
-            sb.appendLine("收入：￥%.2f".format(report.totalIncome))
+            sb.appendLine("收入：${Money.format(report.totalIncome)}")
             report.incomeCategories.take(3).forEach { cat ->
-                sb.appendLine("  · %s：￥%.2f".format(cat.categoryName, cat.total))
+                sb.appendLine("  · %s：%s".format(cat.categoryName, Money.format(cat.total)))
             }
         }
         sb.appendLine("共 %d 笔".format(report.billCount))
 
         val notification = NotificationCompat.Builder(context, CHANNEL_DAILY_REPORT)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_brand_mono)
             .setContentTitle("每日日报")
-            .setContentText("今日支出 ￥%.2f".format(report.totalExpense))
+            .setContentText("今日支出 ${Money.format(report.totalExpense)}")
             .setStyle(NotificationCompat.BigTextStyle().bigText(sb.toString()))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)

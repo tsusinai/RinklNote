@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title">
+  <title id="title">交通</title>
+  <path d="M5 3h14a2 2 0 0 1 2 2v13H3V5a2 2 0 0 1 2-2 M3 10h18 M8 4v6 M16 4v6 M6 14h.01 M18 14h.01 M6 18v3 M18 18v3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

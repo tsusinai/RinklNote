@@ -6,7 +6,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -658,7 +658,7 @@ private fun RelatedBillsCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onEditBill(bill.id) }
+                        .motionClickable { onEditBill(bill.id) }
                 ) {
                     BillRowContent(
                         categoryName = bill.subCategoryName ?: bill.categoryName,

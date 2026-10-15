@@ -72,13 +72,25 @@
         <receiver
             android:name=".widget.RinklNoteAppWidgetReceiver"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/widget_overview_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/rinklnote_appwidget_info" />
+        </receiver>
+        <receiver android:name=".widget.QuickAddWidgetReceiver" android:exported="true" android:label="@string/widget_quick_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_quick_info" />
+        </receiver>
+        <receiver android:name=".widget.BudgetWidgetReceiver" android:exported="true" android:label="@string/widget_budget_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_budget_info" />
+        </receiver>
+        <receiver android:name=".widget.CategoryWidgetReceiver" android:exported="true" android:label="@string/widget_category_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_category_info" />
         </receiver>
         <receiver
             android:name=".notification.DailyReportReceiver"

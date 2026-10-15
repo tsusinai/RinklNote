@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
                 return PendingQuickAdd(amount = Money.toYuanInputString(amountMinor))
             }
             val catId = if (intent.hasExtra(EXTRA_CATEGORY_ID)) intent.getLongExtra(EXTRA_CATEGORY_ID, -1L) else -1L
-            return if (catId >= 0) PendingQuickAdd(categoryId = catId) else null
+            return if (catId >= 0) PendingQuickAdd(categoryId = catId) else PendingQuickAdd()
         }
         return null
     }

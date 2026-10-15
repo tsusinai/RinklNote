@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.navigation.BookingCommand
 import com.example.rinklnote.domain.MessageKind
+import com.example.rinklnote.domain.ExpenseReportContent
+import com.example.rinklnote.data.network.dto.ExpenseReportRequest
 import com.example.rinklnote.data.network.ApiService
 import com.example.rinklnote.data.network.dto.QueryRequest
 import com.example.rinklnote.data.repository.ChatRepository
-import com.example.rinklnote.util.Money
+import kotlinx.coroutines.sync.withLock
 import com.example.rinklnote.util.VoiceParser
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
@@ -97,6 +99,10 @@ class AiViewModel(
 
     /** 记账/问账路由。含 元/块/分类 判定，避免把「8月花了多少」误判为记账。 */
     private fun route(text: String) {
+        ExpenseReportContent.intent(text)?.let { type ->
+            answerReport(type, text)
+            return
+        }
         val local = VoiceParser.parse(text)
         val isBooking = local.amount != null &&
             (text.contains("元") || text.contains("块") || local.categoryName != null)
@@ -137,73 +143,48 @@ class AiViewModel(
         }
     }
 
-    private fun loadMonthlyIfStale() {
+    private fun answerReport(type: String, text: String) {
+        _state.update { it.copy(isWaiting = true) }
         viewModelScope.launch {
-            val zone = bookkeepingZone()
-            val monthStart = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            if (chatRepository.countChatMessages("summary", monthStart) > 0) return@launch
-            val month = LocalDate.now(zone).format(DateTimeFormatter.ofPattern("yyyy-MM"))
             try {
-                val r = api.getMonthlyReview(month)
-                val content = buildString {
-                    append("这个月收支给你捋一捋👇\n")
-                    append(r.summary)
-                    r.highlights.forEach { append("\n• ").append(it) }
-                    // 并入异常事实：超标日 / 最大单笔 / 消费集中
-                    if (r.spikeDays.isNotEmpty()) {
-                        append("\n⚠️ 超标日")
-                        r.spikeDays.take(5).forEach {
-                            append("\n- ").append(it.date).append(" ").append(Money.format(it.amountMinor))
-                                .append("（超日均").append(it.ratioPct).append("%）")
-                        }
-                    }
-                    r.biggestSingle?.let {
-                        append("\n🔍 最大单笔：").append(it.categoryName).append(" ¥")
-                            .append(Money.format(it.amountMinor)).append("（").append(it.date).append("）")
-                    }
-                    if (r.topCategories.isNotEmpty()) {
-                        append("\n🧾 消费集中：")
-                        append(r.topCategories.joinToString("、") { it.name + " " + Money.format(it.amountMinor) })
-                    }
-                }
-                chatRepository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = MessageKind.SUMMARY, content = content, createdAt = now())
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                chatRepository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = MessageKind.TEXT, content = friendlyError(e, "加载总结失败"), createdAt = now())
-                )
-            }
+                val report = api.getExpenseHtmlReport(ExpenseReportRequest(type = type, query = text))
+                chatRepository.insertChatMessage(ChatMessage(role = "assistant",
+                    kind = ExpenseReportContent.kind(report.type), content = ExpenseReportContent.encode(report), createdAt = now()))
+            } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                chatRepository.insertChatMessage(ChatMessage(role = "assistant", kind = MessageKind.TEXT,
+                    content = friendlyError(e, "生成报告失败"), createdAt = now()))
+            } finally { _state.update { it.copy(isWaiting = false) } }
         }
     }
 
-    private fun loadAnomalyIfStale() {
+    private val automaticReportLocks = mapOf("summary" to kotlinx.coroutines.sync.Mutex(), "anomaly" to kotlinx.coroutines.sync.Mutex())
+
+    private fun loadMonthlyIfStale() = loadAutomaticReport("summary")
+    private fun loadAnomalyIfStale() = loadAutomaticReport("anomaly")
+
+    /** 保留月总结/月度去重与当日异常去重；连续进入页面不会并发生成重复报告。 */
+    private fun loadAutomaticReport(type: String) {
         viewModelScope.launch {
-            val zone = bookkeepingZone()
-            val dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
-            if (chatRepository.countChatMessages(MessageKind.ANOMALY.value, dayStart) > 0) return@launch
-            try {
-                val r = api.getAnomalyAlerts()
-                if (r.alerts.isEmpty()) return@launch   // 无异常不插「暂无」，不占去重位
-                val content = buildString {
-                    append("发现点小动静，提你一下～\n")
-                    append(r.alerts.joinToString("\n") { "• " + it.message })
+            automaticReportLocks.getValue(type).withLock {
+                val zone = bookkeepingZone()
+                val today = LocalDate.now(zone)
+                val since = (if (type == "summary") today.withDayOfMonth(1) else today)
+                    .atStartOfDay(zone).toInstant().toEpochMilli()
+                val kind = ExpenseReportContent.kind(type)
+                if (chatRepository.countChatMessages(kind.value, since) > 0) return@withLock
+                try {
+                    val report = api.getExpenseHtmlReport(ExpenseReportRequest(type,
+                        month = today.format(DateTimeFormatter.ofPattern("yyyy-MM")), onlyIfAnomalous = type == "anomaly"))
+                    if (type == "anomaly" && !report.hasAnomaly) return@withLock
+                    chatRepository.insertChatMessage(ChatMessage(role = "assistant", kind = kind,
+                        content = ExpenseReportContent.encode(report), createdAt = now()))
+                } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                    chatRepository.insertChatMessage(ChatMessage(role = "assistant", kind = MessageKind.TEXT,
+                        content = friendlyError(e, if (type == "summary") "加载总结失败" else "加载异常提醒失败"), createdAt = now()))
                 }
-                chatRepository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = MessageKind.ANOMALY, content = content, createdAt = now())
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                chatRepository.insertChatMessage(
-                    ChatMessage(role = "assistant", kind = MessageKind.TEXT, content = friendlyError(e, "加载异常提醒失败"), createdAt = now())
-                )
             }
         }
     }
-
     /** 习惯提醒：每天一次；无内容/失败静默（soft 提醒，不打扰）。 */
     private fun loadHabitIfStale() {
         viewModelScope.launch {
@@ -229,7 +210,8 @@ class AiViewModel(
         val code = (e as? retrofit2.HttpException)?.code()
         return when {
             code == 401 -> "登录已失效，请先在「我的」重新登录"
-            code == 400 -> "输入内容不能为空"
+            code == 400 -> "报告请求无效，请换个说法再试"
+            code == 404 -> "报告服务尚未更新，请稍后再试"
             else -> "$prefix: ${e.message}"
         }
     }

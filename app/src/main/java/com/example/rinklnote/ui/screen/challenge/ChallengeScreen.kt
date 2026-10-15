@@ -6,7 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -308,7 +308,7 @@ private fun ChallengeTopBar(scrimAlpha: Float, listScrolled: Boolean, onBack: ()
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             androidx.compose.material3.Icon(

@@ -158,6 +158,9 @@ interface ApiService {
     suspend fun updateSuggestConfig(@Body config: Map<String, String>): MessageResponse
 
     // Insights (综合助手) — JWT-protected
+    @POST("api/insights/html-report")
+    suspend fun getExpenseHtmlReport(@Body request: ExpenseReportRequest): ExpenseReportResponse
+
     @GET("api/insights/monthly")
     suspend fun getMonthlySummary(@Query("month") month: String): MonthlySummaryResponse
 

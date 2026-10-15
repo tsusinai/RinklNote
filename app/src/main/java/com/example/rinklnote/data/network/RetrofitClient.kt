@@ -40,7 +40,10 @@ object RetrofitClient {
             } else {
                 chain.request()
             }
-            chain.proceed(request)
+            // HTML 报告最多等待模型 60 秒，客户端给传输留余量；其余接口保持原超时。
+            val requestChain = if (request.url.encodedPath == "/api/insights/html-report")
+                chain.withReadTimeout(90, TimeUnit.SECONDS) else chain
+            requestChain.proceed(request)
         }
 
         val client = OkHttpClient.Builder()

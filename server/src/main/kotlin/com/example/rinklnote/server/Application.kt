@@ -84,6 +84,7 @@ fun Application.module() {
     val billService = BillService()
     val budgetService = BudgetService()
     val challengeService = ChallengeService()
+    val botInteractions = com.example.rinklnote.server.services.bot.BotInteractionService(billService, budgetService, userService)
     // 头像文件存储：uploads/avatars/{userId}.jpg（相对工作目录），测试可注入目录。
     val avatarStorage = AvatarStorage()
     // 预热头像目录：staticFiles 注册的目录不要求存在，但首次上传/访问前先建好更稳。
@@ -147,7 +148,7 @@ fun Application.module() {
 
     // 小盘 QQ 消息处理管家（2026-10-03）：多模态归一化 + 意图调度 + 主动照料。
     // 各能力实现见 services/butler/；未配置视觉/ASR 时对应能力优雅降级为引导文案。
-    val butlerCare = ButlerCareService(billService, budgetService, challengeService, userService, log)
+    val butlerCare = ButlerCareService(billService, budgetService, userService, log)
     val butlerVoiceFallback = VoiceTranscribeService(asrService)
     val butlerReceiptOcr = ReceiptOcrService(billService, log)
     val butlerRouter = ButlerIntentRouter(
@@ -176,6 +177,7 @@ fun Application.module() {
 
     // QQ Official Bot — config stored in DB, managed via Web UI
     val qqBotService = QQBotService()
+    qqBotService.interactions = botInteractions
     qqBotService.loadFromDb()
     if (qqBotService.isConfigured()) {
         log.info("QQ Bot service loaded from DB (AppID: ${qqBotService.getMaskedAppId()})")
@@ -191,6 +193,7 @@ fun Application.module() {
     // 飞书自建应用机器人（B2）——配置存 bot_config，经 Web 管理端维护；
     // 事件收口 webhook（FeishuBotWebhookRoutes），消息处理走 FeishuMessageProcessor。
     val feishuBotService = FeishuBotService()
+    feishuBotService.interactions = botInteractions
     feishuBotService.loadFromDb()
     if (feishuBotService.isConfigured()) {
         log.info("飞书 Bot 已加载配置（AppID: ${feishuBotService.getMaskedAppId()}）")
@@ -212,6 +215,7 @@ fun Application.module() {
     // 个人订阅号（C-W2）——只收不推：配置仅 mp_token（+可选 mp_encoding_aes_key 安全模式），
     // 唯一出口是回调里的 5s 被动回复（MpWebhookRoutes），消息处理走 MpMessageProcessor。
     val mpBotService = MpBotService()
+    mpBotService.interactions = botInteractions
     mpBotService.loadFromDb()
     if (mpBotService.isConfigured()) {
         log.info("订阅号已加载配置（明文${if (mpBotService.getEncodingAesKey() != null) "以外还配了加密 key（安全模式）" else "模式"}）")
@@ -255,7 +259,7 @@ fun Application.module() {
     val pushScheduler = PushScheduler(
         userService = userService,
         dailyReportProvider = { userId ->
-            // 日报推「昨天」（已完结的一天）：人话化文案 —— LLM 一句话点评 + 连续记账/预算锚点，
+            // 日报推「昨天」（已完结的一天）：人话化文案 —— LLM 一句话点评 + 支出对比/预算锚点，
             // 失败回退模板；昨天没账则不发。窗口改成昨天是 2026-09-12 修复，勿改回今天。
             val zone = java.time.ZoneId.of("Asia/Shanghai")
             val now = java.time.ZonedDateTime.now(zone)
@@ -406,6 +410,7 @@ fun Application.module() {
         keywordRoutes()
         insightRoutes(insightService)
         qqBotWebhookRoutes(qqBotService, userService, billService, nluService, budgetService, insightService, butlerRouter)
+        botInteractionRoutes(botInteractions)
         qqBotManageRoutes(qqBotService, userService)
         feishuBotWebhookRoutes(feishuBotService, userService, billService, nluService, budgetService, insightService)
         feishuBotManageRoutes(feishuBotService, userService)

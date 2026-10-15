@@ -1,11 +1,10 @@
 package com.example.rinklnote.ui.screen.bookkeeping
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,58 +21,73 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
+import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.domain.MonthDetailData
+import com.example.rinklnote.domain.buildMonthDetail
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.BillCategoryIcon
 import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.MonthChartPager
 import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklTopBarContentHeight
-import com.example.rinklnote.ui.component.applyCardGlass
-import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.component.motionClickable
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.RinklNoteTheme
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
 import dev.chrisbanes.haze.HazeState
 import java.time.Instant
 import java.time.LocalDate
 
-/** 月度明细筛选状态：无 | 只看某天 | 只看某分类。热力图/图表始终显示整月，仅下方明细跟随收窄。 */
+/** 月度筛选只收窄清单，汇总与图表始终显示整月；再次点选即可解除。 */
 private sealed interface MonthFilter {
     data object None : MonthFilter
     data class Day(val day: Int) : MonthFilter
     data class Category(val name: String) : MonthFilter
 }
 
-/** 本页卡片统一形状：与首页账单卡/合计条/热力图同款 15dp。 */
-private val DetailCardShape = RoundedCornerShape(15.dp)
+/** 月度详情局部尺度：紧凑汇总、文字标签、无背景分类标题。 */
+private object MonthDetailDesign {
+    val PagePadding = 20.dp
+    val SectionGap = 18.dp
+    val Heading = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold)
+    val Secondary = TextStyle(fontSize = 12.sp, lineHeight = 17.sp)
+    val Amount = TextStyle(fontSize = 28.sp, lineHeight = 34.sp,
+        fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum", letterSpacing = 0.sp)
+}
 
 @Composable
 fun MonthDetailOverlay(
@@ -85,16 +99,18 @@ fun MonthDetailOverlay(
     monthDetail: MonthDetailData,
     backgroundUri: String?,
     hazeState: HazeState?,
+    accounts: List<Account>,
+    onSelectMonth: (LocalDate) -> Unit,
     onEditBill: (Bill) -> Unit,
     onBack: () -> Unit
 ) {
-    // 选中筛选；切换可见/换月时自动重置为「无」
-    var filter by remember(bills) { mutableStateOf<MonthFilter>(MonthFilter.None) }
-
-    // 明细清单：跟随筛选收窄，否则整月
+    // 用月份而非账单列表作为重置键，空月之间切换也会清掉旧筛选。
+    var filter by remember(month.year, month.monthValue) { mutableStateOf<MonthFilter>(MonthFilter.None) }
+    var showMonthPicker by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val accountNames = remember(accounts) { accounts.associate { it.id to it.name } }
     val filteredBills = remember(bills, filter) {
-        val current = filter
-        when (current) {
+        when (val current = filter) {
             MonthFilter.None -> bills
             is MonthFilter.Day -> bills.filter {
                 Instant.ofEpochMilli(it.date).atZone(bookkeepingZone()).toLocalDate().dayOfMonth == current.day
@@ -102,42 +118,34 @@ fun MonthDetailOverlay(
             is MonthFilter.Category -> bills.filter { it.categoryName == current.name }
         }
     }
-    val filteredGroup = remember(filteredBills) {
-        filteredBills.groupBy { it.categoryName }
-            .map { (name, bl) -> Triple(name, bl.sumOf { it.amountMinor }, bl) }
+    val filteredGroup = remember(filteredBills) { filteredBills.groupBy { it.categoryName } }
+    val emptyLabel = when (val current = filter) {
+        MonthFilter.None -> "本月暂无账单"
+        is MonthFilter.Day -> month.monthValue.toString() + "月" + current.day + "日暂无账单"
+        is MonthFilter.Category -> current.name + "暂无账单"
     }
 
     BackHandler { onBack() }
+    LaunchedEffect(month.year, month.monthValue) { listState.scrollToItem(0) }
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // 背景层：无自选照片时自铺纯白（并注册毛玻璃采样源）；有照片时不铺底，透出 nav 层 AppBackground。
-        if (backgroundUri == null) {
-            val bg = hazeState
-            if (bg != null) {
-                DefaultHazeBackground(bg)
-            } else {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-            }
-        }
-
+    Box(Modifier.fillMaxSize().background(
+        MaterialTheme.colorScheme.background.copy(alpha = if (backgroundUri == null) 1f else 0.94f)
+    )) {
+        // 自选背景淡淡透出；无照片时保留共享毛玻璃采样源，正文均用主题令牌。
+        if (backgroundUri == null && hazeState != null) DefaultHazeBackground(hazeState)
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().statusBarsPadding(),
             contentPadding = PaddingValues(
-                // 顶部垫高 = 统一顶栏高度 + 内容起始留白。
-                top = RinklTopBarContentHeight + 8.dp,
+                top = RinklTopBarContentHeight + 6.dp,
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
-            // contentType：异构 item 分类回收桶（性能任务 2.8，无视觉变化）。
-            item(key = "banner", contentType = "header") { FramedBanner(expenseTotal, incomeTotal) }
-
-            // 图表（占比|折线|柱状 三段可滑）
+            item(key = "summary", contentType = "header") { MonthlySummary(expenseTotal, incomeTotal) }
             item(key = "chart-pager", contentType = "chart") {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(Modifier.height(MonthDetailDesign.SectionGap))
+                Text("支出分析", style = MonthDetailDesign.Heading, color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = MonthDetailDesign.PagePadding))
                 MonthChartPager(
                     month = month,
                     pieSlices = monthDetail.pieSlices,
@@ -146,278 +154,203 @@ fun MonthDetailOverlay(
                     selectedCategory = (filter as? MonthFilter.Category)?.name,
                     onCategoryTap = { name ->
                         filter = if (filter == MonthFilter.Category(name)) MonthFilter.None else MonthFilter.Category(name)
-                    }
+                    },
+                    modifier = Modifier.padding(horizontal = MonthDetailDesign.PagePadding)
                 )
             }
-
-            // 每日支出热力图（复用首页组件）→ 点天筛选
             item(key = "heatmap", contentType = "chart") {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(Modifier.height(MonthDetailDesign.SectionGap))
                 HeatmapBox(
                     heatmap = MonthHeatmap(
                         year = month.year,
                         monthValue = month.monthValue,
-                        firstWeekday = month.dayOfWeek.value,
+                        firstWeekday = month.withDayOfMonth(1).dayOfWeek.value,
                         daysInMonth = month.lengthOfMonth(),
                         dailyExpense = monthDetail.dayAmounts.mapValues { it.value.toFloat() }
                     ),
+                    modifier = Modifier.padding(horizontal = MonthDetailDesign.PagePadding),
                     initiallyExpanded = true,
                     selectedDay = (filter as? MonthFilter.Day)?.day,
                     onDayTap = { day ->
                         filter = if (filter == MonthFilter.Day(day)) MonthFilter.None else MonthFilter.Day(day)
-                    }
+                    },
+                    compact = true
                 )
             }
-
-            if (filter != MonthFilter.None) {
-                item(key = "filter", contentType = "banner") {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    FilterBanner(filter) { filter = MonthFilter.None }
+            item(key = "bill-heading", contentType = "heading") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = MonthDetailDesign.PagePadding)
+                        .padding(top = 24.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("账单明细", style = MonthDetailDesign.Heading, color = MaterialTheme.colorScheme.onSurface)
+                    Text(filteredBills.size.toString() + "笔", style = MonthDetailDesign.Secondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-
             if (filteredBills.isEmpty()) {
-                item(key = "empty", contentType = "banner") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("该月暂无账单", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item(key = "empty", contentType = "empty_placeholder") {
+                    Box(Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 24.dp),
+                        contentAlignment = Alignment.Center) {
+                        Text(emptyLabel, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
-
-            filteredGroup.forEach { (catName, subtotal, catBills) ->
-                item(key = "cat_$catName", contentType = "category-card") {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    CategoryCard(catName, subtotal, catBills, onEditBill)
+            filteredGroup.forEach { (name, categoryBills) ->
+                item(key = "category_" + name, contentType = "category-heading") {
+                    CategoryHeading(name, categoryBills.sumOf { it.amountMinor })
+                }
+                // 每笔账单独立复用，不一次性组合整个分类下的长清单。
+                items(categoryBills, key = { "bill_" + it.id }, contentType = { "bill-row" }) { bill ->
+                    DetailRow(bill, accountNames[bill.accountId], onEditBill)
                 }
             }
         }
-
-        MonthDetailTopBar(
-            monthLabel = monthLabel,
-            hasPhoto = backgroundUri != null,
-            onBack = onBack
-        )
+        MonthDetailTopBar(monthLabel, onBack) { showMonthPicker = true }
+    }
+    if (showMonthPicker) {
+        MonthDetailMonthPicker(month, onDismiss = { showMonthPicker = false }, onSelect = { selected ->
+            showMonthPicker = false
+            onSelectMonth(selected)
+        })
     }
 }
 
-/** 顶部画框头图：树景装饰图装进统一卡片链（1dp 画框边 + 15dp 圆角 + 轻阴影），底部渐变 scrim 上压支出/收入合计。 */
+/** 头图替换为紧凑收支数字，整数分展示仍统一走 Money。 */
 @Composable
-private fun FramedBanner(
-    expenseTotal: Long,
-    incomeTotal: Long,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .rinkShadow(DetailCardShape)
-            .clip(DetailCardShape)
-            .then(applyCardGlass(DetailCardShape))
-            .height(170.dp)
-    ) {
-        Image(
-            painter = painterResource(R.drawable.tree),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.Crop
-        )
-        // 压图合计的渐变 scrim：越靠近底部越深，保证白字可读。
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.45f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.45f)
-                    )
-                )
-        )
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text("支出", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = Money.format(expenseTotal),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
-                )
+private fun MonthlySummary(expenseTotal: Long, incomeTotal: Long) {
+    val colors = LocalRinklColors.current
+    Column(Modifier.padding(horizontal = MonthDetailDesign.PagePadding)) {
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            SummaryAmount("本月支出", expenseTotal, colors.expenseColor, Modifier.weight(1f))
+            Box(Modifier.padding(horizontal = 16.dp).width(1.dp).height(38.dp).background(colors.dividerColor))
+            SummaryAmount("本月收入", incomeTotal, colors.incomeColor, Modifier.weight(1f))
+        }
+        RinklDivider()
+    }
+}
+
+/** 按实际可用宽度缩放长金额，保证窄屏下两列数字完整显示。 */
+@Composable
+private fun SummaryAmount(label: String, amount: Long, color: Color, modifier: Modifier) {
+    val formatted = Money.format(amount)
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val amountStyle = LocalTextStyle.current.merge(MonthDetailDesign.Amount)
+    Column(modifier) {
+        Text(label, style = MonthDetailDesign.Secondary, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val availableWidth = (with(density) { maxWidth.roundToPx() } - 2).coerceAtLeast(1)
+            val measuredWidth = measurer.measure(formatted, style = amountStyle,
+                softWrap = false, maxLines = 1).size.width.coerceAtLeast(1)
+            // 合并真实字体与字距再测量；二分字号，避免按比例缩放忽略固定字距而截断数字。
+            var fittedSize = 28f
+            if (measuredWidth > availableWidth) {
+                var low = 12f
+                var high = 28f
+                repeat(8) {
+                    val middle = (low + high) / 2f
+                    val width = measurer.measure(formatted, style = amountStyle.copy(fontSize = middle.sp),
+                        softWrap = false, maxLines = 1).size.width
+                    if (width <= availableWidth) low = middle else high = middle
+                }
+                fittedSize = low
             }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text("收入", fontSize = 12.sp, color = Color.White.copy(alpha = 0.85f))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = Money.format(incomeTotal),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White
-                )
-            }
+            Text(formatted, style = amountStyle.copy(fontSize = fittedSize.sp),
+                color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
-/** 月度详情悬浮顶栏：与主页同款无边框浮层，仅保留返回按钮和居中标题。 */
+/** 标题整块可点选月份，顶栏沿用应用统一高度和返回行为。 */
 @Composable
-private fun MonthDetailTopBar(
-    monthLabel: String,
-    hasPhoto: Boolean,
-    onBack: () -> Unit
-) {
-    val textColor = if (hasPhoto) Color.White else LocalRinklColors.current.topBarTitleColor
-    RinklTopBar(
-        scrimAlpha = if (hasPhoto) 1f else 0f,
-        horizontalPadding = 8.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                tint = textColor,
-                modifier = Modifier.size(24.dp)
-            )
+private fun MonthDetailTopBar(monthLabel: String, onBack: () -> Unit, onMonthClick: () -> Unit) {
+    val colors = LocalRinklColors.current
+    RinklTopBar(scrimAlpha = 0f, modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
+        Box(Modifier.align(Alignment.CenterStart).defaultMinSize(minWidth = 48.dp, minHeight = 46.dp)
+            .motionClickable(onClickLabel = "返回", role = Role.Button, onClick = onBack),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回",
+                tint = colors.topBarTitleColor, modifier = Modifier.size(24.dp))
         }
-        Text(
-            text = monthLabel,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Medium,
-            color = textColor,
-            modifier = Modifier.align(Alignment.Center)
-        )
-    }
-}
-
-/** 分类分组卡：分类名 + 小计为头，行间发丝分割线（右缩进 6dp，与首页账单卡同款）。 */
-@Composable
-private fun CategoryCard(
-    categoryName: String,
-    subtotal: Long,
-    bills: List<Bill>,
-    onEditBill: (Bill) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .rinkShadow(DetailCardShape)
-            .clip(DetailCardShape)
-            .then(applyCardGlass(DetailCardShape))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(categoryName, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text(
-                text = Money.format(subtotal),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.tertiary
-            )
-        }
-        bills.forEach { bill ->
-            RinklDivider(endInset = 6.dp)
-            DetailRow(bill, onEditBill)
-        }
-    }
-}
-
-/** 顶部筛选横幅：小胶囊显示「已筛选：第X天 / 分类名」+ 可点「清除」。 */
-@Composable
-private fun FilterBanner(filter: MonthFilter, onClear: () -> Unit) {
-    val label = when (filter) {
-        MonthFilter.None -> ""
-        is MonthFilter.Day -> "第${filter.day}天"
-        is MonthFilter.Category -> filter.name
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        Row(Modifier.align(Alignment.Center).defaultMinSize(minHeight = 46.dp)
+            .motionClickable(onClickLabel = "切换月份", role = Role.Button, onClick = onMonthClick)
             .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("已筛选：$label", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.weight(1f))
-        Text(
-            text = "清除",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .clickable { onClear() }
-                .padding(horizontal = 4.dp, vertical = 10.dp)
-        )
+            horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(monthLabel, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = colors.topBarTitleColor)
+            Text("▾", fontSize = 12.sp, color = colors.topBarTitleColor.copy(alpha = 0.62f))
+        }
     }
 }
 
-/** 单笔账单行：点击进入账单编辑；排版对齐首页账单行（16sp 名称/金额、13sp 日期、7dp 收支圆点）。 */
+/** 分类标题无背景，仅用短装饰线建立分组。 */
 @Composable
-private fun DetailRow(bill: Bill, onEditBill: (Bill) -> Unit) {
-    val isExpense = bill.billType == BillType.EXPENSE
-    // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
-    val incomeColor = LocalRinklColors.current.incomeColor
-    val localDate = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
-    val dateLabel = "${localDate.monthValue}月${localDate.dayOfMonth}日"
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onEditBill(bill) }
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else incomeColor)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = dateLabel,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = bill.remark ?: (bill.subCategoryName ?: bill.categoryName),
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+private fun CategoryHeading(name: String, subtotal: Long) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = MonthDetailDesign.PagePadding)
+        .padding(top = 8.dp, bottom = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text(Money.format(subtotal), fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface, style = TextStyle(fontFeatureSettings = "tnum"))
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = (if (isExpense) "-" else "+") + Money.format(bill.amountMinor),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (isExpense) MaterialTheme.colorScheme.tertiary else incomeColor
-        )
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.width(36.dp).height(2.dp)
+            .background(LocalRinklColors.current.themeColor, RoundedCornerShape(1.dp)))
+    }
+}
+
+/** 双行账单：备注或分类为主标题，日期和真实账户为辅助信息，金额沿用收支槽。 */
+@Composable
+private fun DetailRow(bill: Bill, accountName: String?, onEditBill: (Bill) -> Unit) {
+    val colors = LocalRinklColors.current
+    val isExpense = bill.billType == BillType.EXPENSE
+    val dateLabel = remember(bill.date, accountName) {
+        val date = Instant.ofEpochMilli(bill.date).atZone(bookkeepingZone()).toLocalDate()
+        date.monthValue.toString() + "月" + date.dayOfMonth + "日" + (accountName?.let { " · " + it } ?: "")
+    }
+    val title = bill.remark?.takeIf { it.isNotBlank() } ?: bill.subCategoryName ?: bill.categoryName
+    val formatted = Money.format(bill.amountMinor)
+    Row(Modifier.fillMaxWidth().padding(horizontal = MonthDetailDesign.PagePadding)
+        .motionClickable(onClickLabel = "编辑账单", role = Role.Button) { onEditBill(bill) }
+        .padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        BillCategoryIcon(bill.categoryName, size = 40.dp)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(dateLabel, style = MonthDetailDesign.Secondary, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text((if (isExpense) "−" else "+") + formatted,
+            fontSize = if (formatted.length > 12) 13.sp else 16.sp,
+            fontWeight = FontWeight.Medium, style = TextStyle(fontFeatureSettings = "tnum"),
+            color = if (isExpense) colors.expenseColor else colors.incomeColor)
+        Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Preview(name = "月度详情 · 浅色账单", showBackground = true)
+@Composable
+private fun MonthDetailPreview() {
+    val month = LocalDate.of(2026, 10, 1)
+    val bills = listOf(Bill(id = 1, amountMinor = 4200L, categoryId = 1, categoryName = "三餐",
+        accountId = 1, remark = "午餐",
+        date = month.plusDays(4).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()))
+    RinklNoteTheme {
+        MonthDetailOverlay("2026年10月", bills, month, 4200L, 0L, buildMonthDetail(bills, 31),
+            null, null, listOf(Account(1, "微信", iconColor = "#7EC1FC")), {}, {}, {})
+    }
+}
+
+@Preview(name = "月度详情 · 深色空月", showBackground = true)
+@Composable
+private fun MonthDetailEmptyPreview() {
+    RinklNoteTheme(darkTheme = true) {
+        MonthDetailOverlay("2026年10月", emptyList(), LocalDate.of(2026, 10, 1), 0L, 0L,
+            buildMonthDetail(emptyList(), 31), null, null, emptyList(), {}, {}, {})
     }
 }

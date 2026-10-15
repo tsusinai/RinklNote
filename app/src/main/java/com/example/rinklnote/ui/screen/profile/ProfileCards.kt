@@ -1,190 +1,214 @@
 package com.example.rinklnote.ui.screen.profile
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
 import com.example.rinklnote.data.local.LastSyncFailure
 import com.example.rinklnote.data.local.ThemeMode
 import com.example.rinklnote.sync.SyncStatus
+import com.example.rinklnote.ui.component.MotionContent
 import com.example.rinklnote.ui.component.RinklDivider
-import com.example.rinklnote.ui.component.SettingsGroupCard
-import com.example.rinklnote.ui.component.SettingsRow
+import com.example.rinklnote.ui.component.RinklTextButton
+import com.example.rinklnote.ui.component.applyCardGlass
+import com.example.rinklnote.ui.component.motionClickable
+import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.util.Money
 
-/**
- * «我的»页的四张设置分组卡。
- *
- * 2026-09-11 重构：从 ProfileScreen.kt 拆出，页面主体只负责「收集状态 + 组装 + 分发弹窗」。
- * 每张卡都是纯展示组件——状态与回调全部由 ProfileScreen 传入，内部不含业务逻辑。
- * 卡片外壳统一走 [SettingsGroupCard]，行统一走 [SettingsRow]（行高 48dp）。
- *
- * 2026-09-17 再收敛：原「账户与安全」卡（AI 开关 / AI 接口 / 修改密码 / 三通道绑定）整体迁入
- * 「个人资料」页（personal-profile 路由）；原「个性化」卡里的头像 / 昵称行也迁入资料页，
- * 本卡只留外观与显示偏好。分组现为：数据与同步 → 通知 → 个性化 → 通用。
- */
-
-/**
- * «数据与同步» 组：自动同步开关 + 立即同步行 + 同步状态卡。
- *
- * 2026-10-01 升级（体验优化 Task 1）：把「上次同步」小字升级为完整状态卡——
- * 同步中 / 已同步（时间 + 本次上传下载数）/ 待重试（待上传数 + 原因 + 立即重试）/
- * 需要登录；未登录时给登录入口。状态来自 SyncManager 暴露的 [SyncStatus] 流；
- * 进程重启后状态回落 Idle，用 TokenManager 持久化的最近失败原因还原「待重试」展示。
- */
+/** 本文件只负责展示和分发回调，设置、同步与导出仍由页面骨架处理。 */
 @Composable
-internal fun SyncCard(
-    autoSync: Boolean,
-    isLoggedIn: Boolean,
-    status: SyncStatus,
-    lastSync: Long,
-    lastFailure: LastSyncFailure?,
-    onAutoSyncChange: (Boolean) -> Unit,
-    onSyncNow: () -> Unit,
-    onRetry: () -> Unit,
-    onLoginClick: () -> Unit
-) {
-    SettingsGroupCard(title = "数据与同步") {
-        SettingsRow(
-            icon = R.drawable.ic_sync,
-            label = "自动同步",
-            trailing = { Switch(checked = autoSync, onCheckedChange = onAutoSyncChange) }
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_sync,
-            label = "立即同步",
-            value = "上次同步 ${formatSyncTime(lastSync)}",
-            onClick = onSyncNow
-        )
-        RinklDivider()
-        SyncStatusBlock(
-            isLoggedIn = isLoggedIn,
-            status = status,
-            lastSync = lastSync,
-            lastFailure = lastFailure,
-            onRetry = onRetry,
-            onLoginClick = onLoginClick
-        )
-    }
-}
-
-/** 立即重试小按钮：触发 SyncManager 重新同步（协议语义不变）。 */
-@Composable
-private fun RetryButton(onRetry: () -> Unit) {
-    Button(
-        onClick = onRetry,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(text = "立即重试", fontSize = 13.sp)
-    }
-}
-
-/** 12sp 的说明小字，左缩进 52dp 与行内标签对齐（行内边距 16 + 图标 24 + 间距 12）。 */
-@Composable
-private fun StatusHint(text: String) {
-    Text(
-        text = text,
-        fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 12.dp)
+private fun ProfilePanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier.fillMaxWidth().animateContentSize(Motion.EditorResize).clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .then(applyCardGlass(shape)).padding(vertical = 4.dp),
+        content = content
     )
 }
 
-/** 同步状态块：按登录态与 [SyncStatus] 给出进行中 / 已同步 / 待重试 / 需要登录的文案与操作。 */
+/** 分组标题放在面板外，设置项保持统一左边线，减少重复图标和卡内标题。 */
 @Composable
-private fun SyncStatusBlock(
+private fun ProfileGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    val icon = when (title) {
+        "外观" -> R.drawable.ic_redesign_profile_settings
+        "提醒" -> R.drawable.ic_redesign_profile_sync
+        "数据偏好" -> R.drawable.ic_redesign_profile_person
+        else -> R.drawable.ic_redesign_profile_person
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(icon), contentDescription = null, tint = LocalRinklColors.current.themeColor, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        ProfilePanel(content = content)
+    }
+}
+
+/** 最小点击高度 52dp，说明随文字自然撑开，避免大字号下挤压开关和右侧值。 */
+@Composable
+private fun ProfileRow(
+    label: String,
+    value: String? = null,
+    supporting: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
+            .then(if (onClick != null) Modifier.motionClickable(role = Role.Button, onClick = onClick) else Modifier)
+            .defaultMinSize(minHeight = 52.dp).padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, fontSize = 15.sp, lineHeight = 21.sp, color = MaterialTheme.colorScheme.onSurface)
+            if (supporting != null) {
+                Text(supporting, fontSize = 12.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (value != null) {
+            Spacer(Modifier.width(12.dp))
+            MotionContent(value, Modifier.widthIn(max = 132.dp)) {
+                Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
+            }
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        } else if (onClick != null) {
+            Spacer(Modifier.width(8.dp))
+            Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f), modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ProfileDivider() = RinklDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+/** 常用操作并排展示；同步状态只在这一处说明，不再分成三个重复的设置行。 */
+@Composable
+internal fun ProfileToolsCard(
     isLoggedIn: Boolean,
     status: SyncStatus,
     lastSync: Long,
     lastFailure: LastSyncFailure?,
+    onSyncNow: () -> Unit,
     onRetry: () -> Unit,
-    onLoginClick: () -> Unit
+    onLoginClick: () -> Unit,
+    onExportClick: () -> Unit,
+    onAnnualReportClick: () -> Unit
 ) {
-    when {
-        // 未登录：状态卡退化为登录入口。
-        !isLoggedIn -> SettingsRow(
-            icon = R.drawable.ic_sync,
-            label = "未登录，暂不同步",
-            value = "去登录",
-            onClick = onLoginClick
-        )
-
-        else -> when (val s = status) {
-            is SyncStatus.Syncing -> SettingsRow(
-                icon = R.drawable.ic_sync,
-                label = "同步中…",
-                value = "请稍候"
-            )
-
-            is SyncStatus.Synced -> Column {
-                SettingsRow(
-                    icon = R.drawable.ic_sync,
-                    label = "已同步",
-                    value = formatSyncTime(s.time)
-                )
-                StatusHint(
-                    text = if (s.pushed == 0 && s.pulled == 0) {
-                        "云端无新变化"
-                    } else {
-                        "本次上传 ${s.pushed} 条 · 下载 ${s.pulled} 条"
-                    }
-                )
-            }
-
-            is SyncStatus.RetryPending -> Column {
-                SettingsRow(
-                    icon = R.drawable.ic_sync,
-                    iconTint = MaterialTheme.colorScheme.error,
-                    label = if (s.pendingCount > 0) "待重试 · ${s.pendingCount} 条待上传" else "待重试",
-                    trailing = { RetryButton(onRetry) }
-                )
-                StatusHint(text = s.reason)
-            }
-
-            // 登录过期（401）：给重新登录入口。
-            is SyncStatus.NeedLogin -> SettingsRow(
-                icon = R.drawable.ic_sync,
-                iconTint = MaterialTheme.colorScheme.error,
-                label = "登录已过期，同步暂停",
-                value = "重新登录",
-                onClick = onLoginClick
-            )
-
-            SyncStatus.Idle -> {
-                // 进程重启后状态回落 Idle：若持久化的失败时间晚于上次成功同步，还原「待重试」。
-                val recentFailure = lastFailure?.takeIf { it.time > lastSync }
-                if (recentFailure != null) {
-                    Column {
-                        SettingsRow(
-                            icon = R.drawable.ic_sync,
-                            iconTint = MaterialTheme.colorScheme.error,
-                            label = "待重试",
-                            trailing = { RetryButton(onRetry) }
-                        )
-                        StatusHint(text = recentFailure.reason)
-                    }
-                } else {
-                    SettingsRow(
-                        icon = R.drawable.ic_sync,
-                        label = "同步状态",
-                        value = "暂未同步"
-                    )
+    val needsLogin = !isLoggedIn || status is SyncStatus.NeedLogin
+    val needsRetry = status is SyncStatus.RetryPending ||
+        (status == SyncStatus.Idle && lastFailure != null && lastFailure.time > lastSync)
+    ProfilePanel {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+            ProfileAction(R.drawable.ic_sync, if (needsLogin) "登录同步" else "同步账单",
+                Modifier.weight(1f), enabled = status != SyncStatus.Syncing,
+                onClick = if (needsLogin) onLoginClick else if (needsRetry) onRetry else onSyncNow)
+            ProfileAction(R.drawable.ic_export, "导出账单", Modifier.weight(1f), onClick = onExportClick)
+            ProfileAction(R.drawable.ic_chart, "年度账单", Modifier.weight(1f), onClick = onAnnualReportClick)
+        }
+        if (isLoggedIn) {
+            val caption = when (status) {
+                SyncStatus.Syncing -> "正在同步账单…"
+                is SyncStatus.Synced -> "已同步 · ${formatSyncTime(status.time)}" +
+                    if (status.pushed == 0 && status.pulled == 0) "" else " · 上传 ${status.pushed} 条，下载 ${status.pulled} 条"
+                is SyncStatus.RetryPending -> "待重试 · ${status.reason}"
+                is SyncStatus.NeedLogin -> "登录已过期，点击「登录同步」重新登录"
+                SyncStatus.Idle -> when {
+                    needsRetry -> "待重试 · ${lastFailure?.reason.orEmpty()}"
+                    lastSync > 0 -> "上次同步 · ${formatSyncTime(lastSync)}"
+                    else -> "尚未同步账单"
                 }
+            }
+            ProfileDivider()
+            MotionContent(caption, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(it, fontSize = 12.sp, lineHeight = 18.sp,
+                    color = if (needsRetry || status is SyncStatus.NeedLogin) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
-/** «通知» 组：本地通知开关 + 通知时间 + QQ 日报推送 + 支付通知一键记账（默认关）。 */
+@Composable
+private fun ProfileAction(icon: Int, label: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
+    val colors = LocalRinklColors.current
+    Column(
+        modifier = modifier.motionClickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .defaultMinSize(minHeight = 84.dp).padding(vertical = 12.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(colors.themeColor.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center) {
+            Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(20.dp),
+                tint = (colors.iconButtonColor ?: colors.themeColor).copy(alpha = if (enabled) 1f else 0.45f))
+        }
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+    }
+}
+
+/** 主题与配色共享入口，背景操作共享入口，可读性说明放在对应开关内部。 */
+@Composable
+internal fun PersonalizationCard(
+    themeMode: ThemeMode,
+    backgroundUri: String?,
+    cardOverlay: Boolean,
+    onThemeClick: () -> Unit,
+    onBackgroundClick: () -> Unit,
+    onCardOverlayChange: (Boolean) -> Unit
+) {
+    ProfileGroup("外观") {
+        ProfileRow("主题与配色", themeLabel(themeMode), onClick = onThemeClick)
+        ProfileDivider()
+        ProfileRow("背景图片", if (backgroundUri != null) "已设置" else "默认", onClick = onBackgroundClick)
+        ProfileDivider()
+        ProfileRow("卡片对比度", supporting = "让背景上的内容更清晰",
+            trailing = { Switch(checked = cardOverlay, onCheckedChange = onCardOverlayChange) })
+    }
+}
+
+/** 日报关闭时收起时间设置；QQ 推送和支付提醒保留独立开关。 */
 @Composable
 internal fun DailyReportCard(
     enabled: Boolean,
@@ -197,152 +221,51 @@ internal fun DailyReportCard(
     onQqBotChange: (Boolean) -> Unit,
     onPayNotifyChange: (Boolean) -> Unit
 ) {
-    SettingsGroupCard(title = "通知") {
-        SettingsRow(
-            icon = R.drawable.ic_notification,
-            label = "每日日报通知",
-            trailing = { Switch(checked = enabled, onCheckedChange = onEnabledChange) }
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_notification,
-            label = "通知时间",
-            value = "%02d:%02d".format(hour, minute),
-            onClick = onTimeClick
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_link,
-            label = "QQ 日报推送",
-            trailing = { Switch(checked = qqBot, onCheckedChange = onQqBotChange) }
-        )
-        RinklDivider()
-        // 支付通知监听：默认关；开启时由 ProfileScreen 弹权限说明并引导授予「通知使用权」
-        SettingsRow(
-            icon = R.drawable.ic_notification,
-            label = "支付通知一键记账",
-            trailing = { Switch(checked = payNotify, onCheckedChange = onPayNotifyChange) }
-        )
+    ProfileGroup("提醒") {
+        ProfileRow("每日日报", trailing = { Switch(checked = enabled, onCheckedChange = onEnabledChange) })
+        AnimatedVisibility(visible = enabled,
+            enter = fadeIn(Motion.Reveal) + expandVertically(Motion.EditorResize),
+            exit = fadeOut(Motion.Reveal) + shrinkVertically(Motion.EditorResize)) {
+            Column {
+                ProfileDivider()
+                ProfileRow("通知时间", "%02d:%02d".format(hour, minute), onClick = onTimeClick)
+            }
+        }
+        ProfileDivider()
+        ProfileRow("QQ 日报", trailing = { Switch(checked = qqBot, onCheckedChange = onQqBotChange) })
+        ProfileDivider()
+        ProfileRow("支付提醒", supporting = "从支付通知快速记一笔",
+            trailing = { Switch(checked = payNotify, onCheckedChange = onPayNotifyChange) })
     }
 }
 
-/**
- * «个性化» 组（2026-09-17 收敛）：主题外观（主题模式 / 自定义主题 / 背景图）+
- * 卡片白色蒙版开关（开启后卡片玻璃层垫白色蒙版，增强照片背景下的可读性）。
- * 个人形象（头像 / 昵称）已迁入「个人资料」页，此处不再重复。
- *
- * @param backgroundUri 同时也是「当前已设置的自选背景」——决定是否显示「移除背景」行；
- *   全 App 只有这一个背景来源（nav 层与 SettingsManager 同源），因此不再单列第二个参数。
- * @param cardOverlay 卡片白色蒙版开关状态（默认关闭）。
- */
 @Composable
-internal fun PersonalizationCard(
-    themeMode: ThemeMode,
-    backgroundUri: String?,
-    cardOverlay: Boolean,
+internal fun DataPreferencesCard(
+    autoSync: Boolean,
     quickAmountsMinor: List<Long>,
-    onThemeClick: () -> Unit,
-    onCustomThemeClick: () -> Unit,
-    onBackgroundClick: () -> Unit,
-    onRemoveBackground: () -> Unit,
-    onCardOverlayChange: (Boolean) -> Unit,
+    widgetPrivacyEnabled: Boolean,
+    onAutoSyncChange: (Boolean) -> Unit,
+    onWidgetPrivacyChange: (Boolean) -> Unit,
     onQuickAmountsClick: () -> Unit
 ) {
-    SettingsGroupCard(title = "个性化") {
-        // —— 主题外观 ——
-        SettingsRow(
-            icon = R.drawable.ic_theme,
-            label = "主题",
-            value = themeLabel(themeMode),
-            onClick = onThemeClick
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_theme,
-            label = "自定义主题",
-            value = "字体 · 主题 · 边框",
-            onClick = onCustomThemeClick
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_image,
-            label = "选择背景",
-            value = if (backgroundUri != null) "已设置" else "未设置",
-            onClick = onBackgroundClick
-        )
-        if (backgroundUri != null) {
-            RinklDivider()
-            SettingsRow(
-                icon = R.drawable.ic_image,
-                iconTint = MaterialTheme.colorScheme.error,
-                label = "移除背景",
-                labelColor = MaterialTheme.colorScheme.error,
-                onClick = onRemoveBackground
-            )
-        }
-        // —— 小组件 ——
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_wallet,
-            label = "小组件快捷金额",
-            value = quickAmountsMinor.joinToString(" / ") { "¥${Money.toYuanInputString(it)}" },
-            onClick = onQuickAmountsClick
-        )
-        // —— 可读性 ——
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_eye_show,
-            label = "卡片白色蒙版",
-            trailing = { Switch(checked = cardOverlay, onCheckedChange = onCardOverlayChange) }
-        )
-        // 开关行的 12sp 说明小字（左缩进 52dp = 行内边距 16 + 图标 24 + 间距 12，与标签对齐）。
-        Text(
-            text = "增强照片背景下卡片可读性",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 12.dp)
-        )
+    ProfileGroup("数据偏好") {
+        ProfileRow("自动同步", trailing = { Switch(checked = autoSync, onCheckedChange = onAutoSyncChange) })
+        ProfileDivider()
+        ProfileRow("桌面隐私保护", supporting = "隐藏金额、预算比例和分类排行；关闭后桌面可见",
+            trailing = { Switch(checked = widgetPrivacyEnabled, onCheckedChange = onWidgetPrivacyChange) })
+        ProfileDivider()
+        ProfileRow("小组件金额", quickAmountsMinor.joinToString(" / ") { Money.format(it) }, onClick = onQuickAmountsClick)
     }
 }
 
-/** «通用» 组：导出账单、年度账单分享图、版本信息、退出登录（红字置底）。 */
+/** 版本是次要信息，不占用整张设置卡；退出仍走页面原有确认与同步流程。 */
 @Composable
-internal fun AboutCard(
-    isLoggedIn: Boolean,
-    versionName: String,
-    onExportClick: () -> Unit,
-    onAnnualReportClick: () -> Unit,
-    onLogoutClick: () -> Unit
-) {
-    SettingsGroupCard(title = "通用") {
-        SettingsRow(
-            icon = R.drawable.ic_export,
-            label = "导出账单 (CSV)",
-            onClick = onExportClick
-        )
-        RinklDivider()
-        // 年度账单分享图：12 月热力格 + 年总收支 + Top5 分类 + 小盘贺词（Task 2.7）
-        SettingsRow(
-            icon = R.drawable.ic_chart,
-            label = "年度账单",
-            value = "分享图",
-            onClick = onAnnualReportClick
-        )
-        RinklDivider()
-        SettingsRow(
-            icon = R.drawable.ic_info,
-            label = "版本",
-            value = versionName
-        )
+internal fun ProfileFooter(isLoggedIn: Boolean, versionName: String, onLogoutClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (isLoggedIn) {
-            RinklDivider()
-            SettingsRow(
-                icon = R.drawable.ic_logout,
-                iconTint = MaterialTheme.colorScheme.error,
-                label = "退出登录",
-                labelColor = MaterialTheme.colorScheme.error,
-                onClick = onLogoutClick
-            )
+            RinklTextButton(onClick = onLogoutClick) { Text("退出登录", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) }
         }
+        Text("记一笔 · v$versionName", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f))
     }
 }

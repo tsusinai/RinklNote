@@ -7,6 +7,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -21,6 +22,10 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.example.rinklnote.ui.component.motionClickable
+import com.example.rinklnote.ui.component.LiquidGlassBottomBar
+import com.example.rinklnote.ui.component.LiquidGlassTab
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -50,11 +55,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import com.example.rinklnote.ui.component.AlertDialog
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,8 +80,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -116,11 +123,18 @@ import com.example.rinklnote.ui.screen.plan.PlanScreen
 import com.example.rinklnote.ui.screen.autocapture.AutoCaptureScreen
 import com.example.rinklnote.ui.screen.autocapture.AutoCaptureViewModel
 import com.example.rinklnote.ui.screen.quickadd.ReceiptOcrDialog
+import com.example.rinklnote.ui.screen.quickadd.QuickAddDrawer
+import com.example.rinklnote.ui.component.NumericKeypad
+import com.example.rinklnote.ui.component.KeypadContextItem
+import com.example.rinklnote.ui.component.accountIconKeyRes
+import com.example.rinklnote.ui.component.accountColor
+import com.example.rinklnote.ui.theme.billCategoryIconColor
+import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.screen.search.BillSearchViewModel
 import com.example.rinklnote.ui.screen.search.SearchBillsScreen
 import com.example.rinklnote.ui.screen.day.DayBillsScreen
 import com.example.rinklnote.ui.screen.web.WebScreen
-import com.example.rinklnote.ui.screen.profile.BotBindPage
 import com.example.rinklnote.ui.screen.profile.BackgroundCropScreen
 import com.example.rinklnote.ui.screen.profile.CropMode
 import com.example.rinklnote.ui.screen.profile.CustomThemeScreen
@@ -142,6 +156,7 @@ import com.example.rinklnote.ui.viewmodel.QuickAddEffect
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import com.example.rinklnote.util.today
+import com.example.rinklnote.PendingQuickAdd
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -156,24 +171,29 @@ data class Tabs(
 )
 
 private val tabs= listOf<Tabs>(
-    Tabs("计划",R.drawable.ic_register),
-    Tabs("记账",R.drawable.ic_wallet),
-    Tabs("资产",R.drawable.ic_finance),
-    Tabs("我的",R.drawable.ic_more_menu)
+    Tabs("计划",R.drawable.ic_nav_plan),
+    Tabs("记账",R.drawable.ic_nav_bookkeeping),
+    Tabs("资产",R.drawable.ic_nav_assets),
+    Tabs("我的",R.drawable.ic_nav_profile)
     )
 
 // NavHost routes for the 4 bottom tabs, index-aligned with `tabs` (计划/记账/资产/我的).
 // 记账(index 1) 是 start destination；AI 不在 tab 列表里，单独有 route。
 private val tabRoutes = listOf("plan", "bookkeeping", "assets", "profile")
 
+/** 省钱计划功能开关（暂时关闭相关功能与入口；需恢复时改为 true）。 */
+private const val ENABLE_CHALLENGES = false
+
 private val SecondaryEnterTransition =
-    fadeIn(animationSpec = Motion.Fade) + scaleIn(initialScale = 0.96f, animationSpec = Motion.Fade)
+    fadeIn(Motion.Reveal) + scaleIn(initialScale = 0.98f, animationSpec = Motion.Reveal) +
+        slideInVertically(Motion.ContentSlide) { it / 50 }
 private val SecondaryExitTransition =
-    fadeOut(animationSpec = Motion.Fade) + scaleOut(targetScale = 1.02f, animationSpec = Motion.Fade)
+    fadeOut(Motion.Dismiss) + scaleOut(targetScale = 0.995f, animationSpec = Motion.Dismiss)
 private val SecondaryPopEnterTransition =
-    fadeIn(animationSpec = Motion.Fade) + scaleIn(initialScale = 1.02f, animationSpec = Motion.Fade)
+    fadeIn(Motion.Reveal) + scaleIn(initialScale = 0.995f, animationSpec = Motion.Reveal)
 private val SecondaryPopExitTransition =
-    fadeOut(animationSpec = Motion.Fade) + scaleOut(targetScale = 0.96f, animationSpec = Motion.Fade)
+    fadeOut(Motion.Dismiss) + scaleOut(targetScale = 0.98f, animationSpec = Motion.Dismiss) +
+        slideOutVertically(Motion.ContentSlide) { it / 50 }
 
 /** 四个主页的横向转场序号：计划 0 / 记账 1 / 资产 2 / 我的 3。 */
 internal fun routeIndex(route: String?): Int {
@@ -209,11 +229,17 @@ fun AppNavigation(app: RinklNoteApp) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val openBotWeb: () -> Unit = {
+        val url = RetrofitClient.BASE_URL + "console/settings?section=bots"
+        navController.navigate("web-view?url=${Uri.encode(url)}&title=${Uri.encode("Bot 接入")}")
+    }
     var showLogin by remember { mutableStateOf(false) }
-    var showBotBind by remember { mutableStateOf(false) }
     var voiceActive by remember { mutableStateOf(false) }
     var voiceTarget by remember { mutableStateOf(VoiceTarget.QUICK_ADD) }
     var showReceiptCapture by remember { mutableStateOf(false) }
+    var showQuickAddDrawer by remember { mutableStateOf(false) }
+    var showQuickAddKeypad by remember { mutableStateOf(false) }
+    var pendingQuickAddKeypad by remember { mutableStateOf(false) }
     var receiptCapturePicked by remember { mutableStateOf(false) }
     var showQqBotGuide by remember { mutableStateOf(false) }
     // 语音连续多笔：累计笔数 + 最近一笔的短暂确认提示。
@@ -230,7 +256,6 @@ fun AppNavigation(app: RinklNoteApp) {
 
     val context = LocalContext.current
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val tabWidth = screenWidth / tabs.size
     val tabSwipeThresholdPx = with(LocalDensity.current) { 64.dp.toPx() }
 
     val bookkeepingVM: BookkeepingViewModel = viewModel(
@@ -239,11 +264,41 @@ fun AppNavigation(app: RinklNoteApp) {
     val quickAddVM: QuickAddViewModel = viewModel(
         factory = QuickAddViewModel.Factory(app.repository, app.accountRepository, app.syncManager, app.apiService, app.placeRepository)
     )
-    // 新增账单直接进入完整编辑页，避免再打开侧边快捷抽屉。
+    val quickAddState by quickAddVM.state.collectAsStateWithLifecycle()
+    // 轮盘退出后再展开输入区；切页或返回会取消等待，浮层始终互斥。
+    LaunchedEffect(pendingQuickAddKeypad) {
+        if (pendingQuickAddKeypad) {
+            delay(Motion.DurationDrawer.toLong())
+            showQuickAddKeypad = true
+            pendingQuickAddKeypad = false
+        }
+    }
+    BackHandler(enabled = showQuickAddKeypad || pendingQuickAddKeypad) {
+        pendingQuickAddKeypad = false
+        showQuickAddKeypad = false
+        showQuickAddDrawer = true
+    }
+    val openQuickAddKeypad: () -> Unit = {
+        showQuickAddDrawer = false
+        pendingQuickAddKeypad = true
+    }
+    // 新增先选轮盘标签，再直接打开原数字键盘，完整编辑页仍用于编辑已有账单。
     val openBillEditor: (Bill?) -> Unit = { template ->
+        pendingQuickAddKeypad = false
+        showQuickAddKeypad = false
         quickAddVM.reset()
-        bookkeepingVM.onEvent(BookkeepingEvent.NewBill(template))
-        navController.navigate("bill-edit")
+        template?.let { bill ->
+            quickAddVM.applyQuickAddPrefill(
+                PendingQuickAdd(
+                    amount = com.example.rinklnote.util.Money.toYuanInputString(bill.amountMinor),
+                    categoryId = bill.categoryId,
+                    categoryName = bill.categoryName,
+                    remark = bill.remark,
+                    billType = bill.billType.value
+                )
+            )
+        }
+        showQuickAddDrawer = true
     }
     val assetsVM: AssetsViewModel = viewModel(
         factory = AssetsViewModel.Factory(app.accountRepository, app.syncManager)
@@ -326,6 +381,9 @@ fun AppNavigation(app: RinklNoteApp) {
             voiceConfirm = null
             quickAddVM.reset()
             quickAddVM.resetConfirming()
+            showQuickAddDrawer = false
+            showQuickAddKeypad = false
+            pendingQuickAddKeypad = false
         }
         // 离开 AI 页时丢弃未消费的记账在途标记，避免后续抽屉/语音记账被误判为聊天发起
         if (currentRoute != "ai") {
@@ -370,6 +428,8 @@ fun AppNavigation(app: RinklNoteApp) {
     SideEffect { permissionRetry.value = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) } }
 
     val startVoice: (VoiceTarget) -> Unit = { target ->
+        showQuickAddKeypad = false
+        pendingQuickAddKeypad = false
         voiceTarget = target
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
@@ -389,14 +449,17 @@ fun AppNavigation(app: RinklNoteApp) {
         quickAddVM.reset()
     }
 
-    // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并直接进入账单编辑页。
+    // 主屏小组件点分类 / 深链 rinklnote://add：落到记账页并预填快捷侧边栏。
     // 长按快捷方式「语音记账」深链带 voice=1：落记账页后直接进语音条。
     LaunchedEffect(pendingQuickAdd) {
         val pending = pendingQuickAdd ?: return@LaunchedEffect
         navController.navigate("bookkeeping") { launchSingleTop = true }
         when {
             pending.voice -> startVoice(VoiceTarget.QUICK_ADD)
-            else -> openBillEditor(null)
+            else -> {
+                openBillEditor(null)
+                quickAddVM.applyQuickAddPrefill(pending)
+            }
         }
         app.setPendingQuickAdd(null)
     }
@@ -424,7 +487,7 @@ fun AppNavigation(app: RinklNoteApp) {
     // 才挂载手势——浮层在途（Drawer/Keypad/两种过渡态）时横滑不应切走页面。四个主页内部
     // 没有横向滚动手势子组件（横向 Pager/LazyRow 只在二级页 month-detail / bill-edit，
     // 那些路由本就不挂此手势），无需再按路由禁用。
-    val tabSwipeModifier = if (currentTabIndex >= 0) {
+    val tabSwipeModifier = if (currentTabIndex >= 0 && !showQuickAddDrawer && !showQuickAddKeypad && !pendingQuickAddKeypad) {
         Modifier.pointerInput(currentTabIndex) {
             var dragDistance = 0f
             detectHorizontalDragGestures(
@@ -463,6 +526,9 @@ fun AppNavigation(app: RinklNoteApp) {
                     // 同步失败仍保留本机）替代；这里只负责关抽屉与刷新（一步确认语义不变）。
                     bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
                     quickAddVM.reset()
+                    showQuickAddDrawer = false
+                    showQuickAddKeypad = false
+                    pendingQuickAddKeypad = false
                 }
                 is QuickAddEffect.FinalConfirmFailed -> {
                     // 校验失败类一次性提示：自动消失，不打断继续输入。
@@ -519,7 +585,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 enterTransition = {
                     if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
                         val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                        slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                        slideInHorizontally(Motion.NavigationSlide, initialOffsetX = { dir * it / 6 }) + fadeIn(Motion.Reveal)
                     } else {
                         SecondaryEnterTransition
                     }
@@ -527,7 +593,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 exitTransition = {
                     if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
                         val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                        slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                        slideOutHorizontally(Motion.NavigationExit, targetOffsetX = { -dir * it / 6 }) + fadeOut(Motion.Dismiss)
                     } else {
                         SecondaryExitTransition
                     }
@@ -535,7 +601,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 popEnterTransition = {
                     if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
                         val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                        slideInHorizontally(initialOffsetX = { dir * it }) + fadeIn()
+                        slideInHorizontally(Motion.NavigationSlide, initialOffsetX = { dir * it / 6 }) + fadeIn(Motion.Reveal)
                     } else {
                         SecondaryPopEnterTransition
                     }
@@ -543,7 +609,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 popExitTransition = {
                     if (usesHorizontalTabTransition(initialState.destination.route, targetState.destination.route)) {
                         val dir = transitionDirection(initialState.destination.route, targetState.destination.route)
-                        slideOutHorizontally(targetOffsetX = { -dir * it }) + fadeOut()
+                        slideOutHorizontally(Motion.NavigationExit, targetOffsetX = { -dir * it / 6 }) + fadeOut(Motion.Dismiss)
                     } else {
                         SecondaryPopExitTransition
                     }
@@ -563,14 +629,20 @@ fun AppNavigation(app: RinklNoteApp) {
                 // Rk省钱计划（大字报乐园 hub）：记账页「更多」抽屉下属的二级页（非 tab 路由 →
                 // 底栏自动隐藏，默认缩放淡入转场）。hub 只做导航，五个区域各自独立 flat route。
                 composable("challenges") {
-                    ChallengeScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenArena = { navController.navigate("challenge-arena") },
-                        onOpenAchievements = { navController.navigate("challenge-achievements") },
-                        onOpenPredictor = { navController.navigate("challenge-predictor") },
-                        onOpenEnvelope = { navController.navigate("budget-categories") },
-                        onOpenThemes = { navController.navigate("challenge-themes") }
-                    )
+                    if (!ENABLE_CHALLENGES) {
+                        LaunchedEffect(Unit) {
+                            navController.popBackStack()
+                        }
+                    } else {
+                        ChallengeScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenArena = { navController.navigate("challenge-arena") },
+                            onOpenAchievements = { navController.navigate("challenge-achievements") },
+                            onOpenPredictor = { navController.navigate("challenge-predictor") },
+                            onOpenEnvelope = { navController.navigate("budget-categories") },
+                            onOpenThemes = { navController.navigate("challenge-themes") }
+                        )
+                    }
                 }
                 // 挑战竞技场：三张挑战大字报卡（hub 内 push 语义，非 tab 路由 → 缩放淡入转场）。
                 composable("challenge-arena") {
@@ -601,7 +673,13 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
                 // 成就徽章馆：徽章墙按已解锁/未解锁陈列，零存储实时派生。
                 composable("challenge-achievements") {
-                    AchievementsScreen(onBack = { navController.popBackStack() })
+                    if (!ENABLE_CHALLENGES) {
+                        LaunchedEffect(Unit) {
+                            navController.popBackStack()
+                        }
+                    } else {
+                        AchievementsScreen(onBack = { navController.popBackStack() })
+                    }
                 }
                 // 结余预测器：月末结余预测大字报 + 情景提示 + 少买一点试算。
                 composable("challenge-predictor") {
@@ -800,6 +878,14 @@ fun AppNavigation(app: RinklNoteApp) {
                         .collectAsStateWithLifecycle(initialValue = 0)
                     BookkeepingScreen(
                         onOpenDrawer = { openBillEditor(null) },
+                        onOpenEditor = {
+                            pendingQuickAddKeypad = false
+                            showQuickAddKeypad = false
+                            showQuickAddDrawer = false
+                            quickAddVM.reset()
+                            bookkeepingVM.onEvent(BookkeepingEvent.NewBill())
+                            navController.navigate("bill-edit")
+                        },
                         onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
                         onCaptureBill = { receiptCapturePicked = false; showReceiptCapture = true },
                         onFinanceClick = { navigateTo("assets") },
@@ -816,8 +902,13 @@ fun AppNavigation(app: RinklNoteApp) {
                         onOpenImport = { navController.navigate("bill-import") },
                         onOpenMultiCurrency = { navController.navigate("multi-currency") },
                         onOpenSearch = { navController.navigate("bill-search") },
-                        onOpenChallenges = { navController.navigate("challenges") },
+                        onOpenChallenges = {
+                            if (ENABLE_CHALLENGES) {
+                                navController.navigate("challenges")
+                            }
+                        },
                         onOpenAutoCapture = { navController.navigate("auto-capture") },
+                        onOpenBot = openBotWeb,
                         pendingCaptureCount = autoCapturePendingCount,
                         onOpenLogin = { showLogin = true },
                         onOpenDay = { dayStart -> navController.navigate("day-detail/$dayStart") },
@@ -868,6 +959,7 @@ fun AppNavigation(app: RinklNoteApp) {
                 }
                 composable("month-detail") {
                     val state by bookkeepingVM.monthState.collectAsStateWithLifecycle()
+                    val referenceState by bookkeepingVM.editState.collectAsStateWithLifecycle()
                     val monthLabel = remember(state.selectedMonthOffset) {
                         val d = today().plusMonths(state.selectedMonthOffset.toLong())
                         "${d.year}年${d.monthValue}月"
@@ -881,6 +973,13 @@ fun AppNavigation(app: RinklNoteApp) {
                         monthDetail = state.monthDetail,
                         backgroundUri = appBackgroundUri,
                         hazeState = hazeState,
+                        accounts = referenceState.accounts,
+                        onSelectMonth = { selectedMonth ->
+                            val offset = java.time.temporal.ChronoUnit.MONTHS.between(
+                                today().withDayOfMonth(1), selectedMonth.withDayOfMonth(1)
+                            ).toInt()
+                            bookkeepingVM.onEvent(BookkeepingEvent.SelectMonth(offset))
+                        },
                         onEditBill = { bill ->
                             // 账单联动：跳账单编辑页，保存/删除后返回月度详情，数据经 Flow 自动刷新。
                             bookkeepingVM.onEvent(BookkeepingEvent.EditBill(bill))
@@ -940,7 +1039,7 @@ fun AppNavigation(app: RinklNoteApp) {
                         hazeState = hazeState,
                         onBack = { navController.popBackStack() },
                         onLoginClick = { showLogin = true },
-                        onBindBotClick = { showBotBind = true },
+                        onBindBotClick = openBotWeb,
                         onQqBotGuideClick = { showQqBotGuide = true },
                         onPickAvatar = { uri ->
                             // 相册选完 → 取景框裁剪（mode=avatar：1:1 圆形蒙版），确认后 VM 压缩上传
@@ -1015,10 +1114,78 @@ fun AppNavigation(app: RinklNoteApp) {
             if (currentTabIndex >= 0) {
                 CustomBottomBar(
                     currentIndex = currentTabIndex,
-                    tabWidth = tabWidth,
-                    // 只有铺了自选背景才玻璃化：没有背景图时毛玻璃无从采样，会露出灰调兜底色。
-                    hazeState = hazeState.takeIf { appBackgroundUri != null },
+                    // 默认与自选背景均可采样；玻璃底栏自行提供低版本降级材质。
+                    hazeState = hazeState,
                     onTabClick = onTabClick
+                )
+            }
+        }
+
+        QuickAddDrawer(
+            isVisible = showQuickAddDrawer && currentRoute == "bookkeeping",
+            viewModel = quickAddVM,
+            onDismiss = {
+                showQuickAddDrawer = false
+                quickAddVM.reset()
+            },
+            onBillAdded = {
+                showQuickAddDrawer = false
+                quickAddVM.reset()
+                bookkeepingVM.onEvent(BookkeepingEvent.Refresh)
+            },
+            onVoiceInput = { startVoice(VoiceTarget.QUICK_ADD) },
+            onAmountTap = openQuickAddKeypad,
+            onCategoryInput = { category ->
+                quickAddVM.onEvent(QuickAddEvent.SelectCategory(category))
+                openQuickAddKeypad()
+            },
+            backgroundUri = appBackgroundUri,
+            hazeState = hazeState.takeIf { appBackgroundUri != null }
+        )
+
+        AnimatedVisibility(
+            visible = showQuickAddKeypad && currentRoute == "bookkeeping",
+            enter = fadeIn(Motion.Reveal) + slideInVertically(Motion.SheetEnter) { it / 3 },
+            exit = fadeOut(Motion.Dismiss) + slideOutVertically(Motion.SheetExit) { it / 3 },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(Modifier.fillMaxSize().clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null,
+                onClickLabel = "收起金额键盘"
+            ) {
+                showQuickAddKeypad = false
+                quickAddVM.reset()
+            }) {
+                NumericKeypad(
+                    amount = quickAddState.amount,
+                    billType = quickAddState.billType.value,
+                    remark = quickAddState.remark,
+                    onDigit = { quickAddVM.onEvent(QuickAddEvent.Digit(it)) },
+                    onClear = { quickAddVM.onEvent(QuickAddEvent.Clear) },
+                    onBackspace = { quickAddVM.onEvent(QuickAddEvent.Backspace) },
+                    onConfirm = { quickAddVM.onEvent(QuickAddEvent.Confirm) },
+                    onToggleType = { quickAddVM.onEvent(QuickAddEvent.ToggleType) },
+                    onRemarkChange = { quickAddVM.onEvent(QuickAddEvent.RemarkChanged(it)) },
+                    showTypeToggle = false,
+                    contextItems = buildList {
+                        quickAddState.selectedCategory?.let {
+                            add(KeypadContextItem(it.name, categoryIconRes(it.name),
+                                LocalRinklColors.current.billCategoryIconColor(it.name, false)))
+                        }
+                        quickAddState.selectedAccount?.let {
+                            add(KeypadContextItem(it.name,
+                                accountIconKeyRes(if (it.name == "无账户") "WALLET" else it.iconKey),
+                                if (it.name == "无账户") {
+                                    if (quickAddState.billType == com.example.rinklnote.domain.BillType.EXPENSE)
+                                        LocalRinklColors.current.expenseColor else LocalRinklColors.current.incomeColor
+                                } else accountColor(it.iconColor)))
+                        }
+                    },
+                    confirmEnabled = (Money.parseMinor(quickAddState.amount) ?: 0L) > 0L &&
+                        quickAddState.selectedCategory != null && quickAddState.selectedAccount != null,
+                    confirmLabel = "记一笔",
+                    hazeState = hazeState.takeIf { appBackgroundUri != null },
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
                 )
             }
         }
@@ -1036,9 +1203,6 @@ fun AppNavigation(app: RinklNoteApp) {
         // Full-screen login / bot-bind pages — top-most so they cover the bottom nav
         if (showLogin) {
             LoginPage(viewModel = authVM, onDismiss = { showLogin = false })
-        }
-        if (showBotBind) {
-            BotBindPage(viewModel = authVM, onDismiss = { showBotBind = false })
         }
         if (showReceiptCapture) {
             ReceiptOcrDialog(
@@ -1125,7 +1289,7 @@ fun AppNavigation(app: RinklNoteApp) {
                     showQqBotGuide = false
                     // Web 端 settings 是 /console 的子路由（真实路径 /console/settings）；
                     // 深链到不存在的 /settings 会让 vue-router 空渲染（WebView 白屏的根因）
-                    val guideUrl = RetrofitClient.BASE_URL + "console/settings"
+                    val guideUrl = RetrofitClient.BASE_URL + "console/settings?section=bots"
                     navController.navigate(
                         "web-view?url=${Uri.encode(guideUrl)}&title=${Uri.encode("QQ 机器人引导")}"
                     )
@@ -1203,7 +1367,7 @@ private fun QqBotGuideDialog(
 //                    modifier = Modifier
 //                        .width(tabWidth)
 //                        .fillMaxSize()
-//                        .clickable { onTabClick(index) },
+//                        .motionClickable { onTabClick(index) },
 //                    contentAlignment = Alignment.Center
 //                ) {
 //                    Text(
@@ -1232,81 +1396,14 @@ private fun QqBotGuideDialog(
 //    }
 //}
 
-@OptIn(ExperimentalHazeMaterialsApi::class)
+/** 四个入口的路由顺序保持不变，玻璃材质与动画由独立组件承担。 */
 @Composable
 private fun CustomBottomBar(
-    currentIndex: Int ,
-    tabWidth: Dp,
+    currentIndex: Int,
     hazeState: HazeState?,
     onTabClick: (Int) -> Unit
 ) {
-    val indicatorOffset by animateDpAsState(
-        targetValue = tabWidth * currentIndex + (tabWidth - 40.dp) / 2,
-        animationSpec = Motion.Indicator,
-        label = "indicator"
-    )
-
-    val barSurface = if (hazeState != null) {
-        // 毛玻璃（重点区）：采样 nav 层的自定义背景，底栏不再是一块挡住壁纸的实心白。
-        // 统一用 RinklCardFrostedStyle 白雾玻璃，与首页首支总览/总资产/本月预算一致。
-        Modifier.hazeEffect(hazeState, com.example.rinklnote.ui.component.RinklCardFrostedStyle)
-    } else {
-        Modifier.background(MaterialTheme.colorScheme.surface)
-    }
-
-    // 图标色分离（2026-09-15）：底栏**图标**走 NAV_ICON 槽（独立于字体色），未自定义时回落
-    // 「图标/按钮色」槽 → 字体色；底栏**文字**仍跟随原 iconTint 链（FONT 语义）。
-    val navIconTint = LocalRinklColors.current.navIconColor
-        ?: (LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurface)
-    val iconTint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurface
-
-    Box(modifier = Modifier.fillMaxWidth().padding(bottom = 15.dp, start = 10.dp, end = 10.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .then(barSurface)
-        ) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                tabs.forEachIndexed { index, label ->
-                    Column(
-                        modifier = Modifier
-                            .width(tabWidth)
-                            .fillMaxSize()
-                            .clickable { onTabClick(index) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(label.iconId),
-                            contentDescription = label.string,
-                            tint = navIconTint,
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Text(
-                            text = label.string,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = iconTint
-                        )
-                    }
-                }
-            }
-
-            // Blue indicator — align to bottom-start then offset. Hidden on the 我的 page
-            // (index 3) which has no bottom tab.
-            if (currentIndex < tabs.size) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .offset(x = indicatorOffset)
-                        .width(40.dp)
-                        .height(3.dp)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
-                )
-            }
-        }
-    }
+    val glassTabs = remember { tabs.map { LiquidGlassTab(it.string, it.iconId) } }
+    LiquidGlassBottomBar(tabs = glassTabs, selectedIndex = currentIndex,
+        hazeState = hazeState, onTabClick = onTabClick)
 }
-

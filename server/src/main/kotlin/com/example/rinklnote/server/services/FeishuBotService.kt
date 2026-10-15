@@ -90,6 +90,22 @@ class FeishuBotService(
     private val nowSeconds: () -> Long = { Instant.now().epochSecond }
 ) {
     private val logger = LoggerFactory.getLogger(FeishuBotService::class.java)
+    var interactions: com.example.rinklnote.server.services.bot.BotInteractionService? = null
+
+    /** 原消息会话内发送卡片；失败由调用方回落文本，不重复落账。 */
+    suspend fun sendCard(openId: String, card: JsonObject, replyToMsgId: String? = null): Boolean {
+        if (!isConfigured()) return false
+        return try {
+            val url = if (replyToMsgId.isNullOrBlank()) "$BASE_URL/open-apis/im/v1/messages?receive_id_type=open_id"
+            else "$BASE_URL/open-apis/im/v1/messages/$replyToMsgId/reply"
+            val body = buildJsonObject {
+                if (replyToMsgId.isNullOrBlank()) put("receive_id", openId)
+                put("msg_type", "interactive"); put("content", card.toString())
+            }
+            val response = http.post(url, body.toString(), mapOf("Authorization" to "Bearer ${getTenantAccessToken()}"))
+            response.status in 200..299 && json.parseToJsonElement(response.body).jsonObject["code"]?.jsonPrimitive?.intOrNull == 0
+        } catch (e: Exception) { logger.warn("飞书卡片发送失败: ${e.message}"); false }
+    }
 
     companion object {
         /** 飞书开放平台 API 域名。 */

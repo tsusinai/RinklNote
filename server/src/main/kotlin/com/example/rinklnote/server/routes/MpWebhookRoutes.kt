@@ -90,7 +90,8 @@ fun Route.mpWebhookRoutes(
 
             // 同步处理并产出回复文本；null（重复消息/事件类）→ 回空串（微信不作处理，不触发重试展示）
             val reply = try {
-                MpMessageProcessor.process(fields, userService, billService, nluService, budgetService, insightService)
+                MpMessageProcessor.process(fields, userService, billService, nluService, budgetService, insightService,
+                    interactions = mpBotService.interactions)
             } catch (e: Exception) {
                 // 处理器内部已兜底，此处防路由层意外：回空串避免 5s 窗口被 500 重试拖垮
                 logger.error("订阅号回调处理异常", e)

@@ -195,7 +195,8 @@ class RichQueryServiceTest {
         val dailyMinor = 7000L / daysLeft
         val reply = answer("每天还能花多少")
         assertNotNull(reply)
-        assertTrue(reply!!.contains("本月预算还剩 ¥70.00"))
+        assertTrue(reply!!.startsWith("📊"))
+        assertTrue(reply.contains("本月预算还剩 ¥70.00"))
         assertTrue(reply.contains("这个月还剩 $daysLeft 天"))
         assertTrue(reply.contains("平均每天还能花 ¥${Money.format(dailyMinor)}"))
     }
@@ -215,7 +216,9 @@ class RichQueryServiceTest {
 
         val reply = answer("一天还能花多少")
         assertNotNull(reply)
-        assertTrue(reply!!.contains("本月预算已超 ¥20.00"))
+        assertTrue(reply!!.startsWith("⚠️"))
+        assertTrue(reply.contains("本月预算已超 ¥20.00"))
+        assertFalse(reply.contains("零消费"))
         assertFalse(reply.contains("平均每天"))
     }
 

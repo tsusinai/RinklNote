@@ -24,7 +24,9 @@ data class ButlerIncoming(
     /** 语音附件直链：平台 asr_refer_text 缺失时的 Whisper 兜底输入。 */
     val voiceUrl: String?,
     /** 图片附件直链：支付截图 / 小票识图输入。 */
-    val imageUrl: String?
+    val imageUrl: String?,
+    /** 成功落库的具体账单交回消息处理器，供卡片绑定目标。 */
+    val onBillCreated: ((com.example.rinklnote.server.services.BillDTO) -> Unit)? = null
 ) {
     val isGroup: Boolean get() = chatType == ButlerChatType.GROUP
 }

@@ -1,12 +1,13 @@
 package com.example.rinklnote.ui.screen.plan
 
+import androidx.compose.animation.animateContentSize
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,11 +32,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.example.rinklnote.ui.component.AlertDialog
 import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
+import com.example.rinklnote.ui.component.RinklLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -54,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.ui.component.NumericKeypad
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -191,7 +195,7 @@ fun BudgetEditScreen(
                 modifier = Modifier
                     .matchParentSize()
                     .background(Color.Black.copy(alpha = 0.25f))
-                    .clickable(
+                    .motionClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { showKeypad = false }
@@ -332,10 +336,11 @@ private fun AmountCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(Motion.ContentResize)
             .rinkShadow(shape)
             .clip(shape)
             .then(sectionSurface(hasCustomBackground, shape))
-            .clickable { onClick() }
+            .motionClickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(
@@ -343,13 +348,18 @@ private fun AmountCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = dimensionLabel(target),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_redesign_budget_target), contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(dimensionLabel(target), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(if (existingAmountMinor == null) "先设额度，再看进度" else "按本月支出实时更新", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             StatusChip(existing = existingAmountMinor, over = over)
         }
 
@@ -359,7 +369,7 @@ private fun AmountCard(
         val displayAmount = when {
             input != null -> input.ifEmpty { "0" }
             existingAmountMinor != null -> Money.format(existingAmountMinor)
-            else -> "¥0"
+            else -> Money.format(0L)
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -430,7 +440,7 @@ private fun AmountCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 ContextRow(
                     label = "预计月末",
-                    value = Money.format(monthExpenseMinor / elapsedDays * daysInMonth)
+                    value = Money.format((monthExpenseMinor * daysInMonth + elapsedDays / 2) / elapsedDays)
                 )
             }
         }
@@ -619,7 +629,7 @@ private fun BillsCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(6.dp))
-                    .clickable { onBillClick(bill) }
+                    .motionClickable { onBillClick(bill) }
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -701,6 +711,7 @@ private fun SectionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize(Motion.ContentResize)
             .rinkShadow(shape)
             .clip(shape)
             .then(sectionSurface(hasCustomBackground, shape))

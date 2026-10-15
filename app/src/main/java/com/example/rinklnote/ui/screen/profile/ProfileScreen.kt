@@ -12,7 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,11 +30,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.rinklnote.ui.component.AlertDialog
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -51,6 +51,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,12 +67,12 @@ import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.notification.PayNotifyListenerService
 import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.component.DefaultHazeBackground
+import com.example.rinklnote.ui.component.MotionListItem
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.achievementBadgeName
 import com.example.rinklnote.ui.component.achievementBadgeRes
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
-import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthState
@@ -80,8 +82,7 @@ import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.aggregateAnnualStats
 import com.example.rinklnote.util.exportBillsToCsv
 import com.example.rinklnote.util.today
-import com.example.rinklnote.widget.RinklNoteAppWidget
-import androidx.glance.appwidget.updateAll
+import com.example.rinklnote.widget.updateRinklWidgets
 import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -93,11 +94,11 @@ import kotlinx.coroutines.withContext
  *
  * 2026-09-17 改版：个人卡片重做为「头像 + 昵称 + 签名 + 展示徽章行」，整卡点击进
  * `personal-profile` 资料页；QQ/飞书/企微绑定状态、修改密码、AI 开关等账号事务
- * **彻底迁出**本页（原 AccountCard 移入资料页）。本页只留：数据与同步、通知、
- * 个性化（主题/背景/显示偏好）、通用（导出/关于）。
+ * **彻底迁出**本页（原 AccountCard 移入资料页）。
+ * 2026-10-11 收敛为个人入口、三项常用操作、外观、提醒与数据偏好，版本信息放在页尾。
  *
  * 风格对齐首页（Bookkeeping）：`DefaultHazeBackground` 作毛玻璃 blur 源（无自选照片时铺纯白，
- * 有照片时由 nav 层整窗铺满）；极简悬浮顶栏；卡片统一 [applyCardGlass] 透明框 + `rinkShadow`。
+ * 有照片时由 nav 层整窗铺满）；极简悬浮顶栏；卡片为浅色无阴影面板，保留 [applyCardGlass] 偏好。
  *
  * 文件职责（2026-09-11 重构后）：本文件只保留「页面骨架」——
  * 收集状态 → 组装 LazyColumn → 分发弹窗，外加顶栏/头部两个私有组件。
@@ -156,6 +157,8 @@ fun ProfileScreen(
     // 小组件预设金额快捷 chip（整数分，默认 ¥10/¥50）。
     val quickAmounts by settingsManager.quickAmounts
         .collectAsStateWithLifecycle(initialValue = SettingsManager.DEFAULT_QUICK_AMOUNTS)
+    val widgetPrivacyEnabled by settingsManager.widgetPrivacyEnabled
+        .collectAsStateWithLifecycle(initialValue = true)
     var showQuickAmountsEditor by remember { mutableStateOf(false) }
     // 年度账单分享图：年份选择 → 聚合 → Canvas 绘图 → 系统分享面板。
     var showAnnualYearPicker by remember { mutableStateOf(false) }
@@ -317,82 +320,90 @@ fun ProfileScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topBarHeight + 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 顶栏是浮层：列表首项垫到它下面（不留整块空白）。
-            item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
-
             item(key = "header") {
-                ProfileHeader(
-                    state = state,
-                    nickname = nickname,
-                    avatarUri = avatarUri,
-                    displayBadges = displayBadges,
-                    onLogin = onLoginClick,
-                    onEditProfile = onEditProfileClick
-                )
+                MotionListItem {
+                    ProfileHeader(
+                        state = state,
+                        nickname = nickname,
+                        avatarUri = avatarUri,
+                        displayBadges = displayBadges,
+                        onEditProfile = onEditProfileClick
+                    )
+                }
             }
-            item(key = "sync") {
-                SyncCard(
-                    autoSync = autoSync,
-                    isLoggedIn = state.isLoggedIn,
-                    status = syncStatus,
-                    lastSync = lastSync,
-                    lastFailure = lastSyncFailure,
-                    onAutoSyncChange = { coroutineScope.launch { settingsManager.setAutoSync(it) } },
-                    onSyncNow = { coroutineScope.launch { syncManager.sync() } },
-                    onRetry = { coroutineScope.launch { syncManager.sync() } },
-                    onLoginClick = onLoginClick
-                )
-            }
-            item(key = "dailyReport") {
-                DailyReportCard(
-                    enabled = dailyReportEnabled,
-                    hour = dailyReportHour,
-                    minute = dailyReportMinute,
-                    qqBot = dailyReportQqBot,
-                    payNotify = payNotifyEnabled,
-                    onEnabledChange = onDailyReportEnabledChange,
-                    onTimeClick = { dialog = ProfileDialog.TimePicker },
-                    onQqBotChange = onDailyReportQqBotChange,
-                    onPayNotifyChange = onPayNotifyChange
-                )
+            item(key = "tools") {
+                MotionListItem {
+                    ProfileToolsCard(
+                        isLoggedIn = state.isLoggedIn,
+                        status = syncStatus,
+                        lastSync = lastSync,
+                        lastFailure = lastSyncFailure,
+                        onSyncNow = { coroutineScope.launch { syncManager.sync() } },
+                        onRetry = { coroutineScope.launch { syncManager.sync() } },
+                        onLoginClick = onLoginClick,
+                        onExportClick = {
+                            coroutineScope.launch {
+                                val bills = repository.observeAllBills().first()
+                                exportBillsToCsv(context, bills)
+                            }
+                        },
+                        onAnnualReportClick = { showAnnualYearPicker = true }
+                    )
+                }
             }
             item(key = "personalization") {
-                PersonalizationCard(
-                    themeMode = themeMode,
-                    backgroundUri = backgroundUri,
-                    cardOverlay = cardOverlay,
-                    quickAmountsMinor = quickAmounts,
-                    onThemeClick = { dialog = ProfileDialog.Theme },
-                    onCustomThemeClick = onCustomThemeClick,
-                    onBackgroundClick = {
-                        pickBackgroundLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    onRemoveBackground = { coroutineScope.launch { settingsManager.setBackgroundUri(null) } },
-                    onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } },
-                    onQuickAmountsClick = { showQuickAmountsEditor = true }
-                )
+                MotionListItem {
+                    PersonalizationCard(
+                        themeMode = themeMode,
+                        backgroundUri = backgroundUri,
+                        cardOverlay = cardOverlay,
+                        onThemeClick = { dialog = ProfileDialog.Theme },
+                        onBackgroundClick = { dialog = ProfileDialog.Background },
+                        onCardOverlayChange = { on -> coroutineScope.launch { settingsManager.setCardOverlay(on) } }
+                    )
+                }
             }
-            item(key = "about") {
-                AboutCard(
-                    isLoggedIn = state.isLoggedIn,
-                    versionName = versionName,
-                    onExportClick = {
-                        coroutineScope.launch {
-                            val bills = repository.observeAllBills().first()
-                            exportBillsToCsv(context, bills)
-                        }
-                    },
-                    onAnnualReportClick = { showAnnualYearPicker = true },
-                    onLogoutClick = { dialog = ProfileDialog.Logout }
-                )
+            item(key = "dailyReport") {
+                MotionListItem {
+                    DailyReportCard(
+                        enabled = dailyReportEnabled,
+                        hour = dailyReportHour,
+                        minute = dailyReportMinute,
+                        qqBot = dailyReportQqBot,
+                        payNotify = payNotifyEnabled,
+                        onEnabledChange = onDailyReportEnabledChange,
+                        onTimeClick = { dialog = ProfileDialog.TimePicker },
+                        onQqBotChange = onDailyReportQqBotChange,
+                        onPayNotifyChange = onPayNotifyChange
+                    )
+                }
             }
-            // 底部余量：留给安全区。
-            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(48.dp)) }
+            item(key = "data-preferences") {
+                MotionListItem {
+                    DataPreferencesCard(
+                        autoSync = autoSync,
+                        quickAmountsMinor = quickAmounts,
+                        widgetPrivacyEnabled = widgetPrivacyEnabled,
+                        onAutoSyncChange = { coroutineScope.launch { settingsManager.setAutoSync(it) } },
+                        onWidgetPrivacyChange = { enabled ->
+                            coroutineScope.launch { settingsManager.setWidgetPrivacyEnabled(enabled) }
+                        },
+                        onQuickAmountsClick = { showQuickAmountsEditor = true }
+                    )
+                }
+            }
+            item(key = "footer") {
+                MotionListItem {
+                    ProfileFooter(
+                        isLoggedIn = state.isLoggedIn,
+                        versionName = versionName,
+                        onLogoutClick = { dialog = ProfileDialog.Logout }
+                    )
+                }
+            }
         }
 
         // 顶栏固定在页面顶部，压在背景/列表内容之上（对齐其他页 TopBar）。
@@ -415,8 +426,25 @@ fun ProfileScreen(
                     dismissDialog()
                     coroutineScope.launch { settingsManager.setThemeMode(mode) }
                 },
+                onCustomThemeClick = {
+                    dismissDialog()
+                    onCustomThemeClick()
+                },
                 onDismiss = dismissDialog
             )
+
+        ProfileDialog.Background -> BackgroundOptionsDialog(
+            hasBackground = backgroundUri != null,
+            onReplace = {
+                dismissDialog()
+                pickBackgroundLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onRemove = {
+                dismissDialog()
+                coroutineScope.launch { settingsManager.setBackgroundUri(null) }
+            },
+            onDismiss = dismissDialog
+        )
 
         ProfileDialog.Logout ->
             LogoutDialog(
@@ -517,7 +545,7 @@ fun ProfileScreen(
                     settingsManager.setQuickAmounts(minors)
                     // 快捷金额只存 DataStore，小组件仅在记账变更/系统更新时重绘；
                     // 改完主动刷新，否则桌面 chip 停留旧金额直到下一笔记账才变。
-                    RinklNoteAppWidget().updateAll(context)
+                    updateRinklWidgets(context)
                 }
                 Toast.makeText(context, "小组件快捷金额已更新", Toast.LENGTH_SHORT).show()
             },
@@ -597,7 +625,8 @@ private fun ProfileTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolle
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
     RinklTopBar(
-        scrimAlpha = scrimAlpha,
+        scrimAlpha = if (hasBackground) scrimAlpha else 0f,
+        modifier = Modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = if (hasBackground) 0f else scrimAlpha)),
         horizontalPadding = 8.dp
     ) {
         Text(
@@ -609,6 +638,9 @@ private fun ProfileTopBar(scrimAlpha: Float, hasBackground: Boolean, listScrolle
         )
     }
 }
+
+/** 徽章展示开关（暂时关闭徽章功能，待后续开放时置为 true 即可恢复）。 */
+private const val SHOW_BADGES = false
 
 /**
  * 通栏宽头（2026-09-17 重做）：整卡可点进「个人资料」页。
@@ -624,7 +656,6 @@ private fun ProfileHeader(
     nickname: String?,
     avatarUri: String?,
     displayBadges: List<String>,
-    onLogin: () -> Unit,
     onEditProfile: () -> Unit
 ) {
     val effectiveNickname = state.nickname ?: nickname
@@ -632,21 +663,21 @@ private fun ProfileHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .clickable(onClick = onEditProfile)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .then(applyCardGlass(RoundedCornerShape(20.dp)))
+            .motionClickable(role = Role.Button, onClick = onEditProfile)
+            .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (avatarSource != null) {
-                // 自定义头像：按 56dp 圆形裁切显示（Coil 加载服务端 URL 或本地缓存）。
+                // 自定义头像：按 52dp 圆形裁切显示（Coil 加载服务端 URL 或本地缓存）。
                 AsyncImage(
                     model = avatarSource,
                     contentDescription = "头像",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(52.dp)
                         .clip(CircleShape)
                 )
             } else {
@@ -658,47 +689,44 @@ private fun ProfileHeader(
                     } else {
                         "账"
                     },
-                    size = 56.dp
+                    size = 52.dp
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = when {
-                        !state.isLoggedIn -> "未登录"
+                        !state.isLoggedIn -> "个人资料"
                         else -> effectiveNickname?.takeIf { it.isNotBlank() } ?: maskPhone(state.accountPhone)
                     },
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = when {
-                        !state.isLoggedIn -> "登录后即可云端同步账单"
-                        else -> state.signature?.takeIf { it.isNotBlank() } ?: "点击编辑资料，写下个性签名"
+                        !state.isLoggedIn -> "本地记录 · 管理个人资料"
+                        else -> state.signature?.takeIf { it.isNotBlank() } ?: "个人资料与账户设置"
                     },
-                    fontSize = 14.sp,
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            if (!state.isLoggedIn) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Button(onClick = onLogin) { Text("登录 / 注册") }
-            } else {
-                // 「点击编辑资料」affordance：铅笔角标
-                Icon(
-                    painter = painterResource(R.drawable.ic_edit),
-                    contentDescription = "编辑资料",
-                    tint = LocalRinklColors.current.iconButtonColor
-                        ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_right),
+                contentDescription = null,
+                tint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
-        // 展示徽章行：勾选 ∩ 实时解锁态；未勾选或未解锁时不显示。
-        if (displayBadges.isNotEmpty()) {
+        // 展示徽章行：勾选 ∩ 实时解锁态；未勾选、未解锁或功能关闭时不显示。
+        if (SHOW_BADGES && displayBadges.isNotEmpty()) {
             Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),

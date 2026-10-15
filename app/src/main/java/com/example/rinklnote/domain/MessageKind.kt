@@ -6,6 +6,7 @@ enum class MessageKind(val value: String) {
     BOOKING("booking"),
     SUMMARY("summary"),
     ANOMALY("anomaly"),
+    ANALYSIS("analysis"),
     GREETING("greeting"),
     HABIT("habit");
 

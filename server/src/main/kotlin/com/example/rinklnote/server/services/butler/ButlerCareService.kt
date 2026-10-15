@@ -2,7 +2,6 @@ package com.example.rinklnote.server.services.butler
 
 import com.example.rinklnote.server.services.BillService
 import com.example.rinklnote.server.services.BudgetService
-import com.example.rinklnote.server.services.ChallengeService
 import com.example.rinklnote.server.services.Money
 import com.example.rinklnote.server.services.TimeUtil
 import com.example.rinklnote.server.services.UserService
@@ -10,11 +9,9 @@ import com.example.rinklnote.server.tables.BotConfigTable
 import io.ktor.util.logging.Logger
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -37,7 +34,6 @@ import java.util.concurrent.ConcurrentHashMap
 class ButlerCareService(
     private val billService: BillService,
     private val budgetService: BudgetService,
-    private val challengeService: ChallengeService,
     private val userService: UserService,
     private val log: Logger,
     /** 可注入时钟（测试固定到目标时刻）；业务时区 Asia/Shanghai。 */
@@ -145,13 +141,9 @@ class ButlerCareService(
     private fun dayStartMillis(date: LocalDate): Long =
         date.atStartOfDay(TimeUtil.BOOKKEEPING_ZONE).toInstant().toEpochMilli()
 
-    /** epoch 毫秒 → 业务时区的天序号（零消费日按「天」统计用）。 */
-    private fun epochDayOf(dateMillis: Long): Long =
-        Instant.ofEpochMilli(dateMillis).atZone(TimeUtil.BOOKKEEPING_ZONE).toLocalDate().toEpochDay()
-
     // ── 晨报 ──
 
-    /** 晨报（昨日小结 + 本月预算余量 + 零消费日 / 挑战状态）；无内容返回 null 不推。 */
+    /** 晨报（昨日小结 + 本月预算余量）；无内容返回 null 不推。 */
     suspend fun morningReport(userId: Long): String? = try {
         val now = clock()
         val schedule = loadSchedule()
@@ -191,18 +183,6 @@ class ButlerCareService(
         }
         val stats = billService.monthlyStats(userId, monthStart, nextMonthStart)
 
-        // 本月零消费天数（截至昨天）= 已过天数 - 有过支出账单的天数
-        val spendDays = bills.asSequence()
-            .filter { it.billType == "EXPENSE" && it.date >= monthStart && it.date < todayStart }
-            .map { epochDayOf(it.date) }
-            .toSet()
-        // 今天是 1 日时「到昨天为止」为 0 天（昨天属于上月），coerce 兜住
-        val daysElapsed = (ChronoUnit.DAYS.between(monthStartDay, yesterday) + 1).coerceAtLeast(0)
-        val zeroSpendDays = (daysElapsed - spendDays.size).coerceAtLeast(0)
-
-        // 进行中的挑战数（challengeService.list 含软删行，过滤掉）
-        val activeChallenges = challengeService.list(userId).count { !it.deleted && it.status == "ACTIVE" }
-
         return buildString {
             append("☀️ 早安～ 昨天花了 ¥").append(Money.format(yesterdaySpent))
                 .append("（").append(yesterdayExpenses.size).append("笔）。")
@@ -212,13 +192,6 @@ class ButlerCareService(
                 val usedPct = stats.totalExpenseMinor * 100 / totalBudget.amountMinor
                 append("本月预算还剩 ¥").append(Money.format(remaining))
                     .append("（已用 ").append(usedPct).append("%）。")
-            }
-            // 零消费日为 0（月初第 1~2 天）不硬凑句
-            if (zeroSpendDays > 0) {
-                append("这个月已经攒下 ").append(zeroSpendDays).append(" 个零消费日，继续冲！")
-            }
-            if (activeChallenges > 0) {
-                append("进行中的省钱挑战：").append(activeChallenges).append(" 个，别掉链子哦～")
             }
         }
     }
@@ -235,7 +208,7 @@ class ButlerCareService(
             val todayStart = dayStartMillis(now.toLocalDate())
             val todayBills = billService.allBills(userId).filter { !it.deleted && it.date >= todayStart }
             if (todayBills.isEmpty()) {
-                "🌙 今天好像还没记过账哦…是忘记啦还是没花钱？没花钱就回「今天没花钱」打卡，花了就补一笔给小盘～"
+                "🌙 今天好像还没记过账哦…花了就补一笔给小盘，没花也不用特意操作～"
             } else {
                 val expense = todayBills.filter { it.billType == "EXPENSE" }.sumOf { it.amountMinor }
                 val income = todayBills.filter { it.billType == "INCOME" }.sumOf { it.amountMinor }
@@ -326,7 +299,7 @@ class ButlerCareService(
         val displayLabel = if (isTotal) "总预算" else categoryName
         return if (level == 2) {
             "🚨 本月「$displayLabel」预算已花完（¥${Money.format(after)}/¥${Money.format(budgetMinor)}）！" +
-                "接下来小盘陪你一起零消费冲关～"
+                "接下来留意后续支出节奏哦～"
         } else {
             val pct = after * 100 / budgetMinor
             val remaining = (budgetMinor - after).coerceAtLeast(0)

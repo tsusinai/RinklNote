@@ -2,6 +2,7 @@ package com.example.rinklnote.server.routes
 
 import com.example.rinklnote.server.plugins.requireAdmin
 import com.example.rinklnote.server.services.insight.InsightService
+import com.example.rinklnote.server.services.insight.ExpenseReportRequest
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -17,6 +18,11 @@ data class QueryRequest(val query: String)
 fun Route.insightRoutes(insightService: InsightService) {
     authenticate("auth-jwt") {
         route("/api/insights") {
+            post("/html-report") {
+                val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asLong()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized)
+                call.respond(insightService.expenseHtmlReport(userId, call.receive<ExpenseReportRequest>()))
+            }
             get("/daily-report") {
                 val principal = call.principal<JWTPrincipal>()
                 val userId = principal?.payload?.getClaim("userId")?.asLong()

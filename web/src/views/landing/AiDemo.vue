@@ -29,7 +29,9 @@ const dash = (C * pct) / 100
         </div>
 
         <div class="voice-row">
-          <span class="mic">🎤</span>
+          <span class="mic" aria-hidden="true">
+            <svg viewBox="0 0 20 20"><path d="M10 13.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v4a3.5 3.5 0 0 0 3.5 3.5Z"/><path d="M4 9.5a6 6 0 0 0 12 0M10 15.5V18M7.5 18h5"/></svg>
+          </span>
           <span class="voice-text">“午餐 25 块”</span>
           <span class="voice-hint">语音识别到 → 三餐</span>
         </div>
@@ -68,7 +70,8 @@ const dash = (C * pct) / 100
 .insight-summary { color: var(--text); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
 .insight-hl { color: var(--muted); font-size: 12px; line-height: 1.7; }
 .voice-row { display: flex; align-items: center; gap: 8px; padding: 10px; border: 1px dashed var(--border); border-radius: 12px; margin-bottom: 14px; }
-.mic { font-size: 20px; }
+.mic { display: grid; place-items: center; width: 24px; height: 24px; color: var(--primary-ink); }
+.mic svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .voice-text { font-size: 14px; font-weight: 600; }
 .voice-hint { margin-left: auto; font-size: 12px; color: var(--income); }
 .budget-box { display: flex; align-items: center; gap: 16px; }

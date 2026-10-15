@@ -4,7 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -34,13 +34,13 @@ import com.example.rinklnote.ui.component.AlertDialog
 import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -419,7 +419,7 @@ private fun SlotRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -519,7 +519,7 @@ private fun PresetThemeList(onApply: (PresetTheme) -> Unit) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onApply(preset) }
+                    .motionClickable { onApply(preset) }
                     .defaultMinSize(minHeight = 56.dp)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -618,7 +618,7 @@ private fun ColorPickerSheet(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(15.dp))
                         .border(1.dp, DefaultCardBorder, RoundedCornerShape(15.dp))
-                        .clickable {
+                        .motionClickable {
                             transparent = true
                             onPick(Color.Transparent)
                         }
@@ -655,7 +655,7 @@ private fun ColorPickerSheet(
                             ColorDot(
                                 color = c,
                                 size = 32.dp,
-                                modifier = Modifier.clickable {
+                                modifier = Modifier.motionClickable {
                                     transparent = false
                                     onPick(c)
                                 }
@@ -906,7 +906,7 @@ private fun UnlockablePresetRows(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
+                    .motionClickable {
                         if (unlocked) {
                             onApply(colors)
                         } else {

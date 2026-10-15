@@ -1,0 +1,554 @@
+[
+  {
+    "category": "",
+    "name": "不细分",
+    "svg": "svg/none.svg",
+    "drawable": "ic_subcategory_none"
+  },
+  {
+    "category": "三餐",
+    "name": "早餐",
+    "svg": "svg/meals_breakfast.svg",
+    "drawable": "ic_subcategory_meals_breakfast"
+  },
+  {
+    "category": "三餐",
+    "name": "午餐",
+    "svg": "svg/meals_lunch.svg",
+    "drawable": "ic_subcategory_meals_lunch"
+  },
+  {
+    "category": "三餐",
+    "name": "晚餐",
+    "svg": "svg/meals_dinner.svg",
+    "drawable": "ic_subcategory_meals_dinner"
+  },
+  {
+    "category": "三餐",
+    "name": "零食",
+    "svg": "svg/meals_snack.svg",
+    "drawable": "ic_subcategory_meals_snack"
+  },
+  {
+    "category": "三餐",
+    "name": "外卖",
+    "svg": "svg/meals_takeaway.svg",
+    "drawable": "ic_subcategory_meals_takeaway"
+  },
+  {
+    "category": "三餐",
+    "name": "饮品",
+    "svg": "svg/meals_drink.svg",
+    "drawable": "ic_subcategory_meals_drink"
+  },
+  {
+    "category": "交通",
+    "name": "公交",
+    "svg": "svg/transport_bus.svg",
+    "drawable": "ic_subcategory_transport_bus"
+  },
+  {
+    "category": "交通",
+    "name": "地铁",
+    "svg": "svg/transport_train.svg",
+    "drawable": "ic_subcategory_transport_train"
+  },
+  {
+    "category": "交通",
+    "name": "打车",
+    "svg": "svg/transport_taxi.svg",
+    "drawable": "ic_subcategory_transport_taxi"
+  },
+  {
+    "category": "交通",
+    "name": "加油",
+    "svg": "svg/transport_fuel.svg",
+    "drawable": "ic_subcategory_transport_fuel"
+  },
+  {
+    "category": "交通",
+    "name": "停车费",
+    "svg": "svg/transport_parking.svg",
+    "drawable": "ic_subcategory_transport_parking"
+  },
+  {
+    "category": "交通",
+    "name": "火车机票",
+    "svg": "svg/transport_ticket.svg",
+    "drawable": "ic_subcategory_transport_ticket"
+  },
+  {
+    "category": "交通",
+    "name": "共享单车",
+    "svg": "svg/transport_bike.svg",
+    "drawable": "ic_subcategory_transport_bike"
+  },
+  {
+    "category": "日用",
+    "name": "洗衣",
+    "svg": "svg/daily_laundry.svg",
+    "drawable": "ic_subcategory_daily_laundry"
+  },
+  {
+    "category": "日用",
+    "name": "洗漱",
+    "svg": "svg/daily_wash.svg",
+    "drawable": "ic_subcategory_daily_wash"
+  },
+  {
+    "category": "日用",
+    "name": "家居",
+    "svg": "svg/daily_sofa.svg",
+    "drawable": "ic_subcategory_daily_sofa"
+  },
+  {
+    "category": "日用",
+    "name": "纸品清洁",
+    "svg": "svg/daily_tissue.svg",
+    "drawable": "ic_subcategory_daily_tissue"
+  },
+  {
+    "category": "学习",
+    "name": "书籍",
+    "svg": "svg/study_book.svg",
+    "drawable": "ic_subcategory_study_book"
+  },
+  {
+    "category": "学习",
+    "name": "文具",
+    "svg": "svg/study_stationery.svg",
+    "drawable": "ic_subcategory_study_stationery"
+  },
+  {
+    "category": "学习",
+    "name": "培训",
+    "svg": "svg/study_training.svg",
+    "drawable": "ic_subcategory_study_training"
+  },
+  {
+    "category": "学习",
+    "name": "考试",
+    "svg": "svg/study_exam.svg",
+    "drawable": "ic_subcategory_study_exam"
+  },
+  {
+    "category": "学习",
+    "name": "课程",
+    "svg": "svg/study_lesson.svg",
+    "drawable": "ic_subcategory_study_lesson"
+  },
+  {
+    "category": "运动",
+    "name": "健身",
+    "svg": "svg/sports_dumbbell.svg",
+    "drawable": "ic_subcategory_sports_dumbbell"
+  },
+  {
+    "category": "运动",
+    "name": "跑步",
+    "svg": "svg/sports_run.svg",
+    "drawable": "ic_subcategory_sports_run"
+  },
+  {
+    "category": "运动",
+    "name": "球类",
+    "svg": "svg/sports_ball.svg",
+    "drawable": "ic_subcategory_sports_ball"
+  },
+  {
+    "category": "娱乐",
+    "name": "电影",
+    "svg": "svg/entertainment_film.svg",
+    "drawable": "ic_subcategory_entertainment_film"
+  },
+  {
+    "category": "娱乐",
+    "name": "游戏",
+    "svg": "svg/entertainment_game.svg",
+    "drawable": "ic_subcategory_entertainment_game"
+  },
+  {
+    "category": "娱乐",
+    "name": "旅游",
+    "svg": "svg/entertainment_travel.svg",
+    "drawable": "ic_subcategory_entertainment_travel"
+  },
+  {
+    "category": "娱乐",
+    "name": "演出",
+    "svg": "svg/entertainment_stage.svg",
+    "drawable": "ic_subcategory_entertainment_stage"
+  },
+  {
+    "category": "娱乐",
+    "name": "KTV",
+    "svg": "svg/entertainment_microphone.svg",
+    "drawable": "ic_subcategory_entertainment_microphone"
+  },
+  {
+    "category": "网购",
+    "name": "淘宝",
+    "svg": "svg/shopping_bag.svg",
+    "drawable": "ic_subcategory_shopping_bag"
+  },
+  {
+    "category": "网购",
+    "name": "京东",
+    "svg": "svg/shopping_cart.svg",
+    "drawable": "ic_subcategory_shopping_cart"
+  },
+  {
+    "category": "网购",
+    "name": "快递",
+    "svg": "svg/shopping_parcel.svg",
+    "drawable": "ic_subcategory_shopping_parcel"
+  },
+  {
+    "category": "医疗",
+    "name": "门诊",
+    "svg": "svg/medical_clinic.svg",
+    "drawable": "ic_subcategory_medical_clinic"
+  },
+  {
+    "category": "医疗",
+    "name": "药品",
+    "svg": "svg/medical_capsule.svg",
+    "drawable": "ic_subcategory_medical_capsule"
+  },
+  {
+    "category": "医疗",
+    "name": "体检",
+    "svg": "svg/medical_health.svg",
+    "drawable": "ic_subcategory_medical_health"
+  },
+  {
+    "category": "医疗",
+    "name": "口腔",
+    "svg": "svg/medical_tooth.svg",
+    "drawable": "ic_subcategory_medical_tooth"
+  },
+  {
+    "category": "医疗",
+    "name": "眼镜",
+    "svg": "svg/medical_glasses.svg",
+    "drawable": "ic_subcategory_medical_glasses"
+  },
+  {
+    "category": "居家",
+    "name": "房租",
+    "svg": "svg/home_house.svg",
+    "drawable": "ic_subcategory_home_house"
+  },
+  {
+    "category": "居家",
+    "name": "房贷",
+    "svg": "svg/home_mortgage.svg",
+    "drawable": "ic_subcategory_home_mortgage"
+  },
+  {
+    "category": "居家",
+    "name": "物业",
+    "svg": "svg/home_building.svg",
+    "drawable": "ic_subcategory_home_building"
+  },
+  {
+    "category": "居家",
+    "name": "水电燃气",
+    "svg": "svg/home_utilities.svg",
+    "drawable": "ic_subcategory_home_utilities"
+  },
+  {
+    "category": "居家",
+    "name": "宽带",
+    "svg": "svg/home_wifi.svg",
+    "drawable": "ic_subcategory_home_wifi"
+  },
+  {
+    "category": "人情",
+    "name": "红包礼金",
+    "svg": "svg/social_packet.svg",
+    "drawable": "ic_subcategory_social_packet"
+  },
+  {
+    "category": "人情",
+    "name": "礼物",
+    "svg": "svg/social_gift.svg",
+    "drawable": "ic_subcategory_social_gift"
+  },
+  {
+    "category": "人情",
+    "name": "请客",
+    "svg": "svg/social_dining.svg",
+    "drawable": "ic_subcategory_social_dining"
+  },
+  {
+    "category": "人情",
+    "name": "随礼",
+    "svg": "svg/social_giftcard.svg",
+    "drawable": "ic_subcategory_social_giftcard"
+  },
+  {
+    "category": "宠物",
+    "name": "粮食",
+    "svg": "svg/pet_petfood.svg",
+    "drawable": "ic_subcategory_pet_petfood"
+  },
+  {
+    "category": "宠物",
+    "name": "医疗",
+    "svg": "svg/pet_petmedical.svg",
+    "drawable": "ic_subcategory_pet_petmedical"
+  },
+  {
+    "category": "宠物",
+    "name": "用品",
+    "svg": "svg/pet_pettoy.svg",
+    "drawable": "ic_subcategory_pet_pettoy"
+  },
+  {
+    "category": "宠物",
+    "name": "洗护",
+    "svg": "svg/pet_petwash.svg",
+    "drawable": "ic_subcategory_pet_petwash"
+  },
+  {
+    "category": "美妆个护",
+    "name": "护肤彩妆",
+    "svg": "svg/beauty_cosmetics.svg",
+    "drawable": "ic_subcategory_beauty_cosmetics"
+  },
+  {
+    "category": "美妆个护",
+    "name": "理发美发",
+    "svg": "svg/beauty_scissors.svg",
+    "drawable": "ic_subcategory_beauty_scissors"
+  },
+  {
+    "category": "美妆个护",
+    "name": "美容",
+    "svg": "svg/beauty_mirror.svg",
+    "drawable": "ic_subcategory_beauty_mirror"
+  },
+  {
+    "category": "服饰",
+    "name": "衣裤",
+    "svg": "svg/clothing_clothes.svg",
+    "drawable": "ic_subcategory_clothing_clothes"
+  },
+  {
+    "category": "服饰",
+    "name": "鞋帽",
+    "svg": "svg/clothing_shoe.svg",
+    "drawable": "ic_subcategory_clothing_shoe"
+  },
+  {
+    "category": "服饰",
+    "name": "配饰",
+    "svg": "svg/clothing_jewelry.svg",
+    "drawable": "ic_subcategory_clothing_jewelry"
+  },
+  {
+    "category": "母婴",
+    "name": "奶粉尿布",
+    "svg": "svg/baby_bottle.svg",
+    "drawable": "ic_subcategory_baby_bottle"
+  },
+  {
+    "category": "母婴",
+    "name": "玩具",
+    "svg": "svg/baby_toy.svg",
+    "drawable": "ic_subcategory_baby_toy"
+  },
+  {
+    "category": "母婴",
+    "name": "早教",
+    "svg": "svg/baby_early.svg",
+    "drawable": "ic_subcategory_baby_early"
+  },
+  {
+    "category": "汽车",
+    "name": "加油",
+    "svg": "svg/car_fuel.svg",
+    "drawable": "ic_subcategory_car_fuel"
+  },
+  {
+    "category": "汽车",
+    "name": "保养维修",
+    "svg": "svg/car_wrench.svg",
+    "drawable": "ic_subcategory_car_wrench"
+  },
+  {
+    "category": "汽车",
+    "name": "保险",
+    "svg": "svg/car_carshield.svg",
+    "drawable": "ic_subcategory_car_carshield"
+  },
+  {
+    "category": "汽车",
+    "name": "洗车",
+    "svg": "svg/car_carwash.svg",
+    "drawable": "ic_subcategory_car_carwash"
+  },
+  {
+    "category": "数码",
+    "name": "手机电脑",
+    "svg": "svg/digital_devices.svg",
+    "drawable": "ic_subcategory_digital_devices"
+  },
+  {
+    "category": "数码",
+    "name": "配件",
+    "svg": "svg/digital_plug.svg",
+    "drawable": "ic_subcategory_digital_plug"
+  },
+  {
+    "category": "数码",
+    "name": "软件会员",
+    "svg": "svg/digital_member.svg",
+    "drawable": "ic_subcategory_digital_member"
+  },
+  {
+    "category": "保险",
+    "name": "社保商保",
+    "svg": "svg/insurance_shield.svg",
+    "drawable": "ic_subcategory_insurance_shield"
+  },
+  {
+    "category": "保险",
+    "name": "车险",
+    "svg": "svg/insurance_carshield.svg",
+    "drawable": "ic_subcategory_insurance_carshield"
+  },
+  {
+    "category": "旅行",
+    "name": "机票火车",
+    "svg": "svg/travel_ticket.svg",
+    "drawable": "ic_subcategory_travel_ticket"
+  },
+  {
+    "category": "旅行",
+    "name": "酒店",
+    "svg": "svg/travel_hotel.svg",
+    "drawable": "ic_subcategory_travel_hotel"
+  },
+  {
+    "category": "旅行",
+    "name": "景点门票",
+    "svg": "svg/travel_landmark.svg",
+    "drawable": "ic_subcategory_travel_landmark"
+  },
+  {
+    "category": "工资",
+    "name": "基本工资",
+    "svg": "svg/salary_wallet.svg",
+    "drawable": "ic_subcategory_salary_wallet"
+  },
+  {
+    "category": "工资",
+    "name": "奖金",
+    "svg": "svg/salary_bonus.svg",
+    "drawable": "ic_subcategory_salary_bonus"
+  },
+  {
+    "category": "工资",
+    "name": "补贴",
+    "svg": "svg/salary_subsidy.svg",
+    "drawable": "ic_subcategory_salary_subsidy"
+  },
+  {
+    "category": "兼职",
+    "name": "劳务",
+    "svg": "svg/parttime_labor.svg",
+    "drawable": "ic_subcategory_parttime_labor"
+  },
+  {
+    "category": "兼职",
+    "name": "项目",
+    "svg": "svg/parttime_project.svg",
+    "drawable": "ic_subcategory_parttime_project"
+  },
+  {
+    "category": "兼职",
+    "name": "其他",
+    "svg": "svg/parttime_other.svg",
+    "drawable": "ic_subcategory_parttime_other"
+  },
+  {
+    "category": "理财",
+    "name": "利息",
+    "svg": "svg/finance_interest.svg",
+    "drawable": "ic_subcategory_finance_interest"
+  },
+  {
+    "category": "理财",
+    "name": "基金",
+    "svg": "svg/finance_fund.svg",
+    "drawable": "ic_subcategory_finance_fund"
+  },
+  {
+    "category": "理财",
+    "name": "股票",
+    "svg": "svg/finance_stock.svg",
+    "drawable": "ic_subcategory_finance_stock"
+  },
+  {
+    "category": "其他",
+    "name": "红包",
+    "svg": "svg/other_packet.svg",
+    "drawable": "ic_subcategory_other_packet"
+  },
+  {
+    "category": "其他",
+    "name": "返还",
+    "svg": "svg/other_refund.svg",
+    "drawable": "ic_subcategory_other_refund"
+  },
+  {
+    "category": "其他",
+    "name": "其他收入",
+    "svg": "svg/other_income.svg",
+    "drawable": "ic_subcategory_other_income"
+  },
+  {
+    "category": "报销",
+    "name": "差旅报销",
+    "svg": "svg/reimburse_travelreceipt.svg",
+    "drawable": "ic_subcategory_reimburse_travelreceipt"
+  },
+  {
+    "category": "报销",
+    "name": "日常报销",
+    "svg": "svg/reimburse_receipt.svg",
+    "drawable": "ic_subcategory_reimburse_receipt"
+  },
+  {
+    "category": "二手转卖",
+    "name": "闲置出售",
+    "svg": "svg/resale_resale.svg",
+    "drawable": "ic_subcategory_resale_resale"
+  },
+  {
+    "category": "二手转卖",
+    "name": "回款",
+    "svg": "svg/resale_payment.svg",
+    "drawable": "ic_subcategory_resale_payment"
+  },
+  {
+    "category": "红包礼金",
+    "name": "收红包",
+    "svg": "svg/redpacket_receivepacket.svg",
+    "drawable": "ic_subcategory_redpacket_receivepacket"
+  },
+  {
+    "category": "红包礼金",
+    "name": "压岁钱",
+    "svg": "svg/redpacket_lucky.svg",
+    "drawable": "ic_subcategory_redpacket_lucky"
+  },
+  {
+    "category": "红包礼金",
+    "name": "礼金",
+    "svg": "svg/redpacket_giftmoney.svg",
+    "drawable": "ic_subcategory_redpacket_giftmoney"
+  }
+]

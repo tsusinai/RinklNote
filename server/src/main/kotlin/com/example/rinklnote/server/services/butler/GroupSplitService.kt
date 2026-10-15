@@ -68,7 +68,7 @@ class GroupSplitService(private val billService: BillService) {
                 categoryName = RuleBasedParser().parse(topic, emptyList()),
                 remark = "AA·$topic（自付1/$headCount）",
                 source = BotCommands.SOURCE_QQ
-            )
+            ).also { inc.onBillCreated?.invoke(it) }
         } catch (e: Exception) {
             // 补偿：自付账单没记上，这条 AA 单别留着误导用户（台账行软删）
             transaction {

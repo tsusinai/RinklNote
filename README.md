@@ -162,6 +162,7 @@ $env:DATABASE_URL = 'jdbc:h2:file:D:/Codes/RinklNote/.gradle-home/local-data/h2;
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` |  | LLM 地址和模型 |
 | `LLM_TIMEOUT_MS` |  | LLM 超时，默认 `10000` |
 | `ASR_API_KEY` / `ASR_BASE_URL` / `ASR_MODEL` / `ASR_TIMEOUT_MS` |  | Whisper 语音转写，可选 |
+| `BOT_WEB_BASE_URL` |  | 公众号账单编辑页的公网 HTTPS 地址；未配置时只发送普通文字入口 |
 | `ADMIN_IDENTITIES` |  | 管理员手机号或 userId，逗号分隔 |
 | `LEARNING_INTERVAL_MIN` |  | 关键词学习周期，默认 `60` 分钟 |
 | `ANOMALY_THRESHOLD` |  | 异常支出增幅阈值，默认 `1.5` |

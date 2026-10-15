@@ -17,6 +17,13 @@ import kotlinx.coroutines.flow.map
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** 桌面偏好用同一份 DataStore 快照读取，避免开关切换时短暂显示旧的明文状态。 */
+data class WidgetPreferences(
+    val privacyEnabled: Boolean = true,
+    val balanceHidden: Boolean = false,
+    val quickAmounts: List<Long> = SettingsManager.DEFAULT_QUICK_AMOUNTS
+)
+
 private val Context.settingsDataStore: DataStore<Preferences>
     by preferencesDataStore(name = "rinklnote_settings")
 
@@ -31,6 +38,7 @@ class SettingsManager(private val context: Context) {
         // 多币种（预实现）：本位币，存 ISO 4217 代码（如 "CNY"）。
         private val KEY_BASE_CURRENCY = stringPreferencesKey("base_currency")
         private val KEY_BALANCE_HIDDEN = booleanPreferencesKey("balance_hidden")
+        private val KEY_WIDGET_PRIVACY = booleanPreferencesKey("widget_privacy_enabled")
         private val KEY_DAILY_REPORT_ENABLED = booleanPreferencesKey("daily_report_enabled")
         private val KEY_DAILY_REPORT_HOUR = intPreferencesKey("daily_report_hour")
         private val KEY_DAILY_REPORT_MINUTE = intPreferencesKey("daily_report_minute")
@@ -109,8 +117,24 @@ class SettingsManager(private val context: Context) {
     val baseCurrency: Flow<String> =
         context.settingsDataStore.data.map { it[KEY_BASE_CURRENCY] ?: DEFAULT_BASE_CURRENCY }
 
-    /** 余额/金额隐私掩码：默认 false（显示真实金额）。App 与主屏小组件共读此开关。 */
-        val balanceHidden: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_BALANCE_HIDDEN] ?: false }
+    /** 应用内金额掩码；桌面同时受独立的隐私保护开关约束。 */
+    val balanceHidden: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_BALANCE_HIDDEN] ?: false }
+
+    /** 默认保护桌面，不因用户在应用内查看余额而自动暴露给桌面宿主。 */
+    val widgetPrivacyEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_WIDGET_PRIVACY] ?: true }
+
+    val widgetPreferences: Flow<WidgetPreferences> = context.settingsDataStore.data.map { prefs ->
+        WidgetPreferences(
+            privacyEnabled = prefs[KEY_WIDGET_PRIVACY] ?: true,
+            balanceHidden = prefs[KEY_BALANCE_HIDDEN] ?: false,
+            quickAmounts = prefs[KEY_QUICK_AMOUNTS]?.split(',')?.mapNotNull { it.trim().toLongOrNull() }
+                ?.filter { it > 0 }?.take(2)?.takeIf { it.isNotEmpty() } ?: DEFAULT_QUICK_AMOUNTS
+        )
+    }
+
+    suspend fun setWidgetPrivacyEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[KEY_WIDGET_PRIVACY] = enabled }
+    }
     val dailyReportEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_ENABLED] ?: false }
     val dailyReportHour: Flow<Int> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_HOUR] ?: 9 }
     val dailyReportMinute: Flow<Int> = context.settingsDataStore.data.map { it[KEY_DAILY_REPORT_MINUTE] ?: 0 }

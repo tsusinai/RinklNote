@@ -138,6 +138,11 @@ class InsightService(
     private val billService: BillService,
     private val anomalyThreshold: Double = 1.5
 ) {
+    private val htmlReports = ExpenseHtmlReportService { system, user -> llmParser.chat(system, user, timeoutMs = 60_000) }
+
+    suspend fun expenseHtmlReport(userId: Long, request: ExpenseReportRequest): ExpenseReportResponse =
+        htmlReports.create(userId, request)
+
     suspend fun dailyReport(userId: Long, dayStart: Long, dayEnd: Long): DailyReportResponse {
         val stats = billService.monthlyStats(userId, dayStart, dayEnd)
         // 报表标题跟随统计窗口的起始日：窗口是今天就叫「今日」，是别的日子直接报日期
@@ -172,7 +177,7 @@ class InsightService(
     /**
      * 日报推送文案（QQ 主动推送专用，人话化）。
      * 结构：标题 → LLM 一句话点评（失败回退省略）→ 支出/收入行 → 大头分类 →
-     * 连续记账 🔥 → 克制报喜 👍 → 预算进度 📊（有预算才出现）。
+     * 支出对比 📉（有可比数据才出现）→ 预算进度 📊（有预算才出现）。
      * 隐私 NFR：喂给 LLM 的只有聚合数字，无明细/备注。
      */
     suspend fun dailyPushCopy(userId: Long, dayStart: Long, dayEnd: Long): String? {
@@ -182,19 +187,10 @@ class InsightService(
         val bills = billService.allBills(userId)
         val reportDate = Instant.ofEpochMilli(dayStart).atZone(SHANGHAI).toLocalDate()
 
-        // 前 7 天日均支出（不含统计日），用于对比与「克制」判定。
+        // 前 7 天日均支出（不含统计日），用于中性支出对比。
         val prev7Start = dayStart - 7L * DAY_MS
         val prev7 = bills.filter { it.billType == "EXPENSE" && it.date >= prev7Start && it.date < dayStart }
         val prev7AvgMinor = if (prev7.isNotEmpty()) prev7.sumOf { it.amountMinor } / 7.0 else 0.0
-
-        // 连续记账天数：从统计日往回数有账的日子（日期按「当日 0 点」桶分组，中国无夏令时，整除安全）。
-        val streak = run {
-            val days = bills.map { it.date / DAY_MS }.toHashSet()
-            var s = 0
-            var cursor = dayStart / DAY_MS
-            while (days.contains(cursor)) { s++; cursor-- }
-            s
-        }
 
         // 当月总预算（无分类的 MONTHLY 预算）与本月截至统计日的支出。
         val budgetMinor = transaction {
@@ -241,7 +237,6 @@ class InsightService(
             billCount = stats.billCount.toInt(),
             topCategories = stats.topExpenseCategories.take(3),
             prev7AvgMinor = prev7AvgMinor,
-            streak = streak,
             budgetMinor = budgetMinor,
             monthExpenseMinor = monthExpenseMinor
         )
@@ -256,7 +251,6 @@ class InsightService(
         billCount: Int,
         topCategories: List<Pair<String, Long>>,
         prev7AvgMinor: Double,
-        streak: Int,
         budgetMinor: Long,
         monthExpenseMinor: Long
     ): String = buildString {
@@ -268,9 +262,8 @@ class InsightService(
             append("大头：")
             appendLine(topCategories.joinToString("、") { "${it.first} ¥${Money.format(it.second)}" })
         }
-        if (streak >= 2) appendLine("🔥 已连续记账 $streak 天")
         if (prev7AvgMinor > 0 && expenseMinor < prev7AvgMinor * 0.5) {
-            appendLine("👍 只花了平时的一半不到，克制的一天")
+            appendLine("📉 今日支出低于近 7 日均值")
         }
         if (budgetMinor > 0) {
             val pct = (monthExpenseMinor * 100 / budgetMinor).toInt()

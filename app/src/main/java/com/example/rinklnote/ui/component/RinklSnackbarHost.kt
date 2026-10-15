@@ -6,7 +6,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -258,21 +263,26 @@ private fun RinklSnackbarRow(
                 color = actionColor,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onAction)
+                    .motionClickable(onClick = onAction)
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             )
         }
         if (feedback.persistent) {
-            // 失败类常驻：提供「✕」主动关闭；成功类自动消失，不放关闭按钮。
-            Text(
-                text = "✕",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // 失败类常驻：提供「✕」主动关闭；保证无障碍读屏语义与 48dp 最小交互触控区域。
+            Box(
                 modifier = Modifier
+                    .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onClose)
-                    .padding(6.dp)
-            )
+                    .semantics { contentDescription = "关闭提示" }
+                    .motionClickable(onClickLabel = "关闭", role = Role.Button, onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✕",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

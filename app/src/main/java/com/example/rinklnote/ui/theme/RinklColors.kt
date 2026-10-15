@@ -143,8 +143,8 @@ fun rinklColorsOf(
  */
 val DefaultCardBorder = Color(0xFFCFCFCF)
 
-/** 「每日账单」卡片里那根分割线的同款色值（#A5A5A5 发丝灰）。 */
-val DefaultDividerGray = Color(0xFFA5A5A5)
+/** 分割线默认灰：2026-10-10 由 #A5A5A5 浅化为发丝感的 #D6D6D9（原值在白底上过于突出）。 */
+val DefaultDividerGray = Color(0xFFD6D6D9)
 
 /**
  * 折线/柱状图槽（[RinklThemeSlot.CHART]）的**默认色**：月度明细图表现用的深红 `#CA3032`。

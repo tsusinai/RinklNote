@@ -43,14 +43,17 @@ class BillDragHost {
     var dragging by mutableStateOf<BillDragInfo?>(null)
         private set
 
-    /** 是否正处于拖拽中（离散布尔状态，供外层避免监听高频 pointerY 变动）。 */
-    val isDragging: Boolean get() = dragging != null
+    /** 是否正处于拖拽中（离散独立状态，彻底隔离高频 pointerY 对外层重组的触发）。 */
+    var isDragging by mutableStateOf(false)
+        private set
 
     /** 正在拖拽的账单日期（无拖拽时为 null）。 */
-    val draggedDate: Long? get() = dragging?.date
+    var draggedDate by mutableStateOf<Long?>(null)
+        private set
 
     /** 正在拖拽的账单 id（无拖拽时为 null）。 */
-    val draggedBillId: Long? get() = dragging?.billId
+    var draggedBillId by mutableStateOf<Long?>(null)
+        private set
 
     /** 删除区（FAB）的全局 bounds，由 FAB 经 onGloballyPositioned 上报。 */
     var deleteZone by mutableStateOf<Rect?>(null)
@@ -73,6 +76,9 @@ class BillDragHost {
     }
 
     fun startDrag(billId: Long, date: Long, pointerY: Float, grabOffsetY: Float, rowHeightPx: Float, originY: Float) {
+        isDragging = true
+        draggedDate = date
+        draggedBillId = billId
         dragging = BillDragInfo(
             billId = billId, date = date, pointerY = pointerY,
             grabOffsetY = grabOffsetY, rowHeightPx = rowHeightPx, originY = originY
@@ -88,19 +94,36 @@ class BillDragHost {
 
     private fun recompute() {
         val d = dragging ?: return
-        // 插入位：同日（不含拖动项自身）各行中心在 ghost 中心上方的个数 → 0..n
-        val rows = rowBounds.entries
-            .filter { it.key != d.billId && rowDates[it.key] == d.date }
-            .map { it.value }
-        insertionIndex = rows.count { it.center.y < d.centerY }
-        // 删除区命中：只看纵向重叠（ghost 与 FAB 都居中对齐，横向必然重叠），
-        // 命中带 = FAB 高度上下各放宽一半，手指不必精确压在圆圈中心。
+        val targetCenterY = d.centerY
+        val targetBillId = d.billId
+        val targetDate = d.date
+
+        // 原位纯循环计算插入位，消灭临时迭代器、ArrayList 与 Offset 装箱
+        var count = 0
+        for ((id, bounds) in rowBounds) {
+            if (id != targetBillId && rowDates[id] == targetDate) {
+                val rowCenterY = bounds.top + bounds.height * 0.5f
+                if (rowCenterY < targetCenterY) {
+                    count++
+                }
+            }
+        }
+        insertionIndex = count
+
+        // 删除区命中：只看纵向重叠
         val zone = deleteZone
-        val slack = (zone?.height ?: 0f) * 0.5f
-        isOverDelete = zone != null && d.centerY >= zone.top - slack && d.centerY <= zone.bottom + slack
+        if (zone != null) {
+            val slack = zone.height * 0.5f
+            isOverDelete = targetCenterY >= zone.top - slack && targetCenterY <= zone.bottom + slack
+        } else {
+            isOverDelete = false
+        }
     }
 
     fun endDrag() {
+        isDragging = false
+        draggedDate = null
+        draggedBillId = null
         dragging = null
         insertionIndex = null
         isOverDelete = false

@@ -139,6 +139,24 @@ object FeishuMessageProcessor {
             }
 
             // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService。
+            val interactions = feishuBotService.interactions
+            if (interactions != null) {
+                try {
+                    interactions.textAction(content, "FEISHU", senderOpenId)?.let { outcome ->
+                        if (outcome.card == null || !feishuBotService.sendCard(senderOpenId, outcome.card, messageId))
+                            feishuBotService.sendText(senderOpenId, outcome.text, messageId)
+                        return
+                    }
+                    if (interactions.isBudgetRequest(content)) {
+                        val card = interactions.budgetCard(user.id, "FEISHU", senderOpenId)
+                        if (!feishuBotService.sendCard(senderOpenId, com.example.rinklnote.server.services.bot.BotCardRenderer.feishu(card), messageId))
+                            feishuBotService.sendText(senderOpenId, card.text, messageId)
+                        return
+                    }
+                } catch (e: com.example.rinklnote.server.services.bot.BotActionException) {
+                    feishuBotService.sendText(senderOpenId, e.message, messageId); return
+                }
+            }
             BotCorrectService.handle(content, user.id, billService)?.let { reply ->
                 feishuBotService.sendText(senderOpenId, reply, messageId)
                 logger.info("飞书最近一单修正 user=${user.id}: $reply")
@@ -146,14 +164,20 @@ object FeishuMessageProcessor {
             }
 
             // 自然语言记账/问账：source=FEISHU 一路透传到 BillService.createBill（bills.bill_source）
-            val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
+            var bookedBill: BillDTO? = null
+            val router = PhoneIntentRouter(billService, budgetService, insightService, nluService,
+                onBillCreated = { bookedBill = it })
             val reply = router.route(content, user.id, BotCommands.SOURCE_FEISHU)
             val out = if (isNew) {
                 "欢迎！已为你开通飞书记账账号。直接说「午餐20元」即可记账；回复「登录」可获取绑定码。\n\n$reply"
             } else {
                 reply
             }
-            feishuBotService.sendText(senderOpenId, out, messageId)
+            val card = bookedBill?.let { b -> interactions?.billCard(user.id, "FEISHU", senderOpenId, b, out) }
+            if (card == null || !feishuBotService.sendCard(senderOpenId,
+                    com.example.rinklnote.server.services.bot.BotCardRenderer.feishu(card), messageId)) {
+                feishuBotService.sendText(senderOpenId, out, messageId)
+            }
             logger.info("飞书回复 user=${user.id}: ${reply.replace("\n", " / ")}")
         } catch (e: Exception) {
             logger.error("飞书消息处理异常", e)

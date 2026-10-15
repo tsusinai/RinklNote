@@ -1,6 +1,13 @@
 <resources>
     <string name="app_name">RinklNote</string>
-    <string name="app_widget_description">今日/本月收支概览，点击分类即可快速记账</string>
+    <string name="app_widget_description">今日收支、本月支出与预算剩余，默认隐藏金额</string>
+    <string name="widget_overview_name">记一笔 · 收支概览</string>
+    <string name="widget_quick_name">记一笔 · 快捷记账</string>
+    <string name="widget_budget_name">记一笔 · 预算进度</string>
+    <string name="widget_category_name">记一笔 · 月度分类</string>
+    <string name="widget_quick_description">打开记账、固定分类和预设金额；需要在应用内确认保存</string>
+    <string name="widget_budget_description">月度预算与剩余金额；隐私保护同时隐藏预算比例</string>
+    <string name="widget_category_description">本月支出分类；隐私保护同时隐藏金额、排行与进度</string>
     <!-- 长按快捷方式 -->
     <string name="shortcut_voice_short">语音记账</string>
     <string name="shortcut_voice_long">语音说一句，自动记账</string>

@@ -12,7 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -230,7 +230,7 @@ fun VoiceInputBar(
                 }
                 .clip(CircleShape)
                 .background(micBg)
-                .clickable(enabled = phase != VoicePhase.Processing) { onMicTap() },
+                .motionClickable(enabled = phase != VoicePhase.Processing) { onMicTap() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -276,7 +276,7 @@ fun VoiceInputBar(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .padding(8.dp)
-                .clickable {
+                .motionClickable {
                     ended = true
                     currentOnDismiss()
                 }

@@ -90,7 +90,7 @@ class ButlerCareServiceTest {
 
     /** 固定时钟构造被测服务。 */
     private fun newCare(now: LocalDateTime): ButlerCareService =
-        ButlerCareService(billService, budgetService, challengeService, userService, log, clock = { now })
+        ButlerCareService(billService, budgetService, userService, log, clock = { now })
 
     /** 业务时区某日 0 点 epoch 毫秒（与实现里 bills.date 口径一致）。 */
     private fun dayStart(d: LocalDate): Long = d.atStartOfDay(ZONE).toInstant().toEpochMilli()
@@ -203,6 +203,8 @@ class ButlerCareServiceTest {
             assertTrue(full!!.contains("预算已花完"))
             assertTrue(full.contains("¥105.00/¥100.00"))
             assertFalse(full.contains("黄灯预警"))
+            assertFalse(full.contains("零消费"))
+            assertFalse(full.contains("挑战"))
 
             // 已花完后再记账（before 已 >= 预算）：不再跨沿也不再重复告
             expenseBill(500L, "三餐", dayStart(now.toLocalDate()))
@@ -249,7 +251,7 @@ class ButlerCareServiceTest {
         runBlocking {
             var now = LocalDateTime.of(2026, 10, 15, 12, 0)
             val care = ButlerCareService(
-                billService, budgetService, challengeService, userService, log, clock = { now }
+                billService, budgetService, userService, log, clock = { now }
             )
             setCategoryBudget("三餐", monthStartOf(now), 10_000L)
             expenseBill(8_600L, "三餐", dayStart(now.toLocalDate()))
@@ -290,22 +292,22 @@ class ButlerCareServiceTest {
     }
 
     @Test
-    fun `晨报到点输出昨日金额预算零消费日与挑战`() {
+    fun `晨报到点只输出昨日金额与预算`() {
         runBlocking {
             val now = LocalDateTime.of(2026, 10, 15, 9, 0)
             setTotalBudget(monthStartOf(now), 10_000L)
             expenseBill(5_000L, "三餐", dayStart(now.toLocalDate().minusDays(1))) // 昨天 14 日
             expenseBill(2_000L, "交通", dayStart(now.toLocalDate().minusDays(2))) // 前天 13 日
             challengeService.upsert(USER_ID, "NO_SPEND_DAY", monthStartOf(now), 10L)
-
             val text = newCare(now).morningReport(USER_ID)
             assertNotNull(text)
             val t = text!!
             assertTrue(t.contains("早安"))
             assertTrue(t.contains("昨天花了 ¥50.00（1笔）")) // 只有昨天的 5000
             assertTrue(t.contains("本月预算还剩 ¥30.00（已用 70%）")) // 预算 100 - 已用 70
-            assertTrue(t.contains("12 个零消费日")) // 1~14 日已过 14 天，有支出的是 13/14 两天
-            assertTrue(t.contains("进行中的省钱挑战：1 个"))
+            assertFalse(t.contains("零消费"))
+            assertFalse(t.contains("省钱挑战"))
+            assertFalse(t.contains("挑战"))
         }
     }
 
@@ -353,7 +355,8 @@ class ButlerCareServiceTest {
             val text = newCare(now).eveningNudge(USER_ID)
             assertNotNull(text)
             assertTrue(text!!.contains("还没记过账"))
-            assertTrue(text.contains("今天没花钱"))
+            assertTrue(text.contains("补一笔"))
+            assertFalse(text.contains("挑战"))
         }
     }
 

@@ -1,9 +1,10 @@
 package com.example.rinklnote.ui.screen.day
 
+import com.example.rinklnote.ui.component.MotionListItem
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -188,23 +189,33 @@ fun DayBillsScreen(
             )
         ) {
             item(key = "summary") {
-                DaySummaryCard(
-                    dayStart = dayStart,
-                    day = day,
-                    count = bills.size,
-                    totalExpense = totalExpense,
-                    totalIncome = totalIncome
-                )
+                MotionListItem {
+                    DaySummaryCard(
+                        dayStart = dayStart,
+                        day = day,
+                        count = bills.size,
+                        totalExpense = totalExpense,
+                        totalIncome = totalIncome
+                    )
+
+                }
             }
 
             if (bills.isEmpty()) {
                 // 首帧 loading 时不闪空态，等 Flow 首次发射再判定
                 if (!state.loading) {
-                    item(key = "empty") { DayEmptyState() }
+                    item(key = "empty") {
+                        MotionListItem {
+                            DayEmptyState()
+                        }
+                    }
                 }
             } else {
                 item(key = "rows") {
-                    DayBillListCard(bills = bills, onEditBill = onEditBill)
+                    MotionListItem {
+                        DayBillListCard(bills = bills, onEditBill = onEditBill)
+
+                    }
                 }
             }
         }
@@ -343,7 +354,7 @@ private fun DayBillListCard(bills: List<Bill>, onEditBill: (Long) -> Unit) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onEditBill(bill.id) }
+                    .motionClickable { onEditBill(bill.id) }
             ) {
                 BillRowContent(
                     categoryName = bill.subCategoryName ?: bill.categoryName,
@@ -395,7 +406,7 @@ private fun DayTopBar(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -417,7 +428,7 @@ private fun DayTopBar(
                 .align(Alignment.CenterEnd)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
                 .alpha(if (shareEnabled) 1f else 0.35f)
-                .clickable(enabled = shareEnabled, onClick = onShare),
+                .motionClickable(enabled = shareEnabled, onClick = onShare),
             contentAlignment = Alignment.Center
         ) {
             Icon(

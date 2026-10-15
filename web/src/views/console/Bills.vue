@@ -187,15 +187,15 @@ async function downloadCsv() {
     </div>
 
     <div class="filters">
-      <input class="sel w160" type="text" placeholder="搜索备注/分类..." v-model="search" />
-      <select class="sel" v-model="cat">
+      <input class="sel w160" type="search" aria-label="搜索备注或分类" placeholder="搜索备注/分类..." v-model="search" />
+      <select class="sel" aria-label="按分类筛选" v-model="cat">
         <option :value="''">全部分类</option>
         <option v-for="c in data.cats" :key="c.id" :value="c.id">{{ c.name }}</option>
       </select>
-      <input class="sel" type="date" v-model="from" />
+      <input class="sel" type="date" aria-label="开始日期" v-model="from" />
       <span class="to-sep">至</span>
-      <input class="sel" type="date" v-model="to" />
-      <button class="btn ghost pressable" @click="downloadCsv">导出CSV</button>
+      <input class="sel" type="date" aria-label="结束日期" v-model="to" />
+      <button class="btn ghost pressable" type="button" :aria-busy="loading" @click="downloadCsv">导出 CSV</button>
     </div>
 
     <!-- 筛选 chips：220ms 缩放淡入淡出 -->

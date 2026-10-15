@@ -1,6 +1,26 @@
 package com.example.rinklnote.ui.screen.quickadd
 
 import java.util.Locale
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.draw.rotate
+import com.example.rinklnote.ui.component.accountIconKeyRes
+import com.example.rinklnote.ui.component.accountColor
+import com.example.rinklnote.ui.component.MotionContent
+import com.example.rinklnote.ui.theme.BillWheelColors
+import kotlinx.coroutines.Job
+import kotlin.math.atan2
+import kotlin.math.floor
+import kotlin.math.roundToInt
 
 
 import android.annotation.SuppressLint
@@ -25,10 +45,12 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.blur
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,13 +62,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -69,6 +96,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -76,12 +105,17 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
@@ -100,12 +134,14 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import com.example.rinklnote.ui.theme.AxisLabelGray
 import com.example.rinklnote.ui.theme.LocalRinklColors
-import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.BackgroundLight
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.theme.Motion
+import com.example.rinklnote.ui.theme.billCategoryIconColor
+import androidx.compose.ui.graphics.luminance
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.ui.util.subcategoryIconRes
 import com.example.rinklnote.ui.util.rememberPressHaptics
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.ui.viewmodel.QuickAddEvent
@@ -113,13 +149,6 @@ import com.example.rinklnote.ui.viewmodel.QuickAddState
 import com.example.rinklnote.ui.viewmodel.QuickAddViewModel
 import com.example.rinklnote.ui.viewmodel.SuggestionSource
 import kotlinx.coroutines.launch
-
-/**
- * 抽屉宽度：还原为固定 200dp 窄面板（用户 2026-10-04 拍板还原，避免遮挡主页面）。
- * 内容（标签行/账户行/chips）已按窄宽排布校验。
- */
-@Composable
-private fun adaptiveDrawerWidth(): Dp = 200.dp
 
 /** 跳系统设置的本应用详情页（定位权限/定位服务关闭时「去设置」用）。 */
 private fun openAppSettings(context: android.content.Context) {
@@ -139,248 +168,40 @@ fun QuickAddDrawer(
     onBillAdded: () -> Unit,
     onVoiceInput: () -> Unit = {},
     onAmountTap: () -> Unit = {},
-    // 有自选背景时面板切毛玻璃所需的两件套；nav 层按「有背景」条件传入（同 CustomBottomBar）。
+    onCategoryInput: (Category) -> Unit = {},
     backgroundUri: String? = null,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
     BackHandler(enabled = isVisible) { onDismiss() }
-
-    // 面板材质：有自选背景 → 底部导航同款白雾毛玻璃（采样 AppBackground 的照片）；
-    // 无背景 → 纯白实心（毛玻璃无从采样，会露灰调兜底色）。
-    val panelShape = RoundedCornerShape(18.dp)
-    val panelSurface = if (hazeState != null) {
-        // 照片背景下使用轻微冷灰蓝的半透明雾面，保留背景色彩层次，避免快捷栏像一块纯白贴纸。
-        Modifier
-            .hazeEffect(hazeState, RinklCardFrostedStyle)
-            .background(Color(0xFFF4F8FC).copy(alpha = 0.78f))
-    } else {
-        Modifier.background(MaterialTheme.colorScheme.surface)
-    }
-
     AnimatedVisibility(
         visible = isVisible,
-        enter = slideInHorizontally(
-            animationSpec = Motion.DrawerEnter,
-            initialOffsetX = { it }
-        ),
-        exit = slideOutHorizontally(
-            animationSpec = Motion.DrawerExit,
-            targetOffsetX = { it }
-        ),
+        enter = fadeIn(Motion.Reveal) + slideInHorizontally(Motion.DrawerEnter) { it / 4 },
+        exit = fadeOut(Motion.Dismiss) + slideOutHorizontally(Motion.DrawerExit) { it / 4 },
         modifier = modifier
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onDismiss() }
-        ) {
-            // Drawer panel
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .width(adaptiveDrawerWidth())
-                    .clip(panelShape)
-                    .then(panelSurface)
-                    .then(applyCardGlass(panelShape))
-                    .clickable(enabled = false) {} // consume click
-                    .pointerInput(Unit) {
-                        // 关闭阈值先按 dp 换算成像素：原实现直接写死 60 像素，
-                        // 不同屏幕密度下手感不一致（高密度屏约 20dp 就触发，低密度屏要拖满 60dp）。
-                        val closeThresholdPx = 60.dp.toPx()
-                        var dragOffset = 0f
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                if (dragOffset > closeThresholdPx) onDismiss()
-                                dragOffset = 0f
-                            },
-                            onDragCancel = { dragOffset = 0f },
-                            onHorizontalDrag = { _, dragAmount ->
-                                dragOffset += dragAmount
-                            },
-                            onDragStart = { dragOffset = 0f }
-                        )
-                    }
-            ) {
-                DrawerContent(
-                    viewModel = viewModel,
-                    onDismiss = onDismiss,
-                    onBillAdded = onBillAdded,
-                    onVoiceInput = onVoiceInput,
-                    onAmountTap = onAmountTap,
-                    onToggleType = {
-                        viewModel.onEvent(QuickAddEvent.ToggleType)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DrawerContent(
-    viewModel: QuickAddViewModel,
-    onDismiss: () -> Unit,
-    onBillAdded: () -> Unit,
-    onVoiceInput: () -> Unit,
-    onAmountTap: () -> Unit,
-    onToggleType: () -> Unit
-) {
-    // Collect state once — children read from snapshot, no duplicate subscriptions
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val balanceHidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
-
-    // Fetch smart suggestion and trigger smart prefill once when the drawer opens
-    LaunchedEffect(Unit) {
-        viewModel.onEvent(QuickAddEvent.DrawerOpened)
-        val s = viewModel.state.value
-        if (s.suggestion == null && !s.suggestionDismissed) {
-            viewModel.loadSuggestion()
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-        // 可滚动内容区
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Top bar
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("快捷记账", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-                Icon(
-                    painter = painterResource(R.drawable.ic_register),
-                    contentDescription = "登记",
-                    modifier = Modifier.size(26.dp),
-                    tint = Color.Unspecified
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 智能建议卡（体验优化 Task 3）：依据 / 模糊金额 / 固定与关闭均为可见入口；
-            // 关闭或自动收起后出现「重新显示」入口，不依赖用户猜测手势。
-            val aiSuggestion = state.suggestion
-            if (aiSuggestion != null) {
-                AiSuggestionCard(
-                    suggestion = aiSuggestion,
-                    pinned = state.suggestionPinned,
-                    onApply = { viewModel.onEvent(QuickAddEvent.SuggestionClick) },
-                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissSuggestion) },
-                    onTogglePin = { viewModel.onEvent(QuickAddEvent.ToggleSuggestionPin) },
-                    onEditAmount = onAmountTap
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            } else if (state.suggestionRestorable) {
-                SuggestionReshowChip(onShow = { viewModel.onEvent(QuickAddEvent.ShowSuggestion) })
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // 常去地点建议：打点位置接近已知地点时出现（「用」= 选中该地点的常用分类）。
-            state.placeSuggestion?.let { place ->
-                SuggestionSection(
-                    label = "上次在「${place.placeName}」附近记过" +
-                        (place.categoryName?.let { " · 常用「$it」" } ?: ""),
-                    onUse = { viewModel.onEvent(QuickAddEvent.PlaceSuggestionClick) },
-                    onDismiss = { viewModel.onEvent(QuickAddEvent.DismissPlaceSuggestion) }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (state.templates.isNotEmpty()) {
-                TemplatesSection(
-                    templates = state.templates,
-                    onTemplateClick = { viewModel.onEvent(QuickAddEvent.TemplateClick(it)) }
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            CategorySection(state.categories, state.selectedCategory, state.showSubCategories, state.expandedParentId, state.subCategories, state.selectedSubCategory, state.parentIdsWithSubs, viewModel)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            AccountSection(state.accounts, state.selectedAccount, balanceHidden, viewModel)
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 位置 + 小票 OCR：一行等宽双 chip（与账户卡片同宽对齐）
-            var showOcrFlow by remember { mutableStateOf(false) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LocationChipRow(
-                    location = state.location,
-                    onResolved = { lat, lng ->
-                        viewModel.onEvent(QuickAddEvent.LocationResolved(lat, lng))
-                    },
-                    onCleared = { viewModel.onEvent(QuickAddEvent.ClearLocation) },
-                    modifier = Modifier.weight(1f)
-                )
-                OcrChipRow(
-                    onClick = { showOcrFlow = true },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (showOcrFlow) {
-                ReceiptOcrDialog(
-                    onDismiss = { showOcrFlow = false },
-                    onPickAmount = { viewModel.onEvent(QuickAddEvent.OcrAmountPicked(it)) },
-                    onPickDate = { viewModel.onEvent(QuickAddEvent.OcrDatePicked(it)) },
-                    onPickMerchant = { viewModel.onEvent(QuickAddEvent.OcrMerchantPicked(it)) }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Count area — single-step amount box
-            CountBefore(state, onAmountTap, onToggleType)
-        }
-
-        // AI Voice button — 固定在抽屉底部上方，不随内容滚动，避开底部手势区
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            // 抽屉内的主按钮：按压缩放反馈（显式传 LocalIndication 保留原有水波纹，二者叠加不冲突）
-            val voiceInteraction = remember { MutableInteractionSource() }
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .pressScale(voiceInteraction)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .then(applyCardGlass(CircleShape))
-                    .clickable(
-                        interactionSource = voiceInteraction,
-                        indication = LocalIndication.current
-                    ) { onVoiceInput() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_voice_bill),
-                    contentDescription = "语音记账",
-                    modifier = Modifier.size(26.dp),
-                    tint = Color.Unspecified
-                )
+        // 空白处只接收关闭动作；没有整块底板、模糊层、标题或遮罩。
+        Box(Modifier.fillMaxSize().clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null,
+            onClickLabel = "关闭快捷记账", onClick = onDismiss
+        )) {
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { viewModel.onEvent(QuickAddEvent.DrawerOpened) }
+            BoxWithConstraints(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+                val wheelWidth = minOf(maxWidth * 0.72f, 270.dp)
+                val wheelHeight = minOf(maxHeight * 0.82f, wheelWidth * 2f)
+                Box(Modifier.align(Alignment.CenterEnd).width(wheelWidth).height(wheelHeight)) {
+                    ArcCategoryWheel(
+                        categories = state.categories,
+                        selectedCategory = state.selectedCategory,
+                        accounts = state.accounts,
+                        selectedAccount = state.selectedAccount,
+                        onCategoryClick = onCategoryInput,
+                        onAccountClick = { viewModel.onEvent(QuickAddEvent.SelectAccount(it)) },
+                        onToggleType = { viewModel.onEvent(QuickAddEvent.ToggleType) },
+                        billType = state.billType
+                    )
+                }
             }
         }
     }
@@ -410,7 +231,7 @@ private fun AiSuggestionCard(
             .clip(shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .then(applyCardGlass(shape))
-            .clickable(onClick = onApply)
+            .motionClickable(onClick = onApply)
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -428,7 +249,7 @@ private fun AiSuggestionCard(
                     .size(32.dp)
                     .clip(CircleShape)
                     .background(onContainer.copy(alpha = if (pinned) 0.14f else 0.06f))
-                    .clickable(onClickLabel = if (pinned) "取消固定建议" else "固定建议", onClick = onTogglePin),
+                    .motionClickable(onClickLabel = if (pinned) "取消固定建议" else "固定建议", onClick = onTogglePin),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -443,7 +264,7 @@ private fun AiSuggestionCard(
                 modifier = Modifier
                     .size(32.dp)
                     .clip(CircleShape)
-                    .clickable(onClickLabel = "关闭建议", onClick = onDismiss),
+                    .motionClickable(onClickLabel = "关闭建议", onClick = onDismiss),
                 contentAlignment = Alignment.Center
             ) {
                 Text("×", fontSize = 18.sp, color = onContainer.copy(alpha = 0.78f))
@@ -489,7 +310,7 @@ private fun AiSuggestionCard(
                     color = onContainer,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onEditAmount)
+                        .motionClickable(onClick = onEditAmount)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
@@ -519,7 +340,7 @@ private fun SuggestionReshowChip(onShow: () -> Unit) {
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
             .then(applyCardGlass(shape))
-            .clickable(onClick = onShow)
+            .motionClickable(onClick = onShow)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -551,7 +372,7 @@ private fun SuggestionSection(
             .clip(shape)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .then(applyCardGlass(shape))
-            .clickable { onUse() }
+            .motionClickable { onUse() }
             .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -565,7 +386,7 @@ private fun SuggestionSection(
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .clickable { onDismiss() },
+                .motionClickable { onDismiss() },
             contentAlignment = Alignment.Center
         ) {
             Text("✕", fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -573,141 +394,366 @@ private fun SuggestionSection(
     }
 }
 
+/** 透明半圆轮盘：手指按圆心角实时拖动，松手后吸附到分类位置。 */
 @Composable
-private fun TemplatesSection(
-    templates: List<BillTemplate>,
-    onTemplateClick: (BillTemplate) -> Unit
+private fun ArcCategoryWheel(
+    categories: List<Category>,
+    selectedCategory: Category?,
+    accounts: List<Account>,
+    selectedAccount: Account?,
+    onCategoryClick: (Category) -> Unit,
+    onAccountClick: (Account) -> Unit,
+    onToggleType: () -> Unit,
+    billType: BillType
 ) {
-    val shape = RoundedCornerShape(15.dp)
-    Column(
+    val ordered = remember(categories) {
+        val names = listOf("三餐", "日用", "交通", "网购", "学习", "运动", "娱乐")
+        categories.sortedBy { names.indexOf(it.name).let { index -> if (index < 0) Int.MAX_VALUE else index } }
+    }
+    val count = minOf(ordered.size, 7)
+    val spacing = if (count > 1) 150f / (count - 1) else 25f
+    val rotation = remember(ordered) { Animatable(0f) }
+    var dragRotation by remember(ordered) { mutableFloatStateOf(0f) }
+    var dragging by remember(ordered) { mutableStateOf(false) }
+    var settleJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val rinkl = LocalRinklColors.current
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val trackColor = rinkl.themeColor.copy(alpha = 0.26f)
+    fun currentRotation() = if (dragging) dragRotation else rotation.value
+    fun angleFor(index: Int) = if (count == 1) 180f else 255f - index * spacing + currentRotation()
+    // 只在标签跨越半圆边缘时更新节点；连续位移留在布局与绘制阶段，避免逐帧重组文字。
+    val entries by remember(ordered, spacing) {
+        derivedStateOf {
+            if (count == 0) emptyList() else if (count == 1) listOf(0) else {
+                val first = floor(currentRotation() / spacing).toInt()
+                (first - 1..first + count).filter { angleFor(it) in 120f..240f }
+            }
+        }
+    }
+    fun category(index: Int) = ordered[Math.floorMod(index, ordered.size)]
+    fun edgeAlpha(angle: Float) = minOf((angle - 120f) / 10f, (240f - angle) / 10f).coerceIn(0f, 1f)
+    fun settle() {
+        if (!dragging) return
+        val released = dragRotation
+        settleJob = scope.launch {
+            rotation.snapTo(released)
+            dragging = false
+            rotation.animateTo((released / spacing).roundToInt() * spacing, Motion.SliderSettle)
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val widthPx = with(density) { maxWidth.toPx() }
+        val heightPx = with(density) { maxHeight.toPx() }
+        // 只露出轮盘左侧弧段；账户另行贴屏幕右缘，避免随圆心一起移出屏幕。
+        val center = Offset(widthPx + with(density) { 72.dp.toPx() }, heightPx / 2f)
+        val radius = minOf(widthPx - with(density) { 14.dp.toPx() },
+            heightPx / 2f - with(density) { 24.dp.toPx() })
+        val labelRadius = radius - with(density) { 38.dp.toPx() }
+        Box(Modifier.fillMaxSize().pointerInput(ordered, center) {
+            detectDragGestures(
+                onDragStart = {
+                    settleJob?.cancel()
+                    dragRotation = rotation.value
+                    dragging = true
+                },
+                onDrag = { change, movement ->
+                    if (count > 1) {
+                        val before = change.position - movement - center
+                        val after = change.position - center
+                        val degrees = ((atan2(after.y, after.x) - atan2(before.y, before.x)) * 180f / PI).toFloat()
+                        val delta = when { degrees > 180f -> degrees - 360f; degrees < -180f -> degrees + 360f; else -> degrees }
+                        dragRotation += delta
+                    }
+                    change.consume()
+                },
+                onDragEnd = { settle() },
+                onDragCancel = { settle() }
+            )
+        }) {
+            Canvas(Modifier.matchParentSize()) {
+                val outer = Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius)
+                entries.forEach { index ->
+                    val angle = angleFor(index)
+                    val cat = category(index)
+                    if (cat.id == selectedCategory?.id) {
+                        val innerRadius = 74.dp.toPx()
+                        val inner = Rect(center.x - innerRadius, center.y - innerRadius,
+                            center.x + innerRadius, center.y + innerRadius)
+                        val sector = Path().apply {
+                            arcTo(outer, angle - 12f, 24f, true)
+                            arcTo(inner, angle + 12f, -24f, false)
+                            close()
+                        }
+                        drawPath(sector, rinkl.billCategoryIconColor(cat.name, dark).copy(alpha = 0.08f * edgeAlpha(angle)))
+                    }
+                }
+                drawArc(trackColor, 105f, 150f, false, outer.topLeft,
+                    androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f),
+                    style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round))
+                entries.forEach { index ->
+                    val angle = angleFor(index)
+                    val radians = angle * PI / 180f
+                    val point = center + Offset(radius * cos(radians).toFloat(), radius * sin(radians).toFloat())
+                    val tangent = Offset(-sin(radians).toFloat(), cos(radians).toFloat()) * 8.dp.toPx()
+                    drawLine(rinkl.billCategoryIconColor(category(index).name, dark).copy(alpha = 0.7f * edgeAlpha(angle)),
+                        point - tangent, point + tangent, strokeWidth = 6.dp.toPx(), cap = StrokeCap.Round)
+                }
+            }
+            entries.forEach { index ->
+                key(index) {
+                    val cat = category(index)
+                    val enabled by remember(index, ordered) { derivedStateOf { edgeAlpha(angleFor(index)) > 0.2f } }
+                    ArcCategoryOption(cat, selectedCategory?.id == cat.id,
+                        modifier = Modifier.offset {
+                            val radians = angleFor(index) * PI / 180f
+                            val x = center.x + labelRadius * cos(radians).toFloat()
+                            val y = center.y + labelRadius * sin(radians).toFloat()
+                            IntOffset((x - 32.dp.toPx()).roundToInt(), (y - 32.dp.toPx()).roundToInt())
+                        }.size(64.dp).graphicsLayer { alpha = edgeAlpha(angleFor(index)) },
+                        enabled = enabled,
+                        onClick = { onCategoryClick(cat) })
+                }
+            }
+            AccountWheelHub(accounts, selectedAccount,
+                Modifier.align(Alignment.CenterEnd).offset(x = 50.dp), onAccountClick, onToggleType, billType)
+        }
+    }
+}
+
+/** 标签仅使用白色圆底；图标和文字不随轮盘旋转，保持易读与可点击。 */
+@Composable
+private fun ArcCategoryOption(category: Category, selected: Boolean, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
+    val rinkl = LocalRinklColors.current
+    val iconTint = rinkl.billCategoryIconColor(category.name, false)
+    val font = rinkl.fontColor.takeIf { it.luminance() < 0.6f } ?: BillWheelColors.LabelContent
+    Column(modifier.clip(CircleShape).background(BillWheelColors.LabelBackground)
+        .border(1.dp, if (selected) rinkl.themeColor.copy(alpha = 0.65f)
+            else rinkl.borderColor.takeIf { it.alpha > 0f } ?: BillWheelColors.LabelBorder, CircleShape)
+        .semantics(mergeDescendants = true) { this.selected = selected }
+        .motionClickable(enabled = enabled, role = Role.RadioButton,
+            onClickLabel = "选择${category.name}", onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(painterResource(categoryIconRes(category.name)), contentDescription = null,
+            modifier = Modifier.size(24.dp), tint = iconTint)
+        Text(category.name, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = font, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun AccountWheelHub(
+    accounts: List<Account>, selectedAccount: Account?, modifier: Modifier,
+    onAccountClick: (Account) -> Unit, onToggleType: () -> Unit, billType: BillType
+) {
+    val account = selectedAccount ?: accounts.firstOrNull()
+    var dragDistance by remember { mutableStateOf(0f) }
+    Box(modifier.size(128.dp).clip(CircleShape).background(BillWheelColors.LabelBackground)
+        .border(1.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f }
+            ?: BillWheelColors.LabelBorder, CircleShape)
+        .motionClickable(onClickLabel = if (billType == BillType.EXPENSE) "切换为收入" else "切换为支出", onClick = onToggleType)
+        .pointerInput(accounts, account?.id) {
+            detectVerticalDragGestures(
+                onDragStart = { dragDistance = 0f },
+                onVerticalDrag = { change, amount -> change.consume(); dragDistance += amount },
+                onDragEnd = {
+                    val current = accounts.indexOfFirst { it.id == account?.id }.coerceAtLeast(0)
+                    val next = if (dragDistance < -24.dp.toPx()) current + 1 else if (dragDistance > 24.dp.toPx()) current - 1 else current
+                    accounts.getOrNull(next.coerceIn(0, accounts.lastIndex.coerceAtLeast(0)))?.let(onAccountClick)
+                    dragDistance = 0f
+                }, onDragCancel = { dragDistance = 0f }
+            )
+        }, contentAlignment = Alignment.Center) {
+        Column(Modifier.offset(x = (-20).dp).width(76.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            MotionContent(account) { shown ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(painterResource(accountIconKeyRes(if (shown?.name == "无账户") "WALLET" else shown?.iconKey ?: "WALLET")),
+                        contentDescription = null, modifier = Modifier.size(27.dp),
+                        tint = if (shown?.name == "无账户" || shown == null) {
+                            if (billType == BillType.EXPENSE) LocalRinklColors.current.expenseColor else LocalRinklColors.current.incomeColor
+                        } else accountColor(shown.iconColor))
+                    Text(shown?.name ?: "无账户", fontSize = 13.sp, color = BillWheelColors.LabelContent,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+                    modifier = Modifier.size(16.dp).rotate(-90f), tint = BillWheelColors.LabelContent.copy(alpha = 0.5f))
+                Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+                    modifier = Modifier.size(16.dp).rotate(90f), tint = BillWheelColors.LabelContent.copy(alpha = 0.5f))
+            }
+        }
+    }
+}
+
+/** 参考图顶部金额：金额始终可见，点击后进入精确编辑键盘。 */
+@Composable
+private fun SidebarAmountHeader(state: QuickAddState, onClick: () -> Unit) {
+    val isExpense = state.billType == BillType.EXPENSE
+    val amountColor = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
-            .then(applyCardGlass(shape))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .motionClickable(onClickLabel = "输入金额", onClick = onClick)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Bottom
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("快捷模板", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("一键记账", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("¥", fontSize = 17.sp, fontWeight = FontWeight.Medium, color = amountColor)
+        Spacer(Modifier.width(4.dp))
+        Text(
+            state.amount.ifEmpty { "0.00" },
+            fontSize = 24.sp,
+            lineHeight = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = amountColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+    RinklDivider(endInset = 0.dp)
+}
+
+/** 参考图的母分类网格：默认只露出常用项，「全部」展开完整分类集合。 */
+@Composable
+private fun CompactCategorySection(
+    categories: List<Category>,
+    selectedCategory: Category?,
+    showSubCategories: Boolean,
+    subCategories: List<SubCategory>,
+    selectedSubCategory: SubCategory?,
+    parentIdsWithSubs: Set<Long>,
+    viewModel: QuickAddViewModel
+) {
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(selectedCategory?.id) {
+        selectedCategory?.let { viewModel.onEvent(QuickAddEvent.LongPressCategory(it)) }
+    }
+    val displayCategories = remember(categories, selectedCategory?.id, showAll) {
+        if (showAll) categories else buildList {
+            selectedCategory?.let(::add)
+            categories.filter { it.id != selectedCategory?.id }.take(3).forEach(::add)
+        }.distinctBy { it.id }
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("分类", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                if (showAll) "收起 ‹" else "全部 ›",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.motionClickable(onClickLabel = if (showAll) "收起分类" else "查看全部分类") { showAll = !showAll }
+            )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        templates.forEach { template ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onTemplateClick(template) }
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(template.label, fontSize = 16.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    Money.format(template.amountMinor),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
+        Spacer(Modifier.height(6.dp))
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 86.dp, max = if (showAll) 220.dp else 92.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(displayCategories, key = { it.id }) { category ->
+                CompactCategoryChip(category, selectedCategory?.id == category.id) {
+                    if (selectedCategory?.id != category.id) viewModel.onEvent(QuickAddEvent.SelectCategory(category))
+                }
+            }
+        }
+        if (showSubCategories && selectedCategory != null && subCategories.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "${selectedCategory.name}细分",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(3.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                item {
+                    CompactSubcategoryChip(selectedCategory.name, null, selectedSubCategory == null) {
+                        viewModel.onEvent(QuickAddEvent.SelectSubCategory(null))
+                    }
+                }
+                items(subCategories, key = { it.id }) { sub ->
+                    CompactSubcategoryChip(
+                        categoryName = selectedCategory.name,
+                        subCategory = sub,
+                        selected = selectedSubCategory?.id == sub.id,
+                        onClick = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(sub)) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CategorySection(
-    categories: List<Category>,
-    selectedCategory: Category?,
-    showSubCategories: Boolean,
-    expandedParentId: Long?,
-    subCategories: List<SubCategory>,
-    selectedSubCategory: SubCategory?,
-    parentIdsWithSubs: Set<Long>,
-    viewModel: QuickAddViewModel
-) {
-    val shape = RoundedCornerShape(15.dp)
-    Column(
+private fun CompactCategoryChip(category: Category, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(9.dp)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 200.dp, max = 280.dp)
+            .height(38.dp)
             .clip(shape)
-            .then(applyCardGlass(shape))
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f))
+            .border(1.dp, if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.42f) else Color.Transparent, shape)
+            .semantics(mergeDescendants = true) { this.selected = selected }
+            .clickable(role = Role.RadioButton, onClickLabel = "选择${category.name}", onClick = onClick)
+            .padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
+        Icon(painterResource(categoryIconRes(category.name)), contentDescription = null, modifier = Modifier.size(20.dp), tint = LocalRinklColors.current.billCategoryIconColor(category.name, MaterialTheme.colorScheme.background.luminance() < 0.5f))
+        Text(category.name, fontSize = 13.sp, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (selected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun CompactSubcategoryChip(categoryName: String, subCategory: SubCategory?, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
+            .semantics(mergeDescendants = true) { this.selected = selected }
+            .clickable(role = Role.RadioButton, onClickLabel = "选择${subCategory?.name ?: "不细分"}", onClick = onClick)
+            .padding(horizontal = 7.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(painterResource(subcategoryIconRes(categoryName, subCategory?.name)), contentDescription = null, modifier = Modifier.size(16.dp), tint = LocalRinklColors.current.billCategoryIconColor(categoryName, MaterialTheme.colorScheme.background.luminance() < 0.5f))
+        Text(subCategory?.name ?: "不细分", fontSize = 12.sp, color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** 账户只保留一行摘要，点击账户行仍进入原有账户选择逻辑。 */
+@Composable
+private fun CompactAccountSection(accounts: List<Account>, selectedAccount: Account?, viewModel: QuickAddViewModel) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val selected = selectedAccount ?: accounts.firstOrNull()
+    Column(Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().motionClickable(onClickLabel = "选择账户") { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("标签", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                "点击展开",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f)
-            )
+            Icon(painterResource(R.drawable.ic_wallet), contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(6.dp))
+            Text("账户", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.weight(1f))
+            Text(selected?.name ?: "无账户", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.width(3.dp))
+            Text(if (expanded) "‹" else "›", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-        RinklDivider(endInset = 0.dp)
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 当前展开的母标签：显式记录于状态（不再从已加载列表反推），关闭时按 showSubCategories 归零
-        val visibleParentId = if (showSubCategories) expandedParentId else null
-        val listState = rememberLazyListState()
-        LaunchedEffect(selectedCategory?.id, categories.size) {
-            val selectedIndex = categories.indexOfFirst { it.id == selectedCategory?.id }
-            if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
-        }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            items(categories, key = { it.id }, contentType = { "category_quick_add" }) { category ->
-                Column {
-                    CategoryRow(
-                        category = category,
-                        isSelected = selectedCategory?.id == category.id,
-                        onClick = {
-                            val shouldCollapse = showSubCategories && expandedParentId == category.id
-                            viewModel.onEvent(QuickAddEvent.SelectCategory(category))
-                            if (category.id in parentIdsWithSubs && !shouldCollapse) {
-                                viewModel.onEvent(QuickAddEvent.LongPressCategory(category))
-                            }
-                        },
-                        onLongPress = { viewModel.onEvent(QuickAddEvent.LongPressCategory(category)) }
-                    )
-                    // 二级分类紧跟母标签正下方展示，左缘与标签文字对齐。
-                    // AnimatedVisibility 始终在组合中（不能靠 if 守卫，否则进入组合即 visible=true，
-                    // 不会触发 enter 动画），由 visible 的 false→true 翻转驱动展开动画。
-                    AnimatedVisibility(
-                        visible = visibleParentId == category.id && subCategories.isNotEmpty(),
-                        enter = expandVertically(animationSpec = Motion.Expand) + fadeIn(Motion.Fade),
-                        exit = shrinkVertically(animationSpec = Motion.Expand) + fadeOut(Motion.Fade)
+        if (expanded) {
+            Spacer(Modifier.height(5.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                items(accounts, key = { it.id }) { account ->
+                    Row(
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (account.id == selected?.id) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)).motionClickable(onClickLabel = "选择${account.name}") { viewModel.onEvent(QuickAddEvent.SelectAccount(account)); expanded = false }.padding(horizontal = 6.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        // 二级内容淡替：以二级分类列表为 key 交叉淡化（令牌 Motion.Fade）。
-                        // 切换母标签时 VM 会先清空 subCategories 再异步加载新列表——旧内容
-                        // 按切换瞬间的快照冻结，收起时旧二级淡出而非瞬空；新父级列表就绪后
-                        // 展开时直接呈现自己的内容，不再出现「内容瞬换」的生硬感。
-                        AnimatedContent(
-                            targetState = subCategories,
-                            transitionSpec = { fadeIn(Motion.Fade) togetherWith fadeOut(Motion.Fade) },
-                            label = "二级标签淡替"
-                        ) { subs ->
-                            SubCategoryPopup(
-                                subCategories = subs,
-                                selected = selectedSubCategory,
-                                onSelect = { viewModel.onEvent(QuickAddEvent.SelectSubCategory(it)) }
-                            )
-                        }
+                        AccountIcon(iconKey = account.iconKey, colorHex = account.iconColor, size = 18.dp)
+                        Text(account.name, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
                     }
                 }
             }
@@ -715,104 +761,22 @@ private fun CategorySection(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CategoryRow(
-    category: Category,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(
-                painter = painterResource(categoryIconRes(category.name)),
-                contentDescription = category.name,
-                modifier = Modifier.size(24.dp),
-                tint = Color.Unspecified
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                category.name,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+private fun CompactTemplatesSection(templates: List<BillTemplate>, onTemplateClick: (BillTemplate) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(painterResource(R.drawable.ic_sidebar_template), contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("快捷模板", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         }
-        // Radio dot
-        // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
-        val dotColor by animateColorAsState(
-            targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-            animationSpec = Motion.SelectColor,
-            label = "分类选中圆点"
-        )
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(dotColor)
-                .then(
-                    if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
-                    else Modifier
-                )
-        )
-    }
-}
-
-@Composable
-private fun SubCategoryPopup(
-    subCategories: List<SubCategory>,
-    selected: SubCategory?,
-    onSelect: (SubCategory?) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            // 32.dp 缩进：与母标签行内图标(24dp)+间距(8dp)对齐，弹层左缘正对标签文字
-            .padding(start = 32.dp, top = 2.dp, end = 10.dp)
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-    ) {
-        subCategories.forEach { sub ->
-            val isSelected = selected?.id == sub.id
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSelect(sub) }
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        Spacer(Modifier.height(5.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            items(templates, key = { it.id }) { template ->
                 Text(
-                    text = sub.name,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                // 与父分类/账户行同款单选圆点；未选中给空心圆点做右锚，保证可选中观感
-                // 填充随选中交叉淡化（令牌 Motion.SelectColor）
-                val dotColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                    animationSpec = Motion.SelectColor,
-                    label = "二级标签选中圆点"
-                )
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                        .then(
-                            if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
-                            else Modifier
-                        )
+                    "${template.label} ${Money.format(template.amountMinor)}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).motionClickable(onClickLabel = "使用${template.label}模板") { onTemplateClick(template) }.padding(horizontal = 7.dp, vertical = 6.dp),
+                    maxLines = 1
                 )
             }
         }
@@ -820,208 +784,28 @@ private fun SubCategoryPopup(
 }
 
 @Composable
-private fun AccountSection(
-    accounts: List<Account>,
-    selectedAccount: Account?,
-    hidden: Boolean,
-    viewModel: QuickAddViewModel
-) {
-    val shape = RoundedCornerShape(15.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .then(applyCardGlass(shape))
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("账户选择", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clickable { BalancePrivacy.toggle() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
-                    contentDescription = if (hidden) "显示余额" else "隐藏余额",
-                    modifier = Modifier.size(16.dp),
-                    tint = Color.Unspecified
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(2.dp))
-        RinklDivider(endInset = 0.dp)
-        Spacer(modifier = Modifier.height(2.dp))
-        accounts.forEach { account ->
-            AccountRow(
-                account = account,
-                isSelected = selectedAccount?.id == account.id,
-                hidden = hidden,
-                onClick = { viewModel.onEvent(QuickAddEvent.SelectAccount(account)) }
-            )
-        }
-    }
-}
-
-@SuppressLint("DefaultLocale")
-@Composable
-private fun AccountRow(account: Account, isSelected: Boolean, hidden: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .height(32.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AccountIcon(
-                iconKey = account.iconKey,
-                colorHex = account.iconColor,
-                size = 28.dp
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                account.name,
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(modifier = Modifier.width(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (hidden) "***" else Money.format(account.balanceMinor),
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            // 圆点填充随选中交叉淡化（令牌 Motion.SelectColor）；描边兜底逻辑保持不变
-            val dotColor by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                animationSpec = Motion.SelectColor,
-                label = "账户选中圆点"
-            )
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-                    .then(
-                        if (!isSelected) Modifier.border(1.5.dp, LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder, CircleShape)
-                        else Modifier
-                    )
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CountBefore(
-    state: QuickAddState,
-    onAmountTap: () -> Unit,
-    onToggleType: () -> Unit
-) {
+private fun SidebarBottomAction(state: QuickAddState, onAmountTap: () -> Unit, onToggleType: () -> Unit) {
     val isExpense = state.billType == BillType.EXPENSE
-    val haptics = rememberPressHaptics()
-    // 金额框是抽屉里最大的可点元素之一：加按压缩放反馈（复用点击手势的 InteractionSource）
-    val amountInteraction = remember { MutableInteractionSource() }
-    // 一次性提示（体验审查 P1）：长按切换收支属于隐藏手势，首次展示抽屉时用反馈条提示一次。
-    // 会话内只出现一次（rememberSaveable，配置变更不重弹）；跨会话持久化留待后续。
-    // 控制器在组合期捕获（CompositionLocal.current 只能在组合上下文读取）。
-    val feedbackHost = LocalRinklFeedback.current
-    var typeHintShown by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        if (!typeHintShown) {
-            typeHintShown = true
-            feedbackHost.show(BillFeedback.Plain("点「收/支」或长按金额可切换收支方向"))
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TypeToggleChip("支出", isExpense, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f)) { if (!isExpense) onToggleType() }
+            TypeToggleChip("收入", !isExpense, LocalRinklColors.current.incomeColor, Modifier.weight(1f)) { if (isExpense) onToggleType() }
         }
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ){
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .pressScale(amountInteraction)
-                .clip(RoundedCornerShape(15.dp))
-                .then(applyCardGlass(RoundedCornerShape(15.dp)))
-                .combinedClickable(
-                    interactionSource = amountInteraction,
-                    indication = null,
-                    onClick = onAmountTap,
-                    onLongClick = {
-                        haptics.longPress()
-                        onToggleType()
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Text(
-                    text = "¥",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 12.dp)
-                )
-                Text(
-                    text = state.amount.ifEmpty { "0.00" },
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
-                    color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .width(140.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-        // 显式收支切换（体验审查 P1）：点击与长按等效，长按保留为快捷方式。
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).motionClickable(onClickLabel = "输入金额") { onAmountTap() }.padding(vertical = 9.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TypeToggleChip(
-                label = "支出",
-                selected = isExpense,
-                selectedColor = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f),
-                onSelect = { if (!isExpense) onToggleType() }
-            )
-            TypeToggleChip(
-                label = "收入",
-                selected = !isExpense,
-                selectedColor = LocalRinklColors.current.incomeColor,
-                modifier = Modifier.weight(1f),
-                onSelect = { if (isExpense) onToggleType() }
+            Icon(painterResource(R.drawable.ic_amount_entry), contentDescription = null, modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Spacer(Modifier.width(4.dp))
+            Text(
+            if (state.amount.isBlank()) "点击输入金额" else "继续编辑 ¥${state.amount}",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            textAlign = TextAlign.Center
             )
         }
-        Spacer(modifier = Modifier.height(2.dp))
-        Text("点击金额输入 · 长按切换收支", fontSize = 12.sp, fontWeight = FontWeight.Normal, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1043,10 +827,10 @@ private fun TypeToggleChip(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(
-                if (selected) selectedColor.copy(alpha = 0.14f)
+                if (selected) MaterialTheme.colorScheme.primaryContainer
                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
             )
-            .clickable(onClickLabel = if (label == "支出") "切换为支出" else "切换为收入", role = Role.Button, onClick = onSelect)
+            .motionClickable(onClickLabel = if (label == "支出") "切换为支出" else "切换为收入", role = Role.Button, onClick = onSelect)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         textAlign = TextAlign.Center
     )
@@ -1066,7 +850,7 @@ private fun OcrChipRow(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
             // mergeDescendants：图标为装饰（旁有文字），读屏合并为一条「拍小票识别」
             .semantics(mergeDescendants = true) {}
-            .clickable(onClickLabel = "拍小票识别", onClick = onClick)
+            .motionClickable(onClickLabel = "拍小票识别", onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -1149,7 +933,7 @@ private fun LocationChipRow(
             .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(15.dp)))
             // mergeDescendants：读屏把图标+文字合并为一条「记录当前位置」语义
             .semantics(mergeDescendants = true) {}
-            .clickable(onClickLabel = if (located) "清除位置" else "记录当前位置") {
+            .motionClickable(onClickLabel = if (located) "清除位置" else "记录当前位置") {
                 if (located) {
                     onCleared()
                 } else {

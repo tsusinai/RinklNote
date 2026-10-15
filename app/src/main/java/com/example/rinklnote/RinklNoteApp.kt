@@ -24,8 +24,7 @@ import com.example.rinklnote.sync.SyncManager
 import com.example.rinklnote.ui.util.BalancePrivacy
 import com.example.rinklnote.notification.DailyReportReceiver
 import com.example.rinklnote.notification.NotificationHelper
-import com.example.rinklnote.widget.RinklNoteAppWidget
-import androidx.glance.appwidget.updateAll
+import com.example.rinklnote.widget.updateRinklWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -59,7 +60,7 @@ class RinklNoteApp : Application() {
     val repository: BillRepository by lazy {
         BillRepositoryImpl(database, onBillMutated = {
             // updateAll 为 suspend，需在协程内执行；应用级作用域随 App 生命周期存活。
-            applicationScope.launch { RinklNoteAppWidget().updateAll(this@RinklNoteApp) }
+            applicationScope.launch { updateRinklWidgets(this@RinklNoteApp) }
         })
     }
     val tokenManager: TokenManager by lazy { TokenManager(this) }
@@ -95,6 +96,12 @@ class RinklNoteApp : Application() {
         }
         applicationScope.launch {
             settingsManager.balanceHidden.collect { BalancePrivacy.restore(it) }
+        }
+        // 桌面隐私、快捷金额和预算变化均刷新四款；冷启动从持久化偏好恢复，不依赖内存默认值。
+        applicationScope.launch {
+            combine(settingsManager.widgetPreferences, budgetRepository.observeBudgets()) { prefs, budgets ->
+                prefs to budgets
+            }.distinctUntilChanged().collect { updateRinklWidgets(this@RinklNoteApp) }
         }
         // Initialize notification channel and schedule daily report
         NotificationHelper.createChannels(this)

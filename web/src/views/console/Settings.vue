@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useDataStore } from '../../stores/data'
 import ThemeCard from './settings/ThemeCard.vue'
 import SyncCard from './settings/SyncCard.vue'
@@ -10,6 +11,8 @@ import TemplatesSection from './settings/TemplatesSection.vue'
 import SuggestSection from './settings/SuggestSection.vue'
 import BudgetSection from './settings/BudgetSection.vue'
 
+const route = useRoute()
+const botsOnly = computed(() => route.query.section === 'bots')
 const data = useDataStore()
 onMounted(() => { if (!data.cats.length) data.loadData() })
 
@@ -19,15 +22,17 @@ const delays = [0, 60, 120, 180, 240, 300, 360, 360]
 
 <template>
   <div class="page">
-    <h2>设置</h2>
-    <div v-reveal="delays[0]"><ThemeCard /></div>
-    <div v-reveal="delays[1]"><BudgetSection /></div>
-    <div v-reveal="delays[2]"><SyncCard /></div>
-    <div v-reveal="delays[3]"><AiPushCard /></div>
-    <div v-reveal="delays[4]"><KeywordsSection /></div>
-    <div v-reveal="delays[5]"><TemplatesSection /></div>
-    <div v-reveal="delays[6]"><SuggestSection /></div>
-    <div v-reveal="delays[7]"><BotChannelsSection /></div>
+    <h2>{{ botsOnly ? 'Bot 接入' : '设置' }}</h2>
+    <template v-if="!botsOnly">
+      <div v-reveal="delays[0]"><ThemeCard /></div>
+      <div v-reveal="delays[1]"><BudgetSection /></div>
+      <div v-reveal="delays[2]"><SyncCard /></div>
+      <div v-reveal="delays[3]"><AiPushCard /></div>
+      <div v-reveal="delays[4]"><KeywordsSection /></div>
+      <div v-reveal="delays[5]"><TemplatesSection /></div>
+      <div v-reveal="delays[6]"><SuggestSection /></div>
+    </template>
+    <div v-reveal="botsOnly ? 0 : delays[7]"><BotChannelsSection /></div>
   </div>
 </template>
 

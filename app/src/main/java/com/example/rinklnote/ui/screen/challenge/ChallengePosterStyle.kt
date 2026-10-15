@@ -12,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -369,7 +370,7 @@ fun PosterStepButton(symbol: String, pair: PosterPair, onClick: () -> Unit) {
             .clip(RoundedCornerShape(10.dp))
             .background(pair.background)
             .border(2.dp, Color.Black, RoundedCornerShape(10.dp))
-            .clickable(
+            .motionClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
@@ -397,7 +398,7 @@ fun PosterTopBar(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .size(44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -418,17 +419,15 @@ fun PosterTopBar(
 }
 
 /**
- * 小盘吉祥物贴纸位：hub 大字报右上角「探头」。使用 resource/二次元logo/ 现有位图
- * （drawable-nodpi/mascot_xiaopan.png），轻微旋转 + 压在海报边框上制造贴纸感。
+ * 挑战页辅助标识：以统一的预算向量图标替代二次元吉祥物。
  */
 @Composable
 fun MascotPeek(modifier: Modifier = Modifier, size: Dp = 56.dp) {
     Image(
-        painter = painterResource(R.drawable.mascot_xiaopan),
-        contentDescription = "小盘吉祥物",
+        painter = painterResource(R.drawable.ic_budget),
+        contentDescription = "预算挑战",
         modifier = modifier
             .size(size)
-            .graphicsLayer { rotationZ = -8f }
     )
 }
 

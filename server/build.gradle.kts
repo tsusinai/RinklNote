@@ -14,6 +14,7 @@ java {
 }
 
 dependencies {
+    implementation(project(":report"))
     // Ktor Server
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)

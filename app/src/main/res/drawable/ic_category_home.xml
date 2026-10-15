@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 由 resource/mobile/generate_icons.py 生成，请修改 SVG 同源路径后重新生成。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="1024"
-    android:viewportHeight="1024">
-<path
-        android:pathData="M512 96 96 448h96v416c0 35 29 64 64 64h512c35 0 64-29 64-64V448h96L512 96z"
-        android:fillColor="#FF4C4C4C" /><path
-        android:pathData="M448 928V672a64 64 0 0 1 128 0v256z"
-        android:fillColor="#FF7EC1FC" />
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FF555555"
+        android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M2 11l10-9 10 9 M5 9v12h14V9 M9 21v-7h6v7"/>
 </vector>

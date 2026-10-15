@@ -45,7 +45,7 @@ function sample(text: string) { utterance.value = text; saved.value = false; dem
             <figure class="android-shot">
               <div class="android-shot-status"><span>10:08</span><span>▰</span></div>
               <div class="android-shot-viewport">
-                <img src="/screenshots/home.png" alt="RinklNote 记账主页流水截屏" class="real-mcp-shot" />
+                <img src="/screenshots/home.png" alt="RinklNote 记账主页流水截屏" class="real-mcp-shot shot-home-focus" />
               </div>
               <div class="android-shot-card">
                 <b>10月实机流水</b>
@@ -57,7 +57,7 @@ function sample(text: string) { utterance.value = text; saved.value = false; dem
             <figure class="android-shot">
               <div class="android-shot-status"><span>10:08</span><span>▰</span></div>
               <div class="android-shot-viewport">
-                <img src="/screenshots/quickadd.png" alt="RinklNote 快速记账键盘截屏" class="real-mcp-shot" />
+                <img src="/screenshots/quickadd.png" alt="RinklNote 快速记账键盘截屏" class="real-mcp-shot shot-keypad-focus" />
               </div>
               <div class="android-shot-card">
                 <b>定制数字键盘</b>

@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory
  *    EncodingAESKey，验签加解密走 `services/wx/WxCryptUtil`（与企微同套底座）
  */
 class MpBotService {
+    var interactions: com.example.rinklnote.server.services.bot.BotInteractionService? = null
     private val logger = LoggerFactory.getLogger(MpBotService::class.java)
 
     companion object {

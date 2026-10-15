@@ -8,7 +8,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -31,8 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +96,6 @@ fun BillCard(
     Column(
         modifier = modifier
             .padding(horizontal = 14.dp)
-            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .animateContentSize(animationSpec = Motion.ContentResize)
@@ -106,12 +106,15 @@ fun BillCard(
                 .fillMaxWidth()
                 .semantics(mergeDescendants = true) {}
                 // 日期头整行可点：进入「当天账单」页（只加在头部，不碰行内长按拖动手势）
-                .clickable { onOpenDay(date) },
+                .motionClickable { onOpenDay(date) },
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val headerDateLabel = remember(date, dayOfWeek) {
+                "${date.toDateString()} $dayOfWeek"
+            }
             Text(
-                text = "${date.toDateString()} $dayOfWeek",
+                text = headerDateLabel,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -160,7 +163,7 @@ fun BillCard(
                     onDragFinished = onDragFinished,
                     modifier = Modifier
                         .then(if (isDragged) Modifier.height(0.dp) else Modifier)
-                        .offset(y = offsetY)
+                        .offset { IntOffset(0, offsetY.roundToPx()) }
                         .graphicsLayer { alpha = if (isDragged) 0f else 1f }
                 )
             }
@@ -196,14 +199,19 @@ private fun SwipeableBillRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
     ) {
-        // 背景层：向右滑动时露出的操作底色与图标提示
-        if (swipeOffsetAnim.value > 0f) {
-            val progress = (swipeOffsetAnim.value / triggerPx).coerceIn(0f, 1f)
+        // 背景层：向右滑动时露出的操作底色与图标提示（Draw 阶段推迟）
+        val isSwiping by remember { derivedStateOf { swipeOffsetAnim.value > 0f } }
+        if (isSwiping) {
             val colors = LocalRinklColors.current
             Row(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(colors.themeColor.copy(alpha = 0.12f * progress))
+                    .graphicsLayer {
+                        alpha = (swipeOffsetAnim.value / triggerPx).coerceIn(0f, 1f)
+                    }
+                    .drawBehind {
+                        drawRect(colors.themeColor.copy(alpha = 0.12f))
+                    }
                     .padding(start = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start
@@ -211,7 +219,7 @@ private fun SwipeableBillRow(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "再来一笔",
-                    tint = colors.themeColor.copy(alpha = progress),
+                    tint = colors.themeColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -219,13 +227,13 @@ private fun SwipeableBillRow(
                     text = "再来一笔",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = colors.themeColor.copy(alpha = progress)
+                    color = colors.themeColor
                 )
             }
         }
 
         // 内容层：拖动中禁用水平滑动手势
-        val isDraggingActive = isDragged || dragHost.dragging != null
+        val isDraggingActive = isDragged || dragHost.isDragging
         DraggableBillRow(
             bill = bill,
             date = date,
@@ -297,7 +305,7 @@ private fun DraggableBillRow(
                 rowBounds = coords.boundsInRoot()
                 dragHost.registerRow(bill.id, date, coords.boundsInRoot())
             }
-            .clickable(enabled = !isDragged) { onEdit(bill) }
+            .motionClickable(enabled = !isDragged) { onEdit(bill) }
             .pointerInput(bill.id) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { offset ->
@@ -324,6 +332,7 @@ private fun DraggableBillRow(
     ) {
         BillRowContent(
             categoryName = bill.subCategoryName ?: bill.categoryName,
+            iconCategoryName = bill.categoryName,
             amountMinor = bill.amountMinor,
             billType = bill.billType.value,
             remark = bill.remark
@@ -338,7 +347,8 @@ internal fun BillRowContent(
     amountMinor: Long,
     billType: String,
     remark: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    iconCategoryName: String = categoryName
 ) {
     // 收入色走主题令牌（第 10 槽）：未自定义时 rinklColorsOf 已按明暗给默认（亮 IncomeGreen/暗 DarkIncomeGreen）。
     val incomeGreen = LocalRinklColors.current.incomeColor
@@ -358,13 +368,8 @@ internal fun BillRowContent(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(if (isExpense) MaterialTheme.colorScheme.tertiary else incomeGreen)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+            BillCategoryIcon(iconCategoryName)
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = categoryName,

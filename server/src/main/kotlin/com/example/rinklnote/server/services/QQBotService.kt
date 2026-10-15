@@ -14,7 +14,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
@@ -32,6 +32,7 @@ data class AccessTokenResponse(val access_token: String, val expires_in: Long)
 data class SendMessageRequest(val content: String, val msg_id: String? = null)
 
 class QQBotService {
+    var interactions: com.example.rinklnote.server.services.bot.BotInteractionService? = null
     private val logger = LoggerFactory.getLogger(QQBotService::class.java)
     private val baseUrl = "https://api.sgroup.qq.com"
     // Access token is issued by the auth host (bots.qq.com), NOT the api gateway.
@@ -262,6 +263,46 @@ class QQBotService {
     }
 
     // ── Bind Codes ──
+
+    /** 卡片未获平台权限时回落为同一张卡的定向文本操作，不重新记账。 */
+    suspend fun sendCard(openid: String, groupOpenid: String?, card: com.example.rinklnote.server.services.bot.BotCard,
+                         msgId: String, interactionEvent: Boolean = false): Boolean {
+        val rich = com.example.rinklnote.server.services.bot.BotCardRenderer.qq(card, if (interactionEvent) "" else msgId)
+        val body = if (interactionEvent) buildJsonObject { rich.forEach { (k, v) -> put(k, v) }; put("event_id", msgId) } else rich
+        if (sendRich(openid, groupOpenid, body)) return true
+        val fallback = com.example.rinklnote.server.services.bot.BotCardRenderer.qqFallback(card)
+        return sendInteractionText(openid, groupOpenid, fallback, msgId, interactionEvent)
+    }
+
+    suspend fun sendInteractionText(openid: String, groupOpenid: String?, text: String, msgId: String,
+                                    interactionEvent: Boolean = false): Boolean = sendRich(openid, groupOpenid, buildJsonObject {
+        put("msg_type", 0); put("content", text)
+        if (msgId.isNotBlank()) put(if (interactionEvent) "event_id" else "msg_id", msgId)
+    })
+
+    private suspend fun sendRich(openid: String, groupOpenid: String?, body: JsonObject): Boolean {
+        if (!isConfigured()) return false
+        return try {
+            val target = if (groupOpenid == null) "users/$openid" else "groups/$groupOpenid"
+            val response = client.post("$baseUrl/v2/$target/messages") {
+                header("Authorization", "QQBot ${getAccessToken()}")
+                contentType(ContentType.Application.Json); setBody(body)
+            }
+            val code = runCatching { json.parseToJsonElement(response.bodyAsText()).jsonObject["code"]?.jsonPrimitive?.intOrNull }.getOrNull()
+            response.status.value in 200..299 && (code == null || code == 0)
+        } catch (e: Exception) { logger.warn("QQ 交互回复失败: ${e.message}"); false }
+    }
+
+    /** Webhook 接收确认和按钮交互确认是两种独立协议。 */
+    suspend fun acknowledgeInteraction(id: String, code: Int): Boolean {
+        if (!isConfigured()) return false
+        return try {
+            client.put("$baseUrl/interactions/$id") {
+                header("Authorization", "QQBot ${getAccessToken()}"); contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put("code", code) })
+            }.status.value in 200..299
+        } catch (e: Exception) { logger.warn("QQ 按钮确认失败: ${e.message}"); false }
+    }
 
     fun generateBindCode(openid: String): String {
         val now = Instant.now().epochSecond

@@ -3,49 +3,49 @@ package com.example.rinklnote.ui.screen.bookkeeping
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.LocationOn
 import com.example.rinklnote.ui.component.AlertDialog
 import com.example.rinklnote.ui.component.RinklDatePickerDialog
 import com.example.rinklnote.ui.component.RinklTopBar
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,14 +57,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.Account
 import com.example.rinklnote.data.db.entity.Bill
 import com.example.rinklnote.data.db.entity.Category
@@ -72,11 +77,9 @@ import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.domain.BillType
 import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.NumericKeypad
-import com.example.rinklnote.ui.component.applyCardGlass
-import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
-import com.example.rinklnote.ui.util.categoryIconRes
 import com.example.rinklnote.util.LocationGrabber
 import com.example.rinklnote.util.Money
 import com.example.rinklnote.util.bookkeepingZone
@@ -84,7 +87,6 @@ import dev.chrisbanes.haze.HazeState
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -93,8 +95,9 @@ private val editDateFormatter = DateTimeFormatter.ofPattern("M月d日 EEE", Loca
 /**
  * 编辑账单：与快捷记账共享视觉和输入方式，但用完整页面承载更多字段。
  *
- * 页面结构：顶部操作栏 → 一级标签横向滚动 → 二级标签流式布局 → 日期 / 账户 →
- * 底部内联备注数字键盘。自定义背景直接透传，卡片只在有背景时保持透明描边。
+ * 页面结构：顶部操作栏 → 金额 → 分类选择 → 账户 / 日期 / 位置分组 → 含收支选择的固定数字键盘。
+ * 金额只展示一次；备注输入时让出数字键盘空间给系统输入法。
+ * 分类与字段平铺，保留自选背景透出；账户、日期、位置通过细线分组。
  */
 @Composable
 fun BillEditOverlay(
@@ -114,7 +117,9 @@ fun BillEditOverlay(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var amount by remember(bill.id) { mutableStateOf(Money.toYuanInputString(bill.amountMinor)) }
+    var amount by remember(bill.id) {
+        mutableStateOf(if (bill.amountMinor > 0) Money.toYuanInputString(bill.amountMinor) else "")
+    }
     var billType by remember(bill.id) { mutableStateOf(bill.billType.value) }
     var selectedCategory by remember(bill.id) {
         mutableStateOf(initialCategories.firstOrNull { it.id == bill.categoryId } ?: initialCategories.firstOrNull())
@@ -132,6 +137,8 @@ fun BillEditOverlay(
     // 位置打点：编辑既有账单可补打/清除；初值来自账单本身（保存时按当前值全量覆盖）
     var location by remember(bill.id) { mutableStateOf(bill.toLocationTag()) }
     var locating by remember { mutableStateOf(false) }
+    var formVisible by remember(bill.id) { mutableStateOf(false) }
+    LaunchedEffect(bill.id) { formVisible = true }
 
     val visibleCategories = if (billType == BillType.EXPENSE.value) expenseCategories else incomeCategories
 
@@ -173,6 +180,7 @@ fun BillEditOverlay(
     }
 
     fun selectCategory(category: Category) {
+        if (selectedCategory?.id == category.id) return
         selectedCategory = category
         selectedSubCategory = null
         pendingSubName = null
@@ -228,12 +236,14 @@ fun BillEditOverlay(
 
     BackHandler(onBack = ::requestCancel)
 
-    val topBarTextColor = if (hasCustomBackground) Color.White else LocalRinklColors.current.topBarTitleColor
+    val topBarTextColor = LocalRinklColors.current.topBarTitleColor
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(
+        alpha = if (hasCustomBackground) 0.94f else 1f
+    ))) {
         Column(modifier = Modifier.fillMaxSize()) {
             RinklTopBar(
-                scrimAlpha = if (hasCustomBackground) 1f else 0f,
+                scrimAlpha = 0f,
                 horizontalPadding = 8.dp
             ) {
                 IconButton(
@@ -251,97 +261,117 @@ fun BillEditOverlay(
                 }
 
                 Text(
-                    text = "编辑账单",
+                    text = if (bill.id == 0L) "记一笔" else "编辑账单",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Medium,
                     color = topBarTextColor,
                     modifier = Modifier.align(Alignment.Center)
                 )
 
-                Row(
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = if (bill.id == 0L) onCancel else onDelete) {
-                        Text(
-                            text = if (bill.id == 0L) "取消" else "删除",
-                            color = if (bill.id == 0L) topBarTextColor else MaterialTheme.colorScheme.error,
-                            fontSize = 14.sp
-                        )
-                    }
-                    TextButton(enabled = canSave, onClick = { if (canSave) onConfirm(editedBill) }) {
-                        Text(
-                            text = "保存",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (canSave) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                // 保存走底部键盘操作按钮，放弃走返回键：顶栏只保留编辑态的删除入口，
+                // 左右两侧同为单图标，标题居中不再被文字按钮拉偏
+                if (bill.id != 0L) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .semantics { contentDescription = "删除账单" }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "删除账单",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
             }
 
-            Column(
+            BillAmountHeader(amount, BillType.fromValue(billType),
+                Modifier.padding(horizontal = BillEditorDesign.PagePadding, vertical = 4.dp))
+
+            AnimatedVisibility(
+                visible = formVisible,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .fillMaxWidth(),
+                enter = fadeIn(Motion.EditorFade) + slideInVertically(Motion.EditorSlide) { it / 24 }
             ) {
-                CategoryEditor(
-                    categories = visibleCategories,
-                    selectedCategory = selectedCategory,
-                    subCategories = subCategories,
-                    selectedSubCategory = selectedSubCategory,
-                    hasCustomBackground = hasCustomBackground,
-                    onCategoryClick = ::selectCategory,
-                    onSubCategoryClick = { selectedSubCategory = it }
-                )
-                DateEditor(
-                    selectedDate = selectedDate,
-                    hasCustomBackground = hasCustomBackground,
-                    onDateClick = { showDatePicker = true },
-                    onQuickDateClick = { selectedDate = it }
-                )
-                LocationEditor(
-                    location = location,
-                    locating = locating,
-                    hasCustomBackground = hasCustomBackground,
-                    onToggle = ::toggleLocation
-                )
-                AccountEditor(
-                    accounts = accounts,
-                    selectedAccount = selectedAccount,
-                    hasCustomBackground = hasCustomBackground,
-                    onAccountClick = { selectedAccount = it }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = BillEditorDesign.PagePadding, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(BillEditorDesign.SectionGap)
+                ) {
+                    BillCategoryEditor(
+                        categories = visibleCategories,
+                        selectedCategory = selectedCategory,
+                        subCategories = subCategories,
+                        selectedSubCategory = selectedSubCategory,
+                        onCategoryClick = ::selectCategory,
+                        onSubCategoryClick = { selectedSubCategory = it }
+                    )
+                    Column(Modifier.fillMaxWidth()) {
+                        EditorDivider()
+                        AccountEditor(
+                            accounts = accounts,
+                            selectedAccount = selectedAccount,
+                            onAccountClick = { selectedAccount = it }
+                        )
+                        EditorDivider()
+                        DateEditor(
+                            selectedDate = selectedDate,
+                            onDateClick = { showDatePicker = true }
+                        )
+                        EditorDivider()
+                        LocationEditor(
+                            location = location,
+                            locating = locating,
+                            onToggle = ::toggleLocation
+                        )
+                        EditorDivider()
+                    }
+                }
             }
 
-            Box(modifier = Modifier.fillMaxWidth()) {
-                NumericKeypad(
-                    amount = amount,
-                    billType = billType,
-                    remark = remark,
-                    onDigit = { digit ->
-                        if (digit != "." || !amount.contains(".")) {
-                            amount += digit
+            // 数字键盘固定在页面底部：不随上方表单滚动，随时可确认落库
+            NumericKeypad(
+                amount = amount,
+                billType = billType,
+                remark = remark,
+                onDigit = { digit ->
+                    if (digit == ".") {
+                        if (!amount.contains(".")) {
+                            amount = if (amount.isEmpty() || amount == "0") "0." else amount + "."
                         }
-                    },
-                    onClear = { amount = "" },
-                    onBackspace = { amount = amount.dropLast(1) },
-                    onToggleType = {
-                        updateType(
-                            if (billType == BillType.EXPENSE.value) BillType.INCOME else BillType.EXPENSE
-                        )
-                    },
-                    onRemarkChange = { remark = it },
-                    confirmEnabled = canSave,
-                    onConfirm = { if (canSave) onConfirm(editedBill) },
-                    hazeState = hazeState,
-                    bottomPadding = 16.dp
-                )
-            }
+                    } else {
+                        if (amount == "0") {
+                            amount = digit
+                        } else {
+                            val dotIndex = amount.indexOf('.')
+                            if (dotIndex == -1 || amount.length - dotIndex <= 2) {
+                                amount += digit
+                            }
+                        }
+                    }
+                },
+                onClear = { amount = "" },
+                onBackspace = { amount = amount.dropLast(1) },
+                onToggleType = {
+                    updateType(
+                        if (billType == BillType.EXPENSE.value) BillType.INCOME else BillType.EXPENSE
+                    )
+                },
+                onRemarkChange = { remark = it },
+                confirmEnabled = canSave,
+                onConfirm = { if (canSave) onConfirm(editedBill) },
+                hazeState = hazeState,
+                compact = true,
+                editorMode = true,
+                confirmLabel = if (bill.id == 0L) "记一笔" else "保存",
+                bottomPadding = 8.dp,
+                modifier = Modifier.navigationBarsPadding()
+            )
         }
 
         if (showDatePicker) {
@@ -367,222 +397,37 @@ fun BillEditOverlay(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CategoryEditor(
-    categories: List<Category>,
-    selectedCategory: Category?,
-    subCategories: List<SubCategory>,
-    selectedSubCategory: SubCategory?,
-    hasCustomBackground: Boolean,
-    onCategoryClick: (Category) -> Unit,
-    onSubCategoryClick: (SubCategory?) -> Unit
-) {
-    SectionCard(hasCustomBackground = hasCustomBackground) {
-        SectionHeader(title = "一级标签", hint = "左右滑动")
-        Spacer(modifier = Modifier.height(4.dp))
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(categories, key = { it.id }, contentType = { "category_chip" }) { category ->
-                PrimaryCategoryChip(
-                    category = category,
-                    selected = selectedCategory?.id == category.id,
-                    onClick = { onCategoryClick(category) }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        SectionHeader(
-            title = "二级标签",
-            hint = selectedCategory?.name ?: "先选择一级标签"
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 二级标签区以二级分类列表为 key 交叉淡替（令牌 Motion.Fade）：切换一级标签时
-        // 旧内容按切换瞬间的快照淡出、新内容淡入，避免整块内容瞬间替换的生硬感
-        // （与快捷记账抽屉的二级标签同款处理）。
-        AnimatedContent(
-            targetState = subCategories,
-            transitionSpec = { fadeIn(Motion.Fade) togetherWith fadeOut(Motion.Fade) },
-            label = "编辑页二级标签淡替"
-        ) { subs ->
-            Column {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SecondaryCategoryChip(
-                        label = "不限",
-                        selected = selectedSubCategory == null,
-                        onClick = { onSubCategoryClick(null) }
-                    )
-                    subs.forEach { subCategory ->
-                        SecondaryCategoryChip(
-                            label = subCategory.name,
-                            selected = selectedSubCategory?.id == subCategory.id,
-                            onClick = { onSubCategoryClick(subCategory) }
-                        )
-                    }
-                }
-
-                if (subs.isEmpty()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "该标签暂无二级分类，可直接保存",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrimaryCategoryChip(
-    category: Category,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(15.dp)
-    // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
-    val chipColor by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
-        },
-        animationSpec = Motion.SelectColor,
-        label = "一级标签选中底色"
-    )
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(chipColor, shape)
-            .then(if (selected) Modifier else applyCardGlass(shape))
-            .clickable(onClick = onClick)
-            // 选中字重加粗引起微宽度变化：平滑伸缩，相邻 chip 不再瞬移
-            .animateContentSize(animationSpec = Motion.ContentResize)
-            .padding(horizontal = 11.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            painter = painterResource(categoryIconRes(category.name)),
-            contentDescription = category.name,
-            modifier = Modifier.size(22.dp),
-            tint = Color.Unspecified
-        )
-        Text(
-            text = category.name,
-            fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            }
-        )
-    }
-}
-
-@Composable
-private fun SecondaryCategoryChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(15.dp)
-    // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
-    val chipColor by animateColorAsState(
-        targetValue = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-        },
-        animationSpec = Motion.SelectColor,
-        label = "二级标签选中底色"
-    )
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .background(chipColor, shape)
-            .then(if (selected) Modifier else applyCardGlass(shape))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DateEditor(
     selectedDate: LocalDate,
-    hasCustomBackground: Boolean,
-    onDateClick: () -> Unit,
-    onQuickDateClick: (LocalDate) -> Unit
+    onDateClick: () -> Unit
 ) {
-    val today = LocalDate.now(bookkeepingZone())
-    val quickDates = listOf(
-        "今天" to today,
-        "昨天" to today.minusDays(1),
-        "前天" to today.minusDays(2)
-    )
-
-    SectionCard(hasCustomBackground = hasCustomBackground) {
-        SectionHeader(title = "日期", hint = "业务时区 Asia/Shanghai")
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(15.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f))
-                .clickable(onClick = onDateClick)
-                .padding(horizontal = 11.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = selectedDate.format(editDateFormatter),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (selectedDate == today) "今天" else "点击打开日历",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text("选择日期", fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = BillEditorDesign.TouchHeight)
+            .pressScale(interaction)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onDateClick),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("日期", style = BillEditorDesign.SectionTitle, modifier = Modifier.width(44.dp))
+        AnimatedContent(
+            targetState = selectedDate,
+            modifier = Modifier.weight(1f),
+            transitionSpec = {
+                (fadeIn(Motion.EditorFade) + slideInVertically(Motion.EditorSlide) { it / 3 })
+                    .togetherWith(fadeOut(Motion.EditorFade) + slideOutVertically(Motion.EditorSlide) { -it / 3 })
+            },
+            label = "日期切换"
+        ) { date ->
+            Text(
+                date.format(editDateFormatter), fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            quickDates.forEach { (label, date) ->
-                SecondaryCategoryChip(
-                    label = label,
-                    selected = selectedDate == date,
-                    onClick = { onQuickDateClick(date) }
-                )
-            }
-        }
+        Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = "修改日期",
+            modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -590,130 +435,86 @@ private fun DateEditor(
 private fun LocationEditor(
     location: Pair<Double, Double>?,
     locating: Boolean,
-    hasCustomBackground: Boolean,
     onToggle: () -> Unit
 ) {
-    val rinkl = LocalRinklColors.current
+    val interaction = remember { MutableInteractionSource() }
     val located = location != null
-    SectionCard(hasCustomBackground = hasCustomBackground) {
-        SectionHeader(title = "位置", hint = "仅主动打点的账单会上账单地图")
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(15.dp))
-                .background(
-                    if (located) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-                    }
-                )
-                .then(if (located) Modifier else applyCardGlass(RoundedCornerShape(15.dp)))
-                .clickable(onClick = onToggle)
-                .padding(horizontal = 11.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.LocationOn,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                // 已定位 → 主题色令牌（PRIMARY 槽）；未定位 → 图标令牌（ICON 槽，未自定义回落灰）
-                tint = if (located) rinkl.themeColor else rinkl.iconButtonColor ?: MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(7.dp))
-            Column {
-                Text(
-                    text = when {
-                        locating -> "定位中…"
-                        located -> "已定位 · 可再点取消"
-                        else -> "位置"
-                    },
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (located) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-                Text(
-                    text = if (located) {
-                        String.format(Locale.CHINESE, "%.5f, %.5f", location!!.first, location.second)
-                    } else {
-                        "点一下记录当前位置，可再次点击清除"
-                    },
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+    val tint by animateColorAsState(
+        if (located) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        Motion.SelectColor, label = "位置状态颜色"
+    )
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = BillEditorDesign.TouchHeight)
+            .pressScale(interaction)
+            .clickable(interactionSource = interaction, indication = null, enabled = !locating,
+                role = Role.Button, onClick = onToggle),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("位置", style = BillEditorDesign.SectionTitle, modifier = Modifier.width(44.dp))
+        AnimatedContent(
+            targetState = when { locating -> "正在定位…"; located -> "已记录 · 点击清除"; else -> "添加位置 · 可选" },
+            modifier = Modifier.weight(1f),
+            transitionSpec = { fadeIn(Motion.EditorFade) togetherWith fadeOut(Motion.EditorFade) },
+            label = "位置状态切换"
+        ) { label ->
+            Text(label, fontSize = 14.sp, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (locating) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(painterResource(R.drawable.ic_location), contentDescription = null, modifier = Modifier.size(18.dp), tint = tint)
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AccountEditor(
     accounts: List<Account>,
     selectedAccount: Account?,
-    hasCustomBackground: Boolean,
     onAccountClick: (Account) -> Unit
 ) {
-    SectionCard(hasCustomBackground = hasCustomBackground) {
-        SectionHeader(title = "账户", hint = "选择资金账户")
-        Spacer(modifier = Modifier.height(4.dp))
-
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    val listState = rememberLazyListState()
+    LaunchedEffect(accounts, selectedAccount?.id) {
+        val index = accounts.indexOfFirst { it.id == selectedAccount?.id }
+        if (index >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+            listState.animateScrollToItem(index)
+        }
+    }
+    Row(Modifier.fillMaxWidth().heightIn(min = BillEditorDesign.TouchHeight), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("账户", style = BillEditorDesign.SectionTitle, modifier = Modifier.width(44.dp))
+        LazyRow(
+            modifier = Modifier.weight(1f), state = listState,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            accounts.forEach { account ->
+            items(accounts, key = { it.id }) { account ->
                 val selected = selectedAccount?.id == account.id
-                val shape = RoundedCornerShape(15.dp)
-                // 选中底色交叉淡化（令牌 Motion.SelectColor），避免色块突变
+                val interaction = remember { MutableInteractionSource() }
                 val chipColor by animateColorAsState(
-                    targetValue = if (selected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-                    },
-                    animationSpec = Motion.SelectColor,
-                    label = "账户选中底色"
+                    if (selected) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+                    Motion.SelectColor, label = "账户选中底色"
+                )
+                val dotScale by animateFloatAsState(
+                    if (selected) 1f else 0f, Motion.EditorSelection, label = "账户选中标记"
                 )
                 Row(
-                    modifier = Modifier
-                        .clip(shape)
-                        .background(chipColor, shape)
-                        .then(if (selected) Modifier else applyCardGlass(shape))
-                        .clickable { onAccountClick(account) }
-                        // 选中圆点出现/消失引起宽度跳变：以 ContentResize 平滑伸缩，
-                        // FlowRow 内相邻账户的位置随动不再瞬移
-                        .animateContentSize(animationSpec = Motion.ContentResize)
-                        .padding(horizontal = 11.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    Modifier.heightIn(min = BillEditorDesign.TouchHeight).pressScale(interaction)
+                        .clip(RoundedCornerShape(BillEditorDesign.ChipRadius)).background(chipColor)
+                        // 合并子节点语义，让读屏和自动化点击把整张账户卡识别成一个单选项。
+                        .semantics(mergeDescendants = true) { this.selected = selected }
+                        .clickable(interactionSource = interaction, indication = null, role = Role.RadioButton) { onAccountClick(account) }
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AccountIcon(
-                        iconKey = account.iconKey,
-                        colorHex = account.iconColor,
-                        size = 26.dp
-                    )
-                    Text(
-                        text = account.name,
-                        fontSize = 14.sp,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        }
-                    )
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
+                    AccountIcon(iconKey = account.iconKey, colorHex = account.iconColor, size = 28.dp)
+                    Text(account.name, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 120.dp),
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface)
+                    // 始终保留标记占位，切换账户时相邻选项不会跳位。
+                    Box(Modifier.graphicsLayer { alpha = dotScale; scaleX = dotScale; scaleY = dotScale }) {
+                        EditorSelectionMark()
                     }
                 }
             }
@@ -722,51 +523,8 @@ private fun AccountEditor(
 }
 
 @Composable
-private fun SectionCard(
-    hasCustomBackground: Boolean,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    val shape = RoundedCornerShape(15.dp)
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(shape)
-            .clip(shape)
-            .then(sectionSurface(hasCustomBackground, shape))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        content = content
-    )
-}
-
-@Composable
-private fun sectionSurface(hasCustomBackground: Boolean, shape: Shape): Modifier =
-    if (hasCustomBackground) {
-        applyCardGlass(shape)
-    } else {
-        Modifier
-            .background(MaterialTheme.colorScheme.surface, shape)
-            .then(applyCardGlass(shape))
-    }
-
-@Composable
-private fun SectionHeader(title: String, hint: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = hint,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+private fun EditorDivider() {
+    HorizontalDivider(color = LocalRinklColors.current.dividerColor.copy(alpha = 0.55f))
 }
 
 @Composable

@@ -1,7 +1,14 @@
 package com.example.rinklnote.ui.screen.autocapture
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
+import com.example.rinklnote.ui.component.selectionColor
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import com.example.rinklnote.ui.theme.Motion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,7 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -200,7 +207,7 @@ private fun AutoCaptureTopBar(hasBackground: Boolean, onBack: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -233,7 +240,7 @@ private fun ModeSelectRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .defaultMinSize(minHeight = 52.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
@@ -242,10 +249,12 @@ private fun ModeSelectRow(
             modifier = Modifier
                 .size(18.dp)
                 .clip(CircleShape)
-                .background(if (selected) colors.themeColor else MaterialTheme.colorScheme.surfaceVariant),
+                .background(selectionColor(selected, colors.themeColor, MaterialTheme.colorScheme.surfaceVariant)),
             contentAlignment = Alignment.Center
         ) {
-            if (selected) {
+            androidx.compose.animation.AnimatedVisibility(visible = selected,
+                enter = fadeIn(Motion.Reveal) + scaleIn(animationSpec = Motion.Reveal),
+                exit = fadeOut(Motion.Reveal) + scaleOut(animationSpec = Motion.Reveal)) {
                 Box(
                     modifier = Modifier
                         .size(6.dp)

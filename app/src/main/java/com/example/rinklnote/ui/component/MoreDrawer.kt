@@ -5,7 +5,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +29,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,11 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +51,9 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
+
+/** 省钱计划入口开关（暂时关闭相关功能和入口，待后续开放时置为 true 即可恢复）。 */
+private const val SHOW_CHALLENGES = false
 
 /**
  * 记账页左上角「更多」抽屉：从屏幕左缘滑入，顶部个人信息 + 下方功能模块列表。
@@ -100,6 +99,7 @@ fun MoreDrawer(
     onOpenMultiCurrency: () -> Unit = {},
     onOpenChallenges: () -> Unit = {},
     onOpenAutoCapture: () -> Unit = {},
+    onOpenBot: () -> Unit = {},
     pendingCaptureCount: Int = 0,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
@@ -131,17 +131,13 @@ fun MoreDrawer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable(
+                    .motionClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { onDismiss() }
             )
 
-            // 抽屉面板：左缘贴边、自适应宽度（体验审查 P1：可读上限 320dp、小屏按屏宽 0.88 占比，
-            // 与快捷记账抽屉一致）、满高顶天立地、右缘 18dp 圆角。
-            // 不再用 0.88h 居中（那是底部抽屉 QuickAddDrawer 的镜像几何——空隙落在左右不显眼，
-            // 镜像到竖轴后顶部/底部各留 ~6% 空隙，与状态栏避让、内边距层层叠加，头部离屏顶过远）；
-            // 顶部节奏统一由 DrawerContent 的「状态栏避让 + 12dp 呼吸」单一来源承担
+            // 面板收窄到 240dp，保留更多主页内容；右缘圆角与原有背景材质一致。
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -149,7 +145,7 @@ fun MoreDrawer(
                     .clip(panelShape)
                     .then(panelSurface)
                     .then(applyCardGlass(panelShape))
-                    .clickable(
+                    .motionClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { /* 面板吞掉点击，避免透传到点击层误关 */ }
@@ -165,6 +161,7 @@ fun MoreDrawer(
                     onOpenMultiCurrency = onOpenMultiCurrency,
                     onOpenChallenges = onOpenChallenges,
                     onOpenAutoCapture = onOpenAutoCapture,
+                    onOpenBot = onOpenBot,
                     pendingCaptureCount = pendingCaptureCount,
                     onOpenSettings = onOpenSettings,
                     onOpenAbout = onOpenAbout
@@ -178,11 +175,11 @@ fun MoreDrawer(
 private fun closeThen(onDismiss: () -> Unit, action: () -> Unit): () -> Unit =
     { onDismiss(); action() }
 
-/** 抽屉自适应宽度（体验审查 P1）：可读上限 320dp，小屏按屏宽 0.88 占比收缩；与快捷记账抽屉一致。 */
+/** 侧栏最多 240dp；窄屏仍留出至少 28% 的主页用于点击收起。 */
 @Composable
 private fun adaptiveMoreDrawerWidth(): Dp {
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    return minOf(320.dp, screenWidth * 0.88f)
+    return minOf(240.dp, screenWidth * 0.72f)
 }
 
 @Composable
@@ -197,6 +194,7 @@ private fun DrawerContent(
     onOpenMultiCurrency: () -> Unit,
     onOpenChallenges: () -> Unit,
     onOpenAutoCapture: () -> Unit,
+    onOpenBot: () -> Unit,
     pendingCaptureCount: Int,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit
@@ -230,7 +228,7 @@ private fun DrawerContent(
                         if (profileLoggedIn) {
                             Modifier
                         } else {
-                            Modifier.clickable(onClickLabel = "去登录") {
+                            Modifier.motionClickable(onClickLabel = "去登录") {
                                 onDismiss()
                                 onOpenLogin()
                             }
@@ -244,13 +242,13 @@ private fun DrawerContent(
                     } else {
                         "账"
                     },
-                    size = 48.dp
+                    size = 36.dp
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (profileLoggedIn && profileName.isNotBlank()) profileName else "未登录",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -258,8 +256,8 @@ private fun DrawerContent(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (profileLoggedIn) "已登录" else "登录后可云端同步账单",
-                        fontSize = 12.sp,
+                        text = if (profileLoggedIn) "已登录" else "登录同步账单",
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
                     )
@@ -270,12 +268,11 @@ private fun DrawerContent(
                 onClick = onDismiss,
                 modifier = Modifier.size(48.dp)
             ) {
-                Text(
-                    "✕",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    // 「✕」字形对读屏无意义：整体语义收敛为「关闭」
-                    modifier = Modifier.semantics { contentDescription = "关闭" }
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_close),
+                    contentDescription = "关闭",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -285,113 +282,98 @@ private fun DrawerContent(
         RinklDivider(endInset = 6.dp)
         Spacer(modifier = Modifier.height(6.dp))
 
-        // ---- 功能模块列表（行高 48dp，SettingsRow 风格）----
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.ic_search),
-                    contentDescription = null,
-                    tint = tint
-                )
-            },
-            label = "搜索账单",
-            onClick = closeThen(onDismiss, onOpenSearch)
-        )
-        MoreDrawerRow(
-            icon = { tint -> Icon(Icons.Filled.LocationOn, contentDescription = null, tint = tint) },
-            label = "账单地图",
-            onClick = closeThen(onDismiss, onOpenBillMap)
-        )
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.ic_sync),
-                    contentDescription = null,
-                    tint = tint
-                )
-            },
-            label = "导入账单",
-            onClick = closeThen(onDismiss, onOpenImport)
-        )
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.ic_finance),
-                    contentDescription = null,
-                    tint = tint
-                )
-            },
-            label = "多币种",
-            onClick = closeThen(onDismiss, onOpenMultiCurrency)
-        )
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.ic_notification),
-                    contentDescription = null,
-                    tint = tint
-                )
-            },
-            label = "自动记账",
-            badge = if (pendingCaptureCount > 0) {
-                {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.error)
-                            .padding(horizontal = 7.dp, vertical = 2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (pendingCaptureCount > 99) "99+" else pendingCaptureCount.toString(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = androidx.compose.ui.graphics.Color.White
-                        )
+        // 功能区可滚动，横屏和较大字号下仍可访问最后一项。
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            DrawerSectionLabel("记账工具")
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_search,
+                label = "搜索账单",
+                onClick = closeThen(onDismiss, onOpenSearch)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_map,
+                label = "账单地图",
+                onClick = closeThen(onDismiss, onOpenBillMap)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_import,
+                label = "导入账单",
+                onClick = closeThen(onDismiss, onOpenImport)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_currency,
+                label = "多币种",
+                onClick = closeThen(onDismiss, onOpenMultiCurrency)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_capture,
+                label = "自动记账",
+                badge = if (pendingCaptureCount > 0) {
+                    {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.error)
+                                .padding(horizontal = 7.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (pendingCaptureCount > 99) "99+" else pendingCaptureCount.toString(),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = androidx.compose.ui.graphics.Color.White
+                            )
+                        }
                     }
-                }
-            } else null,
-            onClick = closeThen(onDismiss, onOpenAutoCapture)
-        )
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.icon_challenge_piggy),
-                    contentDescription = null,
-                    tint = tint
+                } else null,
+                onClick = closeThen(onDismiss, onOpenAutoCapture)
+            )
+            if (SHOW_CHALLENGES) {
+                MoreDrawerRow(
+                    iconRes = R.drawable.ic_more_challenge,
+                    label = "Rk省钱计划",
+                    onClick = closeThen(onDismiss, onOpenChallenges)
                 )
-            },
-            label = "Rk省钱计划",
-            onClick = closeThen(onDismiss, onOpenChallenges)
-        )
-        MoreDrawerRow(
-            icon = { tint -> Icon(Icons.Filled.Settings, contentDescription = null, tint = tint) },
-            label = "设置",
-            onClick = closeThen(onDismiss, onOpenSettings)
-        )
-        MoreDrawerRow(
-            icon = { tint ->
-                Icon(
-                    painter = painterResource(R.drawable.ic_info),
-                    contentDescription = null,
-                    tint = tint
-                )
-            },
-            label = "关于",
-            onClick = closeThen(onDismiss, onOpenAbout)
-        )
+            }
+            Spacer(Modifier.height(12.dp))
+            RinklDivider()
+            Spacer(Modifier.height(8.dp))
+            DrawerSectionLabel("连接与偏好")
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_bot,
+                label = "机器人",
+                onClick = closeThen(onDismiss, onOpenBot)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_settings,
+                label = "设置",
+                onClick = closeThen(onDismiss, onOpenSettings)
+            )
+            MoreDrawerRow(
+                iconRes = R.drawable.ic_more_info,
+                label = "关于",
+                onClick = closeThen(onDismiss, onOpenAbout)
+            )
+        }
     }
+}
+
+/** 简短分组标题，减少窄侧栏内的视觉负担。 */
+@Composable
+private fun DrawerSectionLabel(label: String) {
+    Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
 }
 
 /**
  * 功能模块单行：前置图标 + 标签 + 右侧「>」箭头。
  *
- * 行高、字号、图标尺寸与 [SettingsRow] 对齐（48dp 行 / 16sp 标签 / 24dp 图标 / 20dp 箭头）；
+ * 48dp 触控行，14sp 标签与 20dp 细线图标，保持窄侧栏清晰紧凑；
  * 图标色跟随自定义主题「图标/按钮色」槽（与设置页行图标一致），经参数注入到 icon 槽。
  */
 @Composable
 private fun MoreDrawerRow(
-    icon: @Composable (Color) -> Unit,
+    iconRes: Int,
     label: String,
     badge: @Composable (() -> Unit)? = null,
     onClick: () -> Unit
@@ -403,31 +385,32 @@ private fun MoreDrawerRow(
             .fillMaxWidth()
             // mergeDescendants：读屏把「图标 + 标签 + 箭头」合并为单条「标签，按钮」语义，不逐项播报
             .semantics(mergeDescendants = true) {}
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            icon(iconTint)
-        }
+        Icon(painterResource(iconRes), contentDescription = null, tint = iconTint,
+            modifier = Modifier.size(20.dp))
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = label,
-            fontSize = 16.sp,
+            fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         if (badge != null) {
             badge()
             Spacer(modifier = Modifier.width(6.dp))
         }
         Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
+            painter = painterResource(R.drawable.ic_more_chevron),
             contentDescription = null,
             tint = LocalRinklColors.current.iconButtonColor
                 ?: MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(16.dp)
         )
     }
 }

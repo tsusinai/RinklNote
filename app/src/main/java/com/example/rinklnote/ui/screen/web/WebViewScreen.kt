@@ -18,8 +18,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
+import com.example.rinklnote.ui.component.RinklLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.RinklTopBarContentHeight
 import com.example.rinklnote.ui.theme.LocalRinklColors
 
@@ -84,14 +85,8 @@ fun WebScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 顶部悬浮返回栏：与其他二级页同节奏（状态栏让位 + 46dp 内容高 + 8dp 水平边距）
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .height(RinklTopBarContentHeight)
-                .padding(horizontal = 8.dp)
-        ) {
+        // 顶部悬浮返回栏：与其他二级页同节奏统一使用 RinklTopBar
+        RinklTopBar(scrimAlpha = 0f, horizontalPadding = 8.dp) {
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,

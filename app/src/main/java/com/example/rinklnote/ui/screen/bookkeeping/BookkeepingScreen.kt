@@ -1,17 +1,37 @@
 package com.example.rinklnote.ui.screen.bookkeeping
+import com.example.rinklnote.ui.component.MotionListItem
 
 import android.content.res.Resources
+import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,7 +50,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -46,14 +66,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import com.example.rinklnote.ui.component.rinkShadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -79,9 +101,7 @@ import com.example.rinklnote.ui.component.BillCard
 import com.example.rinklnote.ui.component.BillFeedback
 import com.example.rinklnote.ui.component.BillRowContent
 import com.example.rinklnote.ui.component.DefaultHazeBackground
-import com.example.rinklnote.ui.component.HeatmapBox
 import com.example.rinklnote.ui.component.LocalRinklFeedback
-import com.example.rinklnote.ui.component.MonthHeatmap
 import com.example.rinklnote.ui.component.MoreDrawer
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
@@ -91,38 +111,58 @@ import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.viewmodel.BookkeepingEvent
 import com.example.rinklnote.ui.viewmodel.BookkeepingViewModel
 import com.example.rinklnote.ui.viewmodel.DayPart
-import com.example.rinklnote.util.bookkeepingZone
 import com.example.rinklnote.util.today
 import com.example.rinklnote.util.toDayOfWeek
-import java.time.Instant
-import java.time.LocalDate
 
-private enum class SliderDirection { LEFT, UP, RIGHT }
+@Composable
+private fun EmptyMonthPrompt(onOpenEditor: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp)
+            .clip(shape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.045f))
+            .then(applyCardGlass(shape)).padding(horizontal = 20.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.size(56.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)), contentAlignment = Alignment.Center) {
+            Icon(painterResource(R.drawable.ic_redesign_empty_receipt), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+        }
+        Spacer(Modifier.height(14.dp))
+        Text("这个月还没有账单", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(6.dp))
+        Text("记下第一笔支出，账单会从这里开始累积", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)).motionClickable(onClick = onOpenEditor).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_redesign_empty_plus), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("开始记一笔", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
 
 @Composable
 private fun SliderGuide(
-    direction: SliderDirection,
+    iconRes: Int,
     label: String,
     selected: Boolean,
     modifier: Modifier
 ) {
-    Box(
-        modifier = modifier
-            .size(if (selected) 58.dp else 50.dp)
-            .clip(CircleShape)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-            )
-            .rinkShadow(CircleShape),
-        contentAlignment = Alignment.Center
+    val guideScale by animateFloatAsState(if (selected) 1.06f else 1f, Motion.Interaction, label = "sliderGuideScale")
+    val primary = MaterialTheme.colorScheme.primary
+    val guideColor by animateColorAsState(
+        if (selected) primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        Motion.SelectColor, label = "方向选中底色"
+    )
+    val labelColor = if (selected) primary else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier.width(74.dp).graphicsLayer { scaleX = guideScale; scaleY = guideScale }
+            .clip(RoundedCornerShape(18.dp)).background(guideColor)
+            .border(1.dp, primary.copy(alpha = if (selected) 0.55f else 0.12f), RoundedCornerShape(18.dp))
+            .padding(vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(
-            text = label,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
-        )
+        Icon(painterResource(iconRes), contentDescription = label, tint = labelColor, modifier = Modifier.size(22.dp))
+        Text(label, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal, color = labelColor)
     }
 }
 
@@ -130,6 +170,7 @@ private fun SliderGuide(
 @Composable
 fun BookkeepingScreen(
     onOpenDrawer: () -> Unit,
+    onOpenEditor: () -> Unit,
     onVoiceInput: () -> Unit = {},
     onCaptureBill: () -> Unit = {},
     onFinanceClick: () -> Unit,
@@ -152,6 +193,7 @@ fun BookkeepingScreen(
     onOpenChallenges: () -> Unit = {},
     // 「更多」抽屉功能项：自动记账（路由 auto-capture，2026-10-03 方案 C）由主会话接线
     onOpenAutoCapture: () -> Unit = {},
+    onOpenBot: () -> Unit = {},
     // 未登录时「更多」抽屉头部即登录入口（路由 showLogin 浮层由主会话接线）
     onOpenLogin: () -> Unit = {},
     // 日期头点击 → 打开「当天账单」页（路由 day-detail/{dayStart}，主会话接线；
@@ -177,13 +219,8 @@ fun BookkeepingScreen(
         "${d.year}年${d.monthValue}月"
     }
 
-    // 未选照片时仍显示时段横幅（对应四张图）；选了照片则整页铺照片、横幅让位
-    val headerBg = when (state.dayPart) {
-        DayPart.MORNING -> R.drawable.morning
-        DayPart.DAY -> R.drawable.moon
-        DayPart.EVENING -> R.drawable.drop
-        DayPart.NIGHT -> R.drawable.night
-    }
+    // 默认主页头图统一使用蓝天猫咪；用户自选背景仍由 nav 层优先铺满整窗。
+    val headerBg = R.drawable.home_header_cat
 
     // Interaction state：长按拖动排序 + 拖入 FAB 删除区（左滑删除与长按菜单已移除）
     val (dragHost, dragHaptics) = rememberBillDragHost()
@@ -204,9 +241,6 @@ fun BookkeepingScreen(
 
     // Cache grouped bills to avoid recomputation on every recomposition
     val groupedBills = remember(state.bills) { groupBillsByDate(state.bills) }
-    val heatmap = remember(state.bills, state.selectedMonthOffset) {
-        computeMonthHeatmap(state.bills, state.selectedMonthOffset)
-    }
 
     // 拖动收尾：松手时按当前状态决定删除（不弹确认框——拖入+松手两段手势即防误触）或重排。
     // 删除走既有 VM 事件（软删/余额/推送语义不变），同时给可撤销反馈：快照进 Snackbar，
@@ -285,7 +319,19 @@ fun BookkeepingScreen(
                 item(key = "top-bar-inset", contentType = "header") { Spacer(modifier = Modifier.height(topBarHeight)) }
             }
 
-            item(key = "spacer-0", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+            // 默认头图已带圆角衔接，不再重复垫高；自选背景保留原有布局间距。
+            if (backgroundUri != null) {
+                item(key = "content-top-corners", contentType = "header-cap") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                            .background(MaterialTheme.colorScheme.background)
+                    )
+                }
+                item(key = "spacer-0", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+            }
 
             item(key = "summary", contentType = "summary") {
                 // AI 总结仅对「当月」展示；切换到其它月份时关闭总结栏（只留合计行）。
@@ -301,35 +347,35 @@ fun BookkeepingScreen(
 
             item(key = "spacer-1", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
 
-            item(key = "chart", contentType = "chart") {
-                HeatmapBox(
-                    heatmap = heatmap,
-                    onDetailClick = onMonthDetailClick
-                )
+            if (groupedBills.isEmpty()) {
+                item(key = "empty-month", contentType = "empty-month") { EmptyMonthPrompt(onOpenEditor = onOpenEditor) }
             }
-            item(key = "spacer-2", contentType = "spacer") { Spacer(modifier = Modifier.height(horizonalPadding)) }
+
+            // 主页不再展示月度支出热力图（2026-10-10 视觉精简，汇总看板已承载支出概览）
 
             groupedBills.forEach { (date, bills) ->
                 item(key = date, contentType = "day-card") {
-                    // 缓存该日合计，重组时不重复 sumOf。
-                    val totalAmount = remember(date, bills) {
-                        bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amountMinor else it.amountMinor }
+                    MotionListItem {
+                        // 缓存该日合计，重组时不重复 sumOf。
+                        val totalAmount = remember(date, bills) {
+                            bills.sumOf { if (it.billType == BillType.EXPENSE) -it.amountMinor else it.amountMinor }
+                        }
+                        BillCard(
+                            date = date,
+                            dayOfWeek = date.toDayOfWeek(),
+                            totalAmount = totalAmount,
+                            bills = bills,
+                            dragHost = dragHost,
+                            onEdit = { bill ->
+                                viewModel.onEvent(BookkeepingEvent.EditBill(bill))
+                                onEditBill(bill)
+                            },
+                            onDragFinished = onDragFinished,
+                            onOpenDay = onOpenDay,
+                            onCopyBill = onCopyBill
+                        )
+                        Spacer(modifier = Modifier.height(horizonalPadding))
                     }
-                    BillCard(
-                        date = date,
-                        dayOfWeek = date.toDayOfWeek(),
-                        totalAmount = totalAmount,
-                        bills = bills,
-                        dragHost = dragHost,
-                        onEdit = { bill ->
-                            viewModel.onEvent(BookkeepingEvent.EditBill(bill))
-                            onEditBill(bill)
-                        },
-                        onDragFinished = onDragFinished,
-                        onOpenDay = onOpenDay,
-                        onCopyBill = onCopyBill
-                    )
-                    Spacer(modifier = Modifier.height(horizonalPadding))
                 }
             }
             item(key = "bottom-spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(100.dp)) }
@@ -353,12 +399,23 @@ fun BookkeepingScreen(
             pendingCaptureCount = pendingCaptureCount
         )
 
-        // 灵动滑块：轻点进入编辑，长按后向上语音、向左编辑、向右拍摄小票。
+        // 灵动滑块：轻点打开快捷轮盘，长按后向上语音、向左完整编辑、向右拍摄小票。
         val isDragging = dragHost.isDragging
         val overDelete = dragHost.isOverDelete
-        val fabScale by animateFloatAsState(if (overDelete) 1.18f else 1f, label = "fabScale")
+        val fabScale by animateFloatAsState(if (overDelete) 1.08f else 1f, Motion.Interaction, label = "fabScale")
         var sliderArmed by remember { mutableStateOf(false) }
+        var longPressHandled by remember { mutableStateOf(false) }
         var sliderDirection by remember { mutableStateOf<SliderDirection?>(null) }
+        var sliderOffset by remember { mutableStateOf(Offset.Zero) }
+        val haptics = LocalHapticFeedback.current
+        val threshold = with(LocalDensity.current) { 36.dp.toPx() }
+        val followLimit = with(LocalDensity.current) { 18.dp.toPx() }
+        val guideProgress by animateFloatAsState(if (sliderArmed) 1f else 0f,
+            if (sliderArmed) Motion.SliderReveal else Motion.SliderDismiss, label = "方向模块等距展开")
+        val followX by animateFloatAsState(if (sliderArmed) (sliderOffset.x * 0.3f).coerceIn(-followLimit, followLimit) else 0f,
+            Motion.SliderSettle, label = "滑块横向跟随")
+        val followY by animateFloatAsState(if (sliderArmed) (sliderOffset.y * 0.3f).coerceIn(-followLimit, followLimit) else 0f,
+            Motion.SliderSettle, label = "滑块纵向跟随")
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -366,85 +423,114 @@ fun BookkeepingScreen(
                 .size(width = 214.dp, height = 174.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (sliderArmed && !isDragging) {
-                SliderGuide(SliderDirection.LEFT, "编辑", sliderDirection == SliderDirection.LEFT, Modifier.align(Alignment.CenterStart).offset(x = 10.dp, y = 36.dp))
-                SliderGuide(SliderDirection.UP, "语音", sliderDirection == SliderDirection.UP, Modifier.align(Alignment.TopCenter).offset(y = 8.dp))
-                SliderGuide(SliderDirection.RIGHT, "拍摄", sliderDirection == SliderDirection.RIGHT, Modifier.align(Alignment.CenterEnd).offset(x = (-10).dp, y = 36.dp))
+            AnimatedVisibility(
+                visible = sliderArmed && !isDragging,
+                modifier = Modifier.matchParentSize(),
+                enter = fadeIn(animationSpec = Motion.SliderReveal),
+                exit = fadeOut(animationSpec = Motion.SliderDismiss)
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    // 三个方向以中心按钮为圆心等距展开，避免左右/上方视觉偏心。
+                    val radius = 78.dp * guideProgress
+                    SliderGuide(R.drawable.ic_edit, "完整编辑", sliderDirection == SliderDirection.LEFT, Modifier.align(Alignment.BottomCenter).offset(x = -radius, y = (-3).dp))
+                    SliderGuide(R.drawable.ic_mic, "语音记账", sliderDirection == SliderDirection.UP, Modifier.align(Alignment.BottomCenter).offset(y = -radius - 3.dp))
+                    SliderGuide(R.drawable.ic_camera, "拍照识别", sliderDirection == SliderDirection.RIGHT, Modifier.align(Alignment.BottomCenter).offset(x = radius, y = (-3).dp))
+                    // 引导只在手势期间轻移；关闭系统动画时保留静态方向提示。
+                    val cueProgress = if (sliderArmed && ValueAnimator.areAnimatorsEnabled()) {
+                        val cue = rememberInfiniteTransition(label = "滑动方向引导")
+                        val phase by cue.animateFloat(0f, 1f,
+                            infiniteRepeatable(tween(900, easing = FastOutSlowInEasing)), label = "方向提示位移")
+                        phase
+                    } else 0.5f
+                    val cueRadius = (39 + 7 * cueProgress).dp
+                    val cueAlpha = 0.2f + 0.5f * kotlin.math.sin(cueProgress * kotlin.math.PI).toFloat()
+                    listOf(SliderDirection.LEFT, SliderDirection.UP, SliderDirection.RIGHT).forEach { direction ->
+                        val x = when (direction) { SliderDirection.LEFT -> -cueRadius; SliderDirection.RIGHT -> cueRadius; else -> 0.dp }
+                        val y = if (direction == SliderDirection.UP) -cueRadius - 22.dp else (-22).dp
+                        Icon(painterResource(R.drawable.ic_chevron_right), contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.align(Alignment.BottomCenter).offset(x = x, y = y).size(12.dp)
+                                .graphicsLayer {
+                                    alpha = cueAlpha * guideProgress
+                                    rotationZ = when (direction) { SliderDirection.LEFT -> 180f; SliderDirection.UP -> -90f; else -> 0f }
+                                })
+                    }
+                }
             }
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                    .graphicsLayer {
+                        scaleX = fabScale; scaleY = fabScale
+                        translationX = followX; translationY = followY
+                    }
                     .size(56.dp)
                     .onGloballyPositioned { dragHost.deleteZone = it.boundsInRoot() }
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer)
-                    .hazeEffect(hazeState, HazeMaterials.thin())
+                    .pointerInput(isDragging) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            longPressHandled = false
+                        }
+                    }
                     .pointerInput(isDragging) {
                         if (isDragging) return@pointerInput
                         detectDragGesturesAfterLongPress(
-                            onDragStart = { sliderArmed = true; sliderDirection = null },
+                            onDragStart = {
+                                longPressHandled = true
+                                sliderOffset = Offset.Zero; sliderArmed = true; sliderDirection = null
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
                             onDrag = { change, amount ->
                                 change.consume()
-                                sliderDirection = when {
-                                    abs(amount.x) > abs(amount.y) && amount.x < 0 -> SliderDirection.LEFT
-                                    abs(amount.x) > abs(amount.y) && amount.x > 0 -> SliderDirection.RIGHT
-                                    amount.y < 0 -> SliderDirection.UP
-                                    else -> sliderDirection
+                                sliderOffset += amount
+                                val direction = resolveSliderDirection(sliderOffset.x, sliderOffset.y, threshold)
+                                if (direction != sliderDirection && direction != null) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
+                                sliderDirection = direction
                             },
                             onDragEnd = {
                                 when (sliderDirection) {
                                     SliderDirection.UP -> onVoiceInput()
-                                    SliderDirection.LEFT -> onOpenDrawer()
+                                    SliderDirection.LEFT -> onOpenEditor()
                                     SliderDirection.RIGHT -> onCaptureBill()
                                     null -> Unit
                                 }
-                                sliderArmed = false; sliderDirection = null
+                                sliderArmed = false; sliderDirection = null; sliderOffset = Offset.Zero
                             },
-                            onDragCancel = { sliderArmed = false; sliderDirection = null }
+                            onDragCancel = { sliderArmed = false; sliderDirection = null; sliderOffset = Offset.Zero }
                         )
                     }
-                    .clickable(enabled = !isDragging, onClickLabel = "灵动滑块") { onOpenDrawer() }
+                    .motionClickable(enabled = !isDragging, onClickLabel = "快捷记账") {
+                        if (!longPressHandled) onOpenDrawer()
+                    }
+                    .semantics {
+                        if (!isDragging) customActions = listOf(
+                            CustomAccessibilityAction("编辑账单") { onOpenEditor(); true },
+                            CustomAccessibilityAction("语音记账") { onVoiceInput(); true },
+                            CustomAccessibilityAction("拍摄账单") { onCaptureBill(); true }
+                        )
+                    }
                     .then(if (isDragging) Modifier.semantics { contentDescription = "拖到此处删除" } else Modifier),
                 contentAlignment = Alignment.Center
             ) {
-                Crossfade(targetState = isDragging, label = "fabIcon") { deleting ->
+                Crossfade(targetState = isDragging, animationSpec = Motion.Reveal, label = "fabIcon") { deleting ->
                     if (deleting) Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else Icon(painter = painterResource(R.drawable.ic_add_bill), contentDescription = "灵动滑块", tint = Color.Unspecified)
+                    else Icon(painter = painterResource(R.drawable.ic_redesign_slider_center), contentDescription = "快捷记账", tint = MaterialTheme.colorScheme.primary)
                 }
                 if (overDelete) Box(Modifier.matchParentSize().clip(CircleShape).background(MaterialTheme.colorScheme.error.copy(alpha = 0.25f)))
             }
         }
 
-        // 拖动 ghost：被拖行从卡片抽出后，在最顶层跟随手指（略放大 + 投影 + 不透明底保证可读）
-        dragHost.dragging?.let { d ->
-            val dragged = state.bills.firstOrNull { it.id == d.billId } ?: return@let
-            // pointer/bounds 都是 composition 根坐标；换算到本页 Box 内
-            val ghostTop = d.pointerY - d.grabOffsetY - screenOriginY
-            key(d.billId) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp)
-                        .offset { IntOffset(0, (d.pointerY - d.grabOffsetY - screenOriginY).roundToInt()) }
-                        .graphicsLayer {
-                            scaleX = 1.05f
-                            scaleY = 1.05f
-                        }
-                        .zIndex(10f)
-                ) {
-                    BillRowContent(
-                        categoryName = dragged.subCategoryName ?: dragged.categoryName,
-                        amountMinor = dragged.amountMinor,
-                        billType = dragged.billType.value,
-                        remark = dragged.remark,
-                        modifier = Modifier
-                            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-                            .padding(horizontal = 16.dp)
-                    )
-                }
-            }
+        // 拖动 ghost：被拖行从卡片抽出后在最顶层跟随手指。推迟至 Layout 阶段，避免每帧触发全页重组
+        if (dragHost.isDragging) {
+            DraggableGhostRow(
+                dragHost = dragHost,
+                bills = state.bills,
+                screenOriginY = { screenOriginY }
+            )
         }
 
         // 「更多」抽屉：整页最顶层（盖过拖动 ghost）；功能行点击后由组件内部先关抽屉再回调
@@ -459,6 +545,7 @@ fun BookkeepingScreen(
             onOpenSearch = onOpenSearch,
             onOpenChallenges = onOpenChallenges,
             onOpenAutoCapture = onOpenAutoCapture,
+            onOpenBot = onOpenBot,
             pendingCaptureCount = pendingCaptureCount,
             onOpenLogin = onOpenLogin,
             onOpenSettings = onMoreClick,
@@ -480,17 +567,20 @@ fun BookkeepingScreen(
  */
 private val DayBannerHeight = 190.dp
 
-/** 时段横幅：按时段换图的整块头图，作为列表首项随时间滚走，不再包住顶栏。 */
+/** 默认头图的底部叠上内容圆角，让圆角缺口真正透出图片。 */
 @Composable
 private fun DayBanner(headerBg: Int) {
-    Image(
-        painter = painterResource(headerBg),
-        contentDescription = null,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(DayBannerHeight),
-        contentScale = ContentScale.Crop
-    )
+    Box(Modifier.fillMaxWidth().height(DayBannerHeight)) {
+        Image(
+            painter = painterResource(headerBg),
+            contentDescription = null,
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop
+        )
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(12.dp)
+            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+            .background(MaterialTheme.colorScheme.background))
+    }
 }
 
 @Composable
@@ -530,7 +620,7 @@ private fun TopBar(
             Box(
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onOpenMoreDrawer),
+                    .motionClickable(onClick = onOpenMoreDrawer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -555,7 +645,7 @@ private fun TopBar(
                 contentDescription = "AI 记账",
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onAiClick),
+                    .motionClickable(onClick = onAiClick),
                 tint = iconColor
             )
         }
@@ -583,7 +673,7 @@ private fun TopBar(
                 color = textColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable(
+                modifier = Modifier.motionClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     role = Role.Button,
@@ -613,7 +703,7 @@ private fun TopBar(
                 contentDescription = "金融",
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onFinanceClick),
+                    .motionClickable(onClick = onFinanceClick),
                 tint = iconColor
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -622,7 +712,7 @@ private fun TopBar(
                 contentDescription = "登记",
                 modifier = Modifier
                     .size(30.dp)
-                    .clickable(onClick = onOpenDrawer),
+                    .motionClickable(onClick = onOpenDrawer),
                 tint = iconColor
             )
         }
@@ -630,31 +720,48 @@ private fun TopBar(
 }
 
 private fun groupBillsByDate(bills: List<Bill>): Map<Long, List<Bill>> {
-    return bills.groupBy { it.date }.toList()
-        .sortedByDescending { it.first }
-        .associate { it.first to it.second }
+    val result = LinkedHashMap<Long, MutableList<Bill>>()
+    for (bill in bills) {
+        val list = result.getOrPut(bill.date) { ArrayList() }
+        list.add(bill)
+    }
+    return result
 }
 
-/** 月度每日支出热力图数据：整月每天的支出合计（周一起始布局、首日 weekday、当月天数由 HeatmapBox 用到）。 */
-private fun computeMonthHeatmap(bills: List<Bill>, offset: Int): MonthHeatmap {
-    val zone = bookkeepingZone()
-    val today = LocalDate.now(zone)
-    val firstDay = today.plusMonths(offset.toLong()).withDayOfMonth(1)
-    val lastDay = firstDay.plusMonths(1).minusDays(1)
-    val dailyExpense = HashMap<Int, Float>()
-    bills.forEach { bill ->
-        if (bill.billType == BillType.EXPENSE) {
-            val d = Instant.ofEpochMilli(bill.date).atZone(zone).toLocalDate()
-            if (!d.isBefore(firstDay) && !d.isAfter(lastDay)) {
-                dailyExpense.merge(d.dayOfMonth, bill.amountMinor.toFloat(), Float::plus)
-            }
+@Composable
+private fun DraggableGhostRow(
+    dragHost: BillDragHost,
+    bills: List<Bill>,
+    screenOriginY: () -> Float
+) {
+    val billId = dragHost.draggedBillId ?: return
+    val dragged = remember(bills, billId) { bills.firstOrNull { it.id == billId } } ?: return
+    key(billId) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .offset {
+                    val d = dragHost.dragging
+                    val y = if (d != null) (d.pointerY - d.grabOffsetY - screenOriginY()).roundToInt() else 0
+                    IntOffset(0, y)
+                }
+                .graphicsLayer {
+                    scaleX = 1.05f
+                    scaleY = 1.05f
+                }
+                .zIndex(10f)
+        ) {
+            BillRowContent(
+                categoryName = dragged.subCategoryName ?: dragged.categoryName,
+                iconCategoryName = dragged.categoryName,
+                amountMinor = dragged.amountMinor,
+                billType = dragged.billType.value,
+                remark = dragged.remark,
+                modifier = Modifier
+                    .then(applyCardGlass(RoundedCornerShape(15.dp)))
+                    .padding(horizontal = 16.dp)
+            )
         }
     }
-    return MonthHeatmap(
-        year = firstDay.year,
-        monthValue = firstDay.monthValue,
-        firstWeekday = firstDay.dayOfWeek.value,
-        daysInMonth = lastDay.dayOfMonth,
-        dailyExpense = dailyExpense
-    )
 }

@@ -1,12 +1,14 @@
 package com.example.rinklnote.ui.screen.plan
 
+import com.example.rinklnote.ui.component.MotionListItem
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,11 +19,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.shape.CircleShape
+import com.example.rinklnote.ui.component.RinklLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -32,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -50,9 +55,11 @@ import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
-import com.example.rinklnote.ui.component.rinkShadow
+import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.billCategoryIconColor
 import com.example.rinklnote.ui.util.categoryIconRes
+import com.example.rinklnote.ui.util.subcategoryIconRes
 import com.example.rinklnote.ui.viewmodel.BudgetEditTarget
 import com.example.rinklnote.ui.viewmodel.BudgetEvent
 import com.example.rinklnote.ui.viewmodel.BudgetState
@@ -72,7 +79,7 @@ import kotlin.math.abs
  * 风格深度对齐首页（Bookkeeping）：
  * - `Box` 根 + 渐变背景作毛玻璃（haze）blur 源；自选照片时由 nav 层整窗铺满。
  * - 悬浮顶栏（floating top bar）：极简，仅居中「计划」标题（tab 内页无返回键，左右留空）+ scrim 渐隐。
- * - 卡片 `rinkShadow` + 毛玻璃 + 圆角；子分类行不加毛玻璃避免嵌套怪异。
+ * - 总览与分类共用整页滚动；卡片保留主题材质，子分类使用分割线降低嵌套感。
  *
  * 编辑流：点击总额卡/已设预算的分类行/子分类行 → 派发 [BudgetEvent.EditBudget] 填充共享编辑状态 →
  * [onEditBudget] 跳转独立路由 `budget-edit`（bill-edit 同款），金额输入/删除都在编辑页完成。
@@ -119,52 +126,41 @@ fun PlanScreen(
             DefaultHazeBackground(hazeState = hazeState)
         }
 
-        Column(
+        LazyColumn(
+            state = listState,
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp)
+                .fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = topBarHeight + 8.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 顶栏是浮层：首项垫到它下面（不留整块空白）。
-            Spacer(modifier = Modifier.height(topBarHeight))
-
-            // 顶部：总额预算卡片
-            TotalBudgetCard(
-                state = state,
-                onClick = {
-                    viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
-                    onEditBudget()
-                },
-                onOpenMonthDetail = onOpenMonthDetail
-            )
+            // 总览与分类共用滚动容器，小屏无需在固定总览下挤压列表。
+            item(key = "total-budget", contentType = "summary") {
+                TotalBudgetCard(
+                    state = state,
+                    onClick = {
+                        viewModel.onEvent(BudgetEvent.EditBudget(BudgetEditTarget.Total))
+                        onEditBudget()
+                    },
+                    onOpenMonthDetail = onOpenMonthDetail
+                )
+            }
 
             // 预算-挑战联动预警（Task 4.1）：总额预算烧穿过快 → 橙色提示条（实时派生零存储）。
             state.totalBurnRisk?.takeIf { it.level != BudgetRiskLevel.LOW }?.let { risk ->
-                Spacer(modifier = Modifier.height(10.dp))
-                BurnRiskBar(risk = risk, periodLabel = "本月")
+                item(key = "burn-risk", contentType = "notice") { BurnRiskBar(risk = risk, periodLabel = "本月") }
             }
 
             // 上月结余（仅展示，不结转）
             state.lastMonthSurplusMinor?.let { surplus ->
-                Spacer(modifier = Modifier.height(10.dp))
-                LastMonthSurplusRow(surplusMinor = surplus)
+                item(key = "last-surplus", contentType = "notice") { LastMonthSurplusRow(surplusMinor = surplus) }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 分类/子分类分层预算列表：主页只展示各分类预算进度（R2-A3：去掉「选择分类添加」
-            // 增加框与「未设 · 去设置」引导胶囊，新增/编辑统一走「分类预算设置」独立页）。
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // 列表区头部：进入「分类预算设置」独立页的入口行（路由 budget-categories 由主会话接线）。
-                item(key = "entry-category-budgets") {
-                    CategoryBudgetEntryRow(onClick = onOpenCategoryBudgets)
-                }
-                items(state.categoryBudgets, key = { it.categoryId }, contentType = { "category_budget_card" }) { category ->
+            // 列表区头部：进入「分类预算设置」独立页的入口行（路由 budget-categories 由主会话接线）。
+            item(key = "entry-category-budgets") {
+                CategoryBudgetEntryRow(onClick = onOpenCategoryBudgets)
+            }
+            items(state.categoryBudgets, key = { it.categoryId }, contentType = { "category_budget_card" }) { category ->
+                MotionListItem {
                     CategoryBudgetCard(
                         category = category,
                         onClick = {
@@ -189,6 +185,7 @@ fun PlanScreen(
                             onEditBudget()
                         }
                     )
+
                 }
             }
         }
@@ -211,10 +208,13 @@ private fun PlanTopBar(scrimAlpha: () -> Float, hasBackground: Boolean, listScro
         !listScrolled -> LocalRinklColors.current.topBarTitleColor
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
+    val surface = MaterialTheme.colorScheme.background
     RinklTopBar(
-        scrimAlpha = scrimAlpha,
+        scrimAlpha = { if (hasBackground) scrimAlpha() else 0f },
         horizontalPadding = 16.dp,
-        modifier = modifier
+        modifier = modifier.drawBehind {
+            if (!hasBackground) drawRect(surface.copy(alpha = scrimAlpha()))
+        }
     ) {
         Text(
             text = "计划",
@@ -227,7 +227,7 @@ private fun PlanTopBar(scrimAlpha: () -> Float, hasBackground: Boolean, listScro
 }
 
 /**
- * 本月总额预算卡（Total Budget Card）：白底 + 毛玻璃。
+ * 本月总额预算区：透明底，标题、金额与状态文字共用左边线。
  *
  * - 未设预算：显示「设置」入口；点击跳预算编辑页。
  * - 已设：预算额 + 进度条（`LinearProgressIndicator`）+ 已花/预算 + 百分比 + 剩余天数 +
@@ -236,147 +236,87 @@ private fun PlanTopBar(scrimAlpha: () -> Float, hasBackground: Boolean, listScro
  * - 预算为零 / 周期结束：给对应中文状态文案，不出现除零或误导性正数。
  */
 @Composable
-private fun TotalBudgetCard(
-    state: BudgetState,
-    onClick: () -> Unit,
-    onOpenMonthDetail: () -> Unit
-) {
+private fun TotalBudgetCard(state: BudgetState, onClick: () -> Unit, onOpenMonthDetail: () -> Unit) {
     val budget = state.totalBudget
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(16.dp)
-    ) {
-        // 主卡片区可点（跳转编辑/设置预算）；超支行动按钮作为兄弟节点并列，避免嵌套 clickable 竞争
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(
-                    onClickLabel = if (budget == null) "设置本月预算" else "编辑本月预算",
-                    role = Role.Button
-                ) { onClick() }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-            Text("本月预算", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+    val primary = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+        Column(Modifier.fillMaxWidth().motionClickable(
+            onClickLabel = if (budget == null) "设置本月预算" else "编辑本月预算", role = Role.Button
+        ) { onClick() }) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("本月预算", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.width(8.dp))
+                PlanOutlineIcon(R.drawable.ic_plan_wallet)
+                Spacer(Modifier.weight(1f))
+                Text(if (budget == null) "设置" else "编辑", fontSize = 12.sp, color = primary)
+                Spacer(Modifier.width(4.dp))
+                PlanOutlineIcon(R.drawable.ic_plan_edit, size = 16.dp)
+            }
+            Spacer(Modifier.height(14.dp))
+            Text(budget?.let { Money.format(it.amountMinor) } ?: "尚未设置",
+                fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(14.dp))
             if (budget == null) {
-                // 未设预算：主色「设置 ›」入口，比原纯文本更有点击暗示。
-                Text("设置 ›", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                Text("设定月度额度，让每笔支出更有计划", fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                BudgetMetric("本月已花", Money.format(state.monthExpenseMinor), MaterialTheme.colorScheme.onSurface)
             } else {
-                Text(
-                    text = Money.format(budget.amountMinor),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                val over = state.isOverTotal
+                val progressColor = if (over) MaterialTheme.colorScheme.error else primary
+                LinearProgressIndicator(progress = { state.totalProgress }, color = progressColor,
+                    trackColor = primary.copy(alpha = 0.1f),
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)))
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    BudgetMetric("已花", Money.format(state.monthExpenseMinor), MaterialTheme.colorScheme.onSurface, Modifier.weight(1f))
+                    BudgetMetric(if (over) "已超预算" else "剩余可用",
+                        Money.format(if (over) state.overTotalBy else (budget.amountMinor-state.monthExpenseMinor).coerceAtLeast(0)),
+                        progressColor, Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("本月剩余 ${state.remainingDays} 天", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(6.dp))
+                    PlanOutlineIcon(R.drawable.ic_plan_calendar, size = 16.dp)
+                    Spacer(Modifier.weight(1f))
+                    if (budget.amountMinor > 0) Text("已用 ${(state.monthExpenseMinor.toDouble()/budget.amountMinor*100).toInt()}%",
+                        fontSize = 12.sp, color = progressColor)
+                }
+                val advice = state.dailyAdvice
+                when (advice.status) {
+                        DailyBudgetStatus.OK -> { Spacer(Modifier.height(14.dp)); DailyAllowanceBlock(advice) }
+                        DailyBudgetStatus.ZERO_BUDGET -> { Spacer(Modifier.height(12.dp));
+                            Text("本月预算为 0，调整预算后可查看今日建议额度", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        DailyBudgetStatus.PERIOD_ENDED -> { Spacer(Modifier.height(12.dp));
+                            Text("本月周期已结束，月初设置新预算后可查看今日建议额度", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        else -> Unit
+                }
             }
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (budget == null) {
-            Text("点击设置本月预算", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            val over = state.isOverTotal
-            val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-            val spentText = Money.format(state.monthExpenseMinor)
-            val budgetText = Money.format(budget.amountMinor)
-            val percent = if (budget.amountMinor > 0) (state.monthExpenseMinor.toDouble() / budget.amountMinor * 100).toInt() else 0
-
-            LinearProgressIndicator(
-                progress = { state.totalProgress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 已花/预算与百分比左右分列：百分比独立加粗，超支时转 error 色更醒目。
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    text = "已花 $spentText / 预算 $budgetText",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "$percent%",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "本月剩余 ${state.remainingDays} 天",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (over) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "已超预算 ${Money.format(state.overTotalBy)}",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
-            // 今日额度解释区（Task 5）：与预算编辑页「日均可花」共用 [deriveDailyBudgetAdvice]
-            // 单一口径（剩余预算 ÷ 剩余天数）。正常态展示建议额度与计算依据；超支态给行动入口；
-            // 预算为零 / 周期结束给中文说明，不出现除零或误导性正数。
-            val advice = state.dailyAdvice
-            when (advice.status) {
-                DailyBudgetStatus.OK -> {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    DailyAllowanceBlock(advice = advice)
-                }
-                DailyBudgetStatus.OVER -> Unit
-                DailyBudgetStatus.ZERO_BUDGET -> {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "本月预算为 0，调整预算后可查看今日建议额度",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                DailyBudgetStatus.PERIOD_ENDED -> {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "本月周期已结束，月初设置新预算后可查看今日建议额度",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // 未设预算：卡片上方已显示「点击设置本月预算」引导，不重复提示。
-                DailyBudgetStatus.NO_BUDGET -> Unit
-            }
-        }
-    }
-
-    // 超支行动入口：与卡片主点击区并列，避免嵌套 clickable 竞争
-    if (budget != null && state.dailyAdvice.status == DailyBudgetStatus.OVER) {
-        Spacer(modifier = Modifier.height(10.dp))
-        OverBudgetActions(
-            onOpenMonthDetail = onOpenMonthDetail,
-            onEditBudget = onClick
-        )
+        // 行动按钮与总览点击区并列，超支时仍可直接查看明细。
+        if (state.isOverTotal) { Spacer(Modifier.height(12.dp)); OverBudgetActions(onOpenMonthDetail, onClick) }
     }
 }
+
+/** 金额分列后各占独立宽度，避免标签和长金额抢占同一行。 */
+@Composable
+private fun BudgetMetric(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = color,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** 计划页操作图标统一为 1.75 单位圆头线条，尊重图标主题槽位。 */
+@Composable
+private fun PlanOutlineIcon(iconRes: Int, size: Dp = 20.dp) {
+    Icon(painterResource(iconRes), contentDescription = null, modifier = Modifier.size(size),
+        tint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.primary)
 }
 
 /**
@@ -468,8 +408,8 @@ private fun OverBudgetActionChip(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(container)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .motionClickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     )
 }
 
@@ -511,38 +451,19 @@ internal fun PlanCategoryIcon(
 }
 
 /**
- * 「分类预算设置」入口行：全宽卡（15dp 圆角 + rinkShadow + 玻璃描边），
- * 行高对齐 SettingsRow（48dp），尾部「>」箭头与设置行同款。
+ * 分类区标题与设置入口同排，减少重复卡片；点击整行进入分类预算设置。
  * 点击 → 跳转「分类预算设置」独立页（路由 `budget-categories`，由主会话接线）。
  */
 @Composable
 private fun CategoryBudgetEntryRow(onClick: () -> Unit) {
-    val shape = RoundedCornerShape(15.dp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(shape)
-            .clip(shape)
-            .then(applyCardGlass(shape))
-            .clickable(onClick = onClick)
-            .defaultMinSize(minHeight = 48.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "分类预算设置",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
-            contentDescription = null,
-            tint = LocalRinklColors.current.iconButtonColor
-                ?: MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
+    Row(Modifier.fillMaxWidth().motionClickable(onClick = onClick).defaultMinSize(minHeight = 48.dp)
+        .padding(horizontal = 0.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("分类预算", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        PlanOutlineIcon(R.drawable.ic_plan_settings, size = 18.dp)
+        Spacer(Modifier.width(6.dp))
+        Text("分类预算设置", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(2.dp))
+        PlanOutlineIcon(R.drawable.ic_plan_chevron, size = 16.dp)
     }
 }
 
@@ -558,81 +479,35 @@ private fun CategoryBudgetEntryRow(onClick: () -> Unit) {
  * @param onSubClick 点子分类行 → 编辑子分类预算
  */
 @Composable
-private fun CategoryBudgetCard(
-    category: CategoryBudgetState,
-    onClick: () -> Unit,
-    onSubClick: (SubCategoryBudgetState) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .then(
-                    // 仅已设预算的分类行可点击进编辑；未设行主页不可点，设置统一走「分类预算设置」独立页。
-                    if (category.amountMinor > 0) Modifier.clickable { onClick() } else Modifier
-                ),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // 分类图标：28dp 图标位，适应铺满不留余白。
-            PlanCategoryIcon(
-                iconRes = categoryIconRes(category.categoryName),
-                size = 28.dp,
-                contentDescription = category.categoryName
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = category.categoryName,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                BudgetProgressBar(
-                    expenseMinor = category.expenseMinor,
-                    amountMinor = category.amountMinor,
-                    progress = category.progress,
-                    over = category.isOverBudget,
-                    overBudgetBy = category.overBudgetBy
-                )
+private fun CategoryBudgetCard(category: CategoryBudgetState, onClick: () -> Unit, onSubClick: (SubCategoryBudgetState) -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(Modifier.fillMaxWidth().clip(shape).then(applyCardGlass(shape)).padding(horizontal = 0.dp, vertical = 12.dp)) {
+        Column(Modifier.fillMaxWidth().then(
+            if (category.amountMinor > 0) Modifier.motionClickable(onClick = onClick) else Modifier
+        )) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                val tint = LocalRinklColors.current.billCategoryIconColor(category.categoryName, isSystemInDarkTheme())
+                Box(Modifier.size(36.dp).clip(CircleShape).background(tint.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(categoryIconRes(category.categoryName)), contentDescription = null,
+                        tint = tint, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(category.categoryName, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(8.dp))
+                Text(if (category.amountMinor > 0) Money.format(category.amountMinor) else "未设置",
+                    fontSize = if (category.amountMinor > 0) 15.sp else 12.sp,
+                    color = if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            if (category.amountMinor > 0) {
-                Text(
-                    text = currencyText(category.amountMinor),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (category.isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
-            } else {
-                // 未设预算：仅灰色「未设置」纯文本提示（12sp、不可点、不做任何引导），
-                // 设置/编辑统一走「分类预算设置」独立页（R2-A3）。
-                Text(
-                    text = "未设置",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Spacer(Modifier.height(12.dp))
+            BudgetProgressBar(category.expenseMinor, category.amountMinor, category.progress, category.isOverBudget, category.overBudgetBy)
         }
-
         category.subBudgets.forEach { sub ->
-            SubCategoryBudgetRow(
-                sub = sub,
-                // 子分类无专属图标：沿用所属一级分类图标（适应铺满 22dp 图标位）。
-                iconRes = categoryIconRes(category.categoryName),
-                onClick = { onSubClick(sub) }
-            )
+            Spacer(Modifier.height(12.dp))
+            RinklDivider()
+            Spacer(Modifier.height(12.dp))
+            SubCategoryBudgetRow(sub = sub, iconRes = subcategoryIconRes(category.categoryName, sub.name), onClick = { onSubClick(sub) })
         }
     }
 }
@@ -651,10 +526,8 @@ private fun SubCategoryBudgetRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, top = 8.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .clickable { onClick() }
+            .padding(start = 10.dp)
+            .motionClickable { onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -700,16 +573,18 @@ private fun BudgetProgressBar(
     compact: Boolean = false
 ) {
     val progressColor = if (over) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    LinearProgressIndicator(
-        progress = { progress },
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(if (compact) 5.dp else barHeight)
-            .clip(RoundedCornerShape(4.dp)),
-        color = progressColor,
-        trackColor = MaterialTheme.colorScheme.surfaceVariant
-    )
-    Spacer(modifier = Modifier.height(4.dp))
+    if (amountMinor > 0) {
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (compact) 5.dp else barHeight)
+                .clip(RoundedCornerShape(4.dp)),
+            color = progressColor,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+    }
     val spentText = Money.format(expenseMinor)
     if (over) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -718,7 +593,8 @@ private fun BudgetProgressBar(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
             )
             Text(
                 text = "已超 ${Money.format(overBudgetBy)}",
@@ -734,7 +610,8 @@ private fun BudgetProgressBar(
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
             )
             Text(
                 text = "${(expenseMinor.toDouble() / amountMinor * 100).toInt()}%",
@@ -751,7 +628,7 @@ private fun BudgetProgressBar(
     }
 }
 
-/** Double → 去尾零的纯数字字符串（无货币符号），如 `12.50` → `"12.5"`。 */
+/** 金额以整数分输入，展示时统一通过 Money 工具格式化。 */
 private fun currencyText(value: Long): String =
     Money.toYuanInputString(value)
 

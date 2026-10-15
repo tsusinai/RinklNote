@@ -37,7 +37,9 @@ class PhoneIntentRouter(
      * 落账回调（2026-10-03 管家阶段 3）：每笔 chat 记账成功后触发，返回追加到回执尾部的
      * 文案（如分类预算亮灯告警）；null = 不追加。默认 null，飞书/企微/订阅号通道行为零变化。
      */
-    private val onBillBooked: (suspend (userId: Long, categoryName: String, amountMinor: Long) -> String?)? = null
+    private val onBillBooked: (suspend (userId: Long, categoryName: String, amountMinor: Long) -> String?)? = null,
+    /** 返回实际落库账单供成功卡绑定，不根据回执文字猜测账单。 */
+    private val onBillCreated: ((BillDTO) -> Unit)? = null
 ) {
     private val shanghai = ZoneId.of("Asia/Shanghai")
 
@@ -88,6 +90,7 @@ class PhoneIntentRouter(
         result.askReply?.let { return it }
         if (result.amount != null && result.amount > 0) {
             val bill = billService.createBill(userId, Money.toMinor(result.amount), result.categoryName, result.remark, source)
+            onBillCreated?.invoke(bill)
             // 个人记忆层（2026-09-18 Task 1.2）：落账后异步累计聚合画像（商家词+次数+首选分类），
             // 写失败只落日志，不影响落账主流程；只存聚合，无单笔明细与金额（隐私红线）。
             UserMemoryService.recordBillAsync(userId, result.remark, bill.categoryName)

@@ -1,6 +1,11 @@
 package com.example.rinklnote.ui.screen.profile
 
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.SelectionBottomSheet
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import com.example.rinklnote.R
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,10 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import com.example.rinklnote.ui.component.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.example.rinklnote.ui.component.RinklOutlinedButton as OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -23,6 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +55,9 @@ import com.example.rinklnote.ui.viewmodel.BotChannel
 sealed interface ProfileDialog {
     /** 主题模式选择（跟随系统 / 浅色 / 深色） */
     data object Theme : ProfileDialog
+
+    /** 更换背景与恢复默认共用入口 */
+    data object Background : ProfileDialog
 
     /** 退出登录二次确认 */
     data object Logout : ProfileDialog
@@ -118,32 +129,40 @@ internal fun UnbindBotDialog(channel: BotChannel, onConfirm: () -> Unit, onDismi
 internal fun ThemeModeDialog(
     themeMode: ThemeMode,
     onSelect: (ThemeMode) -> Unit,
+    onCustomThemeClick: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("主题") },
-        text = {
-            Column {
-                ThemeMode.values().forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 48.dp)
-                            .clickable { onSelect(mode) }
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = themeMode == mode, onClick = { onSelect(mode) })
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(themeLabel(mode), fontSize = 16.sp)
-                    }
-                }
+    SelectionBottomSheet(title = "主题", onDismiss = onDismiss) {
+        ThemeMode.values().forEach { mode ->
+            Row(Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)
+                .motionClickable(role = Role.RadioButton) { onSelect(mode) }
+                .semantics { selected = themeMode == mode }
+                .padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = themeMode == mode, onClick = null)
+                Spacer(Modifier.width(12.dp))
+                Text(themeLabel(mode), fontSize = 16.sp)
             }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = onCustomThemeClick, modifier = Modifier.fillMaxWidth()) { Text("颜色与字体") }
+    }
+}
+
+/** 背景选择始终先展示底部选项，继续复用系统图片选择与裁剪流程。 */
+@Composable
+internal fun BackgroundOptionsDialog(hasBackground: Boolean, onReplace: () -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
+    SelectionBottomSheet(title = "背景图片", onDismiss = onDismiss) {
+        Text(if (hasBackground) "当前使用自选图片" else "当前使用默认背景", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onClick = onReplace, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
+            Icon(painterResource(R.drawable.ic_ui_image), null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp)); Text("更换图片")
+        }
+        TextButton(onClick = onRemove, enabled = hasBackground, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)) {
+            Icon(painterResource(R.drawable.ic_ui_reset), null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp)); Text("恢复默认背景")
+        }
+    }
 }
 
 /** 退出登录二次确认（真正「先推后清」的逻辑在 ProfileScreen 回调里）。 */
@@ -201,10 +220,8 @@ internal fun TimePickerDialog(
 ) {
     var selectedHour by remember { mutableIntStateOf(hour) }
     var selectedMinute by remember { mutableIntStateOf(minute) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("设置日报通知时间") },
-        text = {
+    SelectionBottomSheet(title = "设置日报通知时间", onDismiss = onDismiss) {
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "%02d:%02d".format(selectedHour, selectedMinute),
@@ -236,10 +253,7 @@ internal fun TimePickerDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) { Text("确定") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
+        Spacer(Modifier.height(20.dp))
+        OutlinedButton(onClick = { onConfirm(selectedHour, selectedMinute) }, modifier = Modifier.fillMaxWidth()) { Text("确定") }
+    }
 }

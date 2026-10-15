@@ -5,6 +5,7 @@ package com.example.rinklnote.ui.screen.importbills
  * 因此包名取 `importbills`（Kotlin 不强制包名与目录一致）。路由 `bill-import` 由主会话接线。
  */
 
+import com.example.rinklnote.ui.component.MotionListItem
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -27,12 +28,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.example.rinklnote.ui.component.RinklOutlinedButton as OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -134,68 +135,105 @@ fun ImportBillsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (state.errorMessage != null) {
-                    item(key = "error") { ErrorCard(state.errorMessage!!) }
+                    item(key = "error") {
+                        MotionListItem {
+                            ErrorCard(state.errorMessage!!)
+                        }
+                    }
                 }
                 when (state.phase) {
                     ImportPhase.IDLE -> {
-                        item(key = "intro") { IntroCard() }
+                        item(key = "intro") {
+                            MotionListItem {
+                                IntroCard()
+                            }
+                        }
                         item(key = "pick") {
-                            Button(
-                                onClick = { pickFileLauncher.launch(arrayOf("*/*")) },
-                                enabled = !state.parsing,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                if (state.parsing) {
-                                    CircularProgressIndicator(
-                                        strokeWidth = 2.dp,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("正在解析…", fontSize = 16.sp)
-                                } else {
-                                    Text("选择 CSV 文件", fontSize = 16.sp)
+                            MotionListItem {
+                                Button(
+                                    onClick = { pickFileLauncher.launch(arrayOf("*/*")) },
+                                    enabled = !state.parsing,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    if (state.parsing) {
+                                        CircularProgressIndicator(
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("正在解析…", fontSize = 16.sp)
+                                    } else {
+                                        Text("选择 CSV 文件", fontSize = 16.sp)
+                                    }
                                 }
+
                             }
                         }
                     }
 
                     ImportPhase.PARSED -> {
-                        item(key = "summary") { SummaryCard(state) }
+                        item(key = "summary") {
+                            MotionListItem {
+                                SummaryCard(state)
+                            }
+                        }
                         if (state.importableRows.isNotEmpty()) {
-                            item(key = "preview") { PreviewCard(state.importableRows) }
+                            item(key = "preview") {
+                                MotionListItem {
+                                    PreviewCard(state.importableRows)
+                                }
+                            }
                         }
                         if (state.failedRows.isNotEmpty()) {
-                            item(key = "failed") { FailedCard(state.failedRows) }
+                            item(key = "failed") {
+                                MotionListItem {
+                                    FailedCard(state.failedRows)
+                                }
+                            }
                         }
                         item(key = "actions") {
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                OutlinedButton(
-                                    onClick = { viewModel.onEvent(BillImportEvent.Reset) },
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("重新选择", fontSize = 16.sp) }
-                                Button(
-                                    onClick = { viewModel.onEvent(BillImportEvent.ConfirmImport) },
-                                    enabled = state.importableCount > 0,
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("确认导入", fontSize = 16.sp) }
+                            MotionListItem {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.onEvent(BillImportEvent.Reset) },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("重新选择", fontSize = 16.sp) }
+                                    Button(
+                                        onClick = { viewModel.onEvent(BillImportEvent.ConfirmImport) },
+                                        enabled = state.importableCount > 0,
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("确认导入", fontSize = 16.sp) }
+                                }
+
                             }
                         }
                     }
 
                     ImportPhase.IMPORTING -> {
-                        item(key = "importing") { ImportingCard(state.importableCount) }
+                        item(key = "importing") {
+                            MotionListItem {
+                                ImportingCard(state.importableCount)
+                            }
+                        }
                     }
 
                     ImportPhase.DONE -> {
-                        item(key = "done") { DoneCard(state) }
+                        item(key = "done") {
+                            MotionListItem {
+                                DoneCard(state)
+                            }
+                        }
                         item(key = "finish") {
-                            Button(
-                                onClick = {
-                                    viewModel.onEvent(BillImportEvent.Reset)
-                                    onBack()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("完成", fontSize = 16.sp) }
+                            MotionListItem {
+                                Button(
+                                    onClick = {
+                                        viewModel.onEvent(BillImportEvent.Reset)
+                                        onBack()
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { Text("完成", fontSize = 16.sp) }
+
+                            }
                         }
                     }
                 }

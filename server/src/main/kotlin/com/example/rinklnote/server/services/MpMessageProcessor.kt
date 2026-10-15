@@ -46,7 +46,8 @@ object MpMessageProcessor {
         insightService: InsightService,
         // 超时可注入：单测传 0 直接命中兜底分支（withTimeoutOrNull(0) 不执行块立即超时），
         // 生产固定 [REPLY_DEADLINE_MS]
-        replyTimeoutMs: Long = REPLY_DEADLINE_MS
+        replyTimeoutMs: Long = REPLY_DEADLINE_MS,
+        interactions: com.example.rinklnote.server.services.bot.BotInteractionService? = null
     ): String? {
         val openid = fields["FromUserName"]
         val msgId = fields["MsgId"]
@@ -69,7 +70,7 @@ object MpMessageProcessor {
         // （LLM 兜底查询默认 10s 超时，必须由这层硬顶下来）。广捕获放在超时块外。
         return try {
             withTimeoutOrNull(replyTimeoutMs) {
-                handle(fields, openid, userService, billService, nluService, budgetService, insightService)
+                handle(fields, openid, userService, billService, nluService, budgetService, insightService, interactions)
             } ?: TIMEOUT_REPLY
         } catch (e: CancellationException) {
             throw e
@@ -86,7 +87,8 @@ object MpMessageProcessor {
         billService: BillService,
         nluService: NLUService,
         budgetService: BudgetService,
-        insightService: InsightService
+        insightService: InsightService,
+        interactions: com.example.rinklnote.server.services.bot.BotInteractionService? = null
     ): String {
         val msgType = fields["MsgType"] ?: ""
 
@@ -126,15 +128,32 @@ object MpMessageProcessor {
         }
 
         // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService。
+        if (interactions != null) {
+            if (interactions.isBudgetRequest(content)) {
+                val overview = interactions.budgetCard(user.id, "MP", openid)
+                val url = interactions.webLink(user.id, openid)
+                return overview.text + if (url == null) "\n网页入口尚未配置，查看明细请到 App 或网页" else "\n查看明细与管理提醒（30分钟内有效）：\n$url"
+            }
+            if (content in listOf("查看账单", "编辑账单", "查看最近一笔")) {
+                val bill = billService.latestBill(user.id) ?: return "🧾 还没有可查看的账单"
+                val url = interactions.webLink(user.id, openid, bill)
+                return "🧾 ${bill.categoryName} ¥${Money.format(bill.amountMinor)}" +
+                    if (url == null) "\n网页入口尚未配置，可回复改金额或改分类" else "\n查看与编辑这一笔（30分钟内有效）：\n$url"
+            }
+        }
         BotCorrectService.handle(content, user.id, billService)?.let { return it }
 
         // 自然语言记账/问账：source=MP 一路透传到 BillService.createBill（bills.bill_source）
-        val router = PhoneIntentRouter(billService, budgetService, insightService, nluService)
+        var bookedBill: BillDTO? = null
+        val router = PhoneIntentRouter(billService, budgetService, insightService, nluService,
+            onBillCreated = { bookedBill = it })
         val reply = router.route(content, user.id, BotCommands.SOURCE_MP)
+        val link = bookedBill?.let { interactions?.webLink(user.id, openid, it) }
+        val receipt = if (link == null) reply else "$reply\n改金额、换分类、撤销这一笔、查看账单（30分钟内有效）：\n$link"
         return if (isNew) {
-            "欢迎！已为你开通订阅号记账账号。直接说「午餐20元」即可记账。\n\n$reply"
+            "欢迎！已为你开通订阅号记账账号。直接说「午餐20元」即可记账。\n\n$receipt"
         } else {
-            reply
+            receipt
         }
     }
 

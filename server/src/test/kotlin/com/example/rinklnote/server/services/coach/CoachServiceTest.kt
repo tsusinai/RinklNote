@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -130,10 +131,8 @@ class CoachServiceTest {
         assertTrue(over.text.contains("远超"))
         // 隐私红线：文案绝不包含账单备注
         assertFalse(over.text.contains("绝密备注"))
-        // 周报文案可由建议拼出（标题走小盘人格化）
-        val push = coach.weeklyPushCopy(1L, today)!!
-        assertTrue(push.contains("小盘周报"))
-        assertTrue(push.contains("预计"))
+        // Bot 周报不再下发省钱挑战建议；挑战数据仍可供结构化建议层使用。
+        assertNull(coach.weeklyPushCopy(1L, today))
     }
 
     @Test
@@ -158,6 +157,24 @@ class CoachServiceTest {
         assertEquals("WARN", monthOver.level)
         assertEquals(budget.id, monthOver.budgetId)
         assertTrue(monthOver.text.contains("75.00"))
+    }
+
+    @Test
+    fun `Bot周报保留月预算观察并排除并存的挑战建议`() {
+        val monthStartEpoch = today.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        budgetService.upsert(1L, monthStartEpoch, 6000L)
+        challengeService.upsert(1L, "WEEKLY_BUDGET", weekStartEpoch, 7000L, "ACTIVE")
+        insertWeekBill(5000L, "三餐", LocalDate.of(2026, 9, 15), remark = "绝密备注内容")
+
+        val push = coach.weeklyPushCopy(1L, today)!!
+        assertTrue(push.contains("小盘周报"))
+        assertTrue(push.contains("月预算"))
+        assertTrue(push.contains("93.75"))
+        assertTrue(push.contains("可以留意本周的大额支出"))
+        assertFalse(push.contains("省一点"))
+        assertFalse(push.contains("周预算"))
+        assertFalse(push.contains("116.67"))
+        assertFalse(push.contains("绝密备注"))
     }
 
     @Test

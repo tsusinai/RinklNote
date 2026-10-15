@@ -46,6 +46,9 @@ import com.example.rinklnote.data.network.dto.ParseRequest
 import com.example.rinklnote.data.network.dto.ParseResponse
 import com.example.rinklnote.data.network.dto.QueryRequest
 import com.example.rinklnote.data.network.dto.QueryResponse
+import com.example.rinklnote.data.network.dto.ExpenseReportRequest
+import com.example.rinklnote.data.network.dto.ExpenseReportResponse
+import com.example.rinklnote.domain.ExpenseReportContent
 import com.example.rinklnote.data.network.dto.RatesResponse
 import com.example.rinklnote.data.network.dto.SyncResponse
 import com.example.rinklnote.data.network.dto.TemplateDTO
@@ -165,6 +168,30 @@ class AiViewModelTest {
         advanceUntilIdle()
 
         assertEquals(0, repo.chatMessages.value.size)
+    }
+
+    @Test
+    fun `three report questions persist renderable HTML and never create bills`() = runTest(dispatcher) {
+        val vm = newVM()
+        listOf("分析一下8月交通支出", "帮我总结本月支出", "本月有支出异常吗").forEach {
+            vm.send(it)
+            advanceUntilIdle()
+        }
+        assertEquals(listOf("analysis", "summary", "anomaly"), fake.reportRequests.map { it.type })
+        assertEquals(0, repo.addedBills.size)
+        val reports = repo.chatMessages.value.filter { it.role == "assistant" }.mapNotNull { ExpenseReportContent.decode(it.content) }
+        assertEquals(3, reports.size)
+        assertTrue(reports.all { it.html.contains("<h2>") })
+        assertFalse(vm.state.value.isWaiting)
+    }
+
+    @Test
+    fun `repeated entry generates each automatic report once`() = runTest(dispatcher) {
+        val vm = newVM()
+        vm.onEnter(true); vm.onEnter(true)
+        advanceUntilIdle()
+        assertEquals(1, fake.reportRequests.count { it.type == "summary" })
+        assertEquals(1, fake.reportRequests.count { it.type == "anomaly" })
     }
 
     @Test
@@ -343,6 +370,14 @@ class AiViewModelTest {
 
     /** ApiService fake：覆写 parseBill + insights 方法，其余桩。 */
     private class FakeApiService : ApiService {
+        val reportRequests = mutableListOf<ExpenseReportRequest>()
+        override suspend fun getExpenseHtmlReport(request: ExpenseReportRequest): ExpenseReportResponse {
+            reportRequests += request
+            if (request.type == "summary") monthlyError?.let { throw it }
+            return ExpenseReportResponse("expense-report-v1", request.type, "支出报告", request.month ?: "2026-08",
+                "<section><h2>本月支出</h2><p>分类汇总报告</p></section>", "分类汇总报告", "llm",
+                123400L, 3L, anomalyResult.alerts.isNotEmpty())
+        }
         var reviewResult: MonthlyReviewResponse =
             MonthlyReviewResponse(
                 summary = "本月支出 1234 元", highlights = listOf("餐饮占比 30%"),

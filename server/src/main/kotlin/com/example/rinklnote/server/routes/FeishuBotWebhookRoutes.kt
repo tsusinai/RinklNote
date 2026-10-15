@@ -142,6 +142,14 @@ fun Route.feishuBotWebhookRoutes(
                 }
 
                 // 4) 立即 200，异步处理（飞书 3s 内收不到 200 会重试，处理务必不占响应窗口）
+                if (payload["header"]?.jsonObject?.get("event_type")?.jsonPrimitive?.contentOrNull == "card.action.trigger") {
+                    val callback = payload["event"]?.jsonObject
+                    val interactions = feishuBotService.interactions
+                    val result = if (callback != null && interactions != null)
+                        com.example.rinklnote.server.services.bot.BotPlatformCallbacks.feishu(callback, interactions)
+                    else buildJsonObject { putJsonObject("toast") { put("type", "error"); put("content", "卡片服务暂不可用") } }
+                    return@post call.respondText(result.toString(), ContentType.Application.Json)
+                }
                 call.respondText("{}", ContentType.Application.Json)
 
                 // v2 schema：header.event_type + event；兼容 v1：type=event_callback + event

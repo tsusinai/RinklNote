@@ -1,6 +1,8 @@
 package com.example.rinklnote.ui.theme
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -10,12 +12,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 
-/**
- * Central motion tokens — single source of truth for the app's animation specs.
- * Duration in milliseconds; springs/tweens typed per target value type.
- * The Web side mirrors FastOutSlowInEasing via --ease: cubic-bezier(.4,0,.2,1).
- */
+/** 全局动效令牌：按压即时响应、状态切换柔和落定、退出比进入更短。 */
 object Motion {
+    // 首屏最多分四组入场，最后一组在 340ms 内完成；延迟交给动画系统随系统比例缩放。
+    fun stagedReveal(stage: Int): FiniteAnimationSpec<Float> =
+        tween(220, delayMillis = stage.coerceIn(0, 3) * 40, easing = LinearOutSlowInEasing)
+    val Selection: FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 650f)
+    val SelectionWidth: FiniteAnimationSpec<Dp> = tween(180, easing = FastOutSlowInEasing)
+    // 平静、克制：按压即时，入场缓出，退出加速；交互不出现弹性过冲。
+    val Interaction: FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 700f)
+    val Reveal: FiniteAnimationSpec<Float> = tween(220, easing = LinearOutSlowInEasing)
+    val Dismiss: FiniteAnimationSpec<Float> = tween(150, easing = FastOutLinearInEasing)
+    val ContentSlide: FiniteAnimationSpec<IntOffset> = tween(220, easing = FastOutSlowInEasing)
+    val NavigationSlide: FiniteAnimationSpec<IntOffset> = tween(320, easing = LinearOutSlowInEasing)
+    val NavigationExit: FiniteAnimationSpec<IntOffset> = tween(220, easing = FastOutLinearInEasing)
+    val Progress: FiniteAnimationSpec<Float> = tween(360, easing = FastOutSlowInEasing)
     // Durations (ms)
     const val DurationSheet = 250        // keypad & slide-up overlays
     const val DurationDrawer = 240       // quick-add drawer enter / exit
@@ -30,11 +41,11 @@ object Motion {
 
     // Sheets / keypad: smooth tween in and out (no spring overshoot / bounce)
     val SheetEnter: FiniteAnimationSpec<IntOffset> = tween(DurationSheet, easing = IndicatorEasing)
-    val SheetExit: FiniteAnimationSpec<IntOffset> = tween(DurationSheet, easing = IndicatorEasing)
+    val SheetExit: FiniteAnimationSpec<IntOffset> = tween(180, easing = FastOutLinearInEasing)
 
     // QuickAdd drawer (horizontal)：与输入法串行切换，固定时长便于精准接棒。
     val DrawerEnter: FiniteAnimationSpec<IntOffset> = tween(DurationDrawer, easing = IndicatorEasing)
-    val DrawerExit: FiniteAnimationSpec<IntOffset> = tween(DurationDrawer, easing = IndicatorEasing)
+    val DrawerExit: FiniteAnimationSpec<IntOffset> = tween(170, easing = FastOutLinearInEasing)
 
     // Bottom nav indicator
     val Indicator: FiniteAnimationSpec<Dp> = tween(DurationIndicator, easing = IndicatorEasing)
@@ -57,5 +68,15 @@ object Motion {
     val SelectColor: FiniteAnimationSpec<Color> = tween(DurationExpand, easing = IndicatorEasing)
 
     // Card height auto-resize (drag settle / expand) — same spring feel as row shift
-    val ContentResize: FiniteAnimationSpec<IntSize> = spring(stiffness = Spring.StiffnessMediumLow)
+    val ContentResize: FiniteAnimationSpec<IntSize> = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow)
+
+    // 编辑页：短距离位移和柔和缓出，尺寸变化不回弹，避免相邻表单跳动。
+    val EditorResize: FiniteAnimationSpec<IntSize> = tween(240, easing = IndicatorEasing)
+    val EditorSlide: FiniteAnimationSpec<IntOffset> = tween(220, easing = IndicatorEasing)
+    val EditorFade: FiniteAnimationSpec<Float> = tween(160, easing = IndicatorEasing)
+    val EditorSelection: FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 600f)
+    val PressRelease: FiniteAnimationSpec<Float> = tween(180, easing = LinearOutSlowInEasing)
+    val SliderReveal: FiniteAnimationSpec<Float> = tween(240, easing = LinearOutSlowInEasing)
+    val SliderDismiss: FiniteAnimationSpec<Float> = tween(160, easing = FastOutLinearInEasing)
+    val SliderSettle: FiniteAnimationSpec<Float> = spring(dampingRatio = 1f, stiffness = 550f)
 }

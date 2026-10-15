@@ -142,7 +142,7 @@ class CoachService(
                 advices += CoachAdvice(
                     type = "MONTH_FORECAST_OVER", level = "WARN", budgetId = monthlyBudget.id,
                     text = "按目前节奏月底预计花 ¥${Money.format(forecast)}，会超出月预算 " +
-                        "¥${Money.format(monthlyBudget.amountMinor)}，本周能省一点是一点～"
+                        "¥${Money.format(monthlyBudget.amountMinor)}，可以留意本周的大额支出。"
                 )
             }
         }
@@ -150,11 +150,13 @@ class CoachService(
     }
 
     /**
-     * 周报推送文案（PushScheduler WEEKLY_REPORT 周一挂接）：无建议返回 null（不推）。
+     * 周报推送文案（PushScheduler WEEKLY_REPORT 周一挂接）：只推送普通预算观察，
+     * 不把省钱挑战建议带到 Bot；无内容返回 null（不推）。
      * 文案仅含聚合数字与分类名；标题走小盘人格化（Task 1.5）。
      */
     fun weeklyPushCopy(userId: Long, today: LocalDate = TimeUtil.today()): String? {
         val advices = weeklyAdvice(userId, today)
+            .filterNot { it.challengeId != null || it.type.startsWith("WEEKLY_") }
         if (advices.isEmpty()) return null
         return buildString {
             appendLine(MascotVoice.WEEKLY_REPORT_TITLE)

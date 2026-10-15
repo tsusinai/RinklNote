@@ -10,6 +10,9 @@ import com.example.rinklnote.data.db.entity.SubCategory
 import com.example.rinklnote.data.repository.AccountRepository
 import com.example.rinklnote.data.repository.BillRepository
 import com.example.rinklnote.data.repository.DailyReport
+import com.example.rinklnote.domain.BillType
+import com.example.rinklnote.util.bookkeepingZone
+import com.example.rinklnote.util.today
 import com.example.rinklnote.util.getMonthStart
 import com.example.rinklnote.util.getNextMonthStart
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * BookkeepingViewModel month-window logic: the main bill list, chart source and
@@ -71,7 +76,8 @@ class BookkeepingViewModelTest {
         vm.selectMonth(-1)
         advanceUntilIdle()
         assertEquals(getMonthStart(-1) to getNextMonthStart(-1), repo.billRanges.last())
-        assertEquals(getMonthStart(-1) to getNextMonthStart(-1), repo.totalRanges.last())
+        // 合计已改为由账单流内存派生（性能优化：不再单独监听 total 流），故只校验账单窗口切换
+        assertEquals(getMonthStart(-1) to getNextMonthStart(-1), repo.billRanges.last())
         assertEquals(-1, vm.monthState.value.selectedMonthOffset)
     }
 
@@ -107,7 +113,77 @@ class BookkeepingViewModelTest {
         assertEquals(ranks.distinct().size, ranks.size)
     }
 
-    /** Repository fake that records the month windows it is asked to observe/aggregate. */
+    /** 选择跨年月份后，账单、收支合计与图表均应来自同一业务时区窗口。 */
+    @Test
+    fun monthSelectionEventRefreshesAllMonthDataAcrossYears() = runTest(dispatcher) {
+        val december = LocalDate.of(today().year - 1, 12, 1)
+        val start = december.atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+        val next = december.plusMonths(1).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli()
+        val offset = ChronoUnit.MONTHS.between(today().withDayOfMonth(1), december).toInt()
+        val expense = Bill(id = 1, amountMinor = 98765L, categoryId = 1, categoryName = "三餐",
+            accountId = 1, date = december.plusDays(4).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli())
+        val income = Bill(id = 2, amountMinor = 300000L, billType = BillType.INCOME,
+            categoryId = 2, categoryName = "工资", accountId = 1,
+            date = december.plusDays(8).atStartOfDay(bookkeepingZone()).toInstant().toEpochMilli())
+        repo.monthBills[start] = MutableStateFlow(listOf(expense, income))
+        val vm = newVM()
+
+        vm.onEvent(BookkeepingEvent.SelectMonth(offset))
+        advanceUntilIdle()
+
+        val state = vm.monthState.value
+        assertEquals(start to next, repo.billRanges.last())
+        assertEquals(offset, state.selectedMonthOffset)
+        assertEquals(listOf(expense, income), state.bills)
+        assertEquals(98765L, state.totalExpense)
+        assertEquals(300000L, state.totalIncome)
+        assertEquals(mapOf(5 to 98765L), state.monthDetail.dayAmounts)
+        assertEquals(98765L, state.monthDetail.pieSlices.single().amount)
+        assertEquals(31, state.monthDetail.daySeries.size)
+        assertEquals(98765f, state.monthDetail.daySeries[4])
+    }
+
+    /** 切换后取消旧月份订阅，旧窗口后续更新不能覆盖新月份数据。 */
+    @Test
+    fun previousMonthEmissionsCannotOverwriteSelectedMonth() = runTest(dispatcher) {
+        val currentStart = getMonthStart(0)
+        val previousStart = getMonthStart(-1)
+        val previousBill = Bill(id = 1, amountMinor = 4200L, categoryId = 1, categoryName = "三餐",
+            accountId = 1, date = previousStart)
+        repo.monthBills[previousStart] = MutableStateFlow(listOf(previousBill))
+        val vm = newVM()
+        val oldFlow = requireNotNull(repo.monthBills[currentStart])
+        vm.onEvent(BookkeepingEvent.SelectMonth(-1))
+        advanceUntilIdle()
+
+        oldFlow.value = listOf(previousBill.copy(id = 2, amountMinor = 999999L, date = currentStart))
+        advanceUntilIdle()
+
+        assertEquals(-1, vm.monthState.value.selectedMonthOffset)
+        assertEquals(listOf(previousBill), vm.monthState.value.bills)
+        assertEquals(4200L, vm.monthState.value.totalExpense)
+        assertEquals(mapOf(1 to 4200L), vm.monthState.value.monthDetail.dayAmounts)
+    }
+
+    /** 空月份也要更新日历长度，不能沿用上一月的账单和序列。 */
+    @Test
+    fun emptyMonthSelectionClearsDataAndUsesActualDayCount() = runTest(dispatcher) {
+        val february = LocalDate.of(today().year - 1, 2, 1)
+        val offset = ChronoUnit.MONTHS.between(today().withDayOfMonth(1), february).toInt()
+        val vm = newVM()
+        vm.onEvent(BookkeepingEvent.SelectMonth(offset))
+        advanceUntilIdle()
+
+        val state = vm.monthState.value
+        assertTrue(state.bills.isEmpty())
+        assertEquals(0L, state.totalExpense)
+        assertEquals(0L, state.totalIncome)
+        assertTrue(state.monthDetail.pieSlices.isEmpty())
+        assertEquals(february.lengthOfMonth(), state.monthDetail.daySeries.size)
+        assertTrue(state.monthDetail.daySeries.all { it == 0f })
+    }
+
+    /** 仓库替身记录订阅窗口，按月维护可继续发射的账单流。 */
     private class FakeBillRepository : BillRepository {
         override val expenseCategories: MutableStateFlow<List<Category>> = MutableStateFlow(emptyList())
         override val incomeCategories: MutableStateFlow<List<Category>> = MutableStateFlow(emptyList())
@@ -116,6 +192,7 @@ class BookkeepingViewModelTest {
         val billRanges = mutableListOf<Pair<Long, Long>>()
         val totalRanges = mutableListOf<Pair<Long, Long>>()
         val reordered = mutableListOf<List<Bill>>()
+        val monthBills = mutableMapOf<Long, MutableStateFlow<List<Bill>>>()
 
         override suspend fun reorderBills(bills: List<Bill>) {
             reordered += bills
@@ -123,7 +200,7 @@ class BookkeepingViewModelTest {
 
         override fun observeBillsByMonth(monthStart: Long, nextMonthStart: Long): Flow<List<Bill>> {
             billRanges += monthStart to nextMonthStart
-            return flowOf(emptyList())
+            return monthBills.getOrPut(monthStart) { MutableStateFlow(emptyList()) }
         }
 
         override suspend fun getTotalExpense(monthStart: Long, nextMonthStart: Long): Long {

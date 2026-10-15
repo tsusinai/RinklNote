@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.screen.quickadd
 
 import com.example.rinklnote.util.Money
+import com.example.rinklnote.util.bookkeepingZone
 import java.time.LocalDate
 import java.time.MonthDay
 import java.time.Year
@@ -104,7 +105,7 @@ object ReceiptOcrParser {
         if (result.isEmpty()) {
             monthDayRegex.findAll(text).forEach { m ->
                 val date = runCatching {
-                    Year.now().atMonthDay(
+                    Year.now(bookkeepingZone()).atMonthDay(
                         MonthDay.of(m.groupValues[1].toInt(), m.groupValues[2].toInt())
                     )
                 }.getOrNull()

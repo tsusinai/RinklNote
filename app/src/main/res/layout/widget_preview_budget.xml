@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:gravity="center_vertical" android:padding="12dp"
+    android:background="@drawable/widget_preview_background">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="本月预算" android:textSize="15sp" android:textStyle="bold" android:textColor="#202A35" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="8dp" android:text="剩余" android:textSize="11sp" android:textColor="#69788B" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="¥•••&#10;金额与进度已隐藏" android:textSize="13sp" android:textColor="#2468AC" />
+</LinearLayout>

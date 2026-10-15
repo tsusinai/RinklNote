@@ -7,16 +7,16 @@ import Icon from './DefenseIcon.vue'
     <span class="stage-spark spark-one">✳</span><span class="stage-spark spark-two">✧</span>
     <!-- 背景手机：月度详情图表（热力图与分类饼图联动） -->
     <div class="phone-mock phone-back">
-      <div class="phone-top"><span>10:08</span><span>▰</span></div>
+      <div class="phone-island"></div>
       <div class="phone-screen-wrap">
-        <img src="/screenshots/chart.png" alt="RinklNote 月度详情与热力图" class="phone-real-img" />
+        <img src="/screenshots/chart.png" alt="RinklNote 月度详情与热力图" class="phone-real-img shot-chart-focus" />
       </div>
     </div>
     <!-- 前景手机：记账主页（流水日卡片与月度汇总） -->
     <div class="phone-mock phone-front">
-      <div class="phone-top"><span>10:08</span><div class="phone-island"></div><span>▰</span></div>
+      <div class="phone-island"></div>
       <div class="phone-screen-wrap">
-        <img src="/screenshots/home.png" alt="RinklNote 记账主页" class="phone-real-img" />
+        <img src="/screenshots/home.png" alt="RinklNote 记账主页" class="phone-real-img shot-home-focus" />
       </div>
     </div>
     <div class="floating-tag tag-sync"><span class="tag-icon"><Icon name="sync" :size="17" /></span><div><b>先记录，再同步</b><small>Android 本地优先 · 离线秒级响应</small></div></div>

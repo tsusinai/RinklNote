@@ -32,7 +32,7 @@ class BatchBookingService(
         val pending = session.get(inc.userId, nowMillis())
         if (pending != null) {
             if (CONFIRM.containsMatchIn(text)) {
-                return confirmAll(inc.userId, pending)
+                return confirmAll(inc.userId, pending, inc.onBillCreated)
             }
             if (CANCEL.containsMatchIn(text)) {
                 session.clear(inc.userId)
@@ -60,7 +60,8 @@ class BatchBookingService(
     // ── 待确认态指令 ──
 
     /** 「确认 / 全部入账 / 都记上」：逐条落库，某条异常跳过并标注，末尾汇总。 */
-    private fun confirmAll(userId: Long, batch: ButlerSession.PendingBatch): String {
+    private fun confirmAll(userId: Long, batch: ButlerSession.PendingBatch,
+                           onBillCreated: ((com.example.rinklnote.server.services.BillDTO) -> Unit)? = null): String {
         val lines = mutableListOf<String>()
         var okCount = 0
         var okSum = 0L
@@ -73,6 +74,7 @@ class BatchBookingService(
                     remark = item.line.take(50),
                     source = BotCommands.SOURCE_QQ
                 )
+                onBillCreated?.invoke(bill)
                 lines += "✅ ${bill.categoryName} ¥${Money.format(bill.amountMinor)}"
                 okCount++
                 okSum += bill.amountMinor

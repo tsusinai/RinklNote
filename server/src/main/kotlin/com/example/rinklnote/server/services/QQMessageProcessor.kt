@@ -50,6 +50,10 @@ object QQMessageProcessor {
         butler: ButlerIntentRouter? = null
     ) {
         try {
+            if (eventType == "INTERACTION_CREATE") {
+                com.example.rinklnote.server.services.bot.BotPlatformCallbacks.qq(d, qqBotService)
+                return
+            }
             // Handle content as string or array
             val rawContent = when (val c = d["content"]) {
                 is JsonPrimitive -> c.content.trim()
@@ -166,6 +170,22 @@ object QQMessageProcessor {
             }
 
             // 「改金额/改分类/删上一笔/撤销」最近一单修正（Task 1.1）：四通道共用 BotCorrectService，
+            val interactions = qqBotService.interactions
+            if (interactions != null) {
+                try {
+                    interactions.textAction(content, "QQ", openid)?.let { outcome ->
+                        if (outcome.qqCard != null) qqBotService.sendCard(openid, groupOpenid, outcome.qqCard, msgId)
+                        else qqBotService.sendInteractionText(openid, groupOpenid, outcome.text, msgId)
+                        return
+                    }
+                    if (interactions.isBudgetRequest(content)) {
+                        qqBotService.sendCard(openid, groupOpenid, interactions.budgetCard(user.id, "QQ", openid), msgId)
+                        return
+                    }
+                } catch (e: com.example.rinklnote.server.services.bot.BotActionException) {
+                    qqBotService.sendInteractionText(openid, groupOpenid, e.message, msgId); return
+                }
+            }
             // 命中即短路回执，未命中返回 null 继续走自然语言路由。
             BotCorrectService.handle(content, user.id, billService)?.let { reply ->
                 if (groupOpenid != null) {
@@ -180,6 +200,7 @@ object QQMessageProcessor {
             // 管家管线（2026-10-03）：多模态（识图/语音兜底）与管家意图（AA 分账/批量记账/
             // 无消费打卡/富查账）。返回 null = 无人认领，落回既有自然语言路由。
             if (butler != null) {
+                val booked = mutableListOf<BillDTO>()
                 val inc = ButlerIncoming(
                     userId = user.id,
                     openid = openid,
@@ -188,11 +209,16 @@ object QQMessageProcessor {
                     msgId = msgId,
                     text = content.takeIf { it.isNotBlank() },
                     voiceUrl = voiceUrl,
-                    imageUrl = imageUrl
+                    imageUrl = imageUrl,
+                    onBillCreated = { booked.add(it) }
                 )
                 val butlerReply = butler.dispatch(inc)
                 if (butlerReply != null) {
-                    if (groupOpenid != null) {
+                    val card = booked.lastOrNull()?.let { b -> interactions?.billCard(user.id, "QQ", openid, b,
+                        butlerReply + if (booked.size > 1) "\n以下操作针对最后这一笔：${b.categoryName} ¥${Money.format(b.amountMinor)}" else "") }
+                    if (card != null) {
+                        qqBotService.sendCard(openid, groupOpenid, card, msgId)
+                    } else if (groupOpenid != null) {
                         qqBotService.sendGroupMessage(groupOpenid, butlerReply, msgId)
                     } else {
                         qqBotService.sendC2CMessage(openid, butlerReply, msgId)
@@ -202,13 +228,18 @@ object QQMessageProcessor {
                 }
             }
 
+            var bookedBill: BillDTO? = null
             val router = PhoneIntentRouter(
                 billService, budgetService, insightService, nluService,
-                onBillBooked = butler?.budgetLightHook
+                onBillBooked = butler?.budgetLightHook,
+                onBillCreated = { bookedBill = it }
             )
             val reply = router.route(content, user.id)
             val out = if (isNew) "欢迎！已开通 QQ 记账账号。用中文说「午餐20元」即可记账；回复「登录」可获取网页登录码。\n\n$reply" else reply
-            if (groupOpenid != null) {
+            val card = bookedBill?.let { b -> interactions?.billCard(user.id, "QQ", openid, b, out) }
+            if (card != null) {
+                qqBotService.sendCard(openid, groupOpenid, card, msgId)
+            } else if (groupOpenid != null) {
                 qqBotService.sendGroupMessage(groupOpenid, out, msgId)
             } else {
                 qqBotService.sendC2CMessage(openid, out, msgId)

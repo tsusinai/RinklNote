@@ -3,7 +3,8 @@ package com.example.rinklnote.ui.screen.currency
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
+import com.example.rinklnote.ui.component.selectionColor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -48,7 +49,6 @@ import com.example.rinklnote.ui.component.RinklDivider
 import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
-import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.CurrencyRates
 import dev.chrisbanes.haze.HazeState
@@ -243,7 +243,7 @@ private fun CurrencyRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -307,13 +307,13 @@ private fun RadioDot(isSelected: Boolean) {
         modifier = Modifier
             .size(10.dp)
             .clip(CircleShape)
-            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+            .background(selectionColor(isSelected, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.surface))
             .then(
                 if (!isSelected) {
                     Modifier.border(
                         width = 1.5.dp,
                         color = LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f }
-                            ?: DefaultCardBorder,
+                            ?: MaterialTheme.colorScheme.outlineVariant,
                         shape = CircleShape
                     )
                 } else {
@@ -345,7 +345,7 @@ private fun MultiCurrencyTopBar(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(

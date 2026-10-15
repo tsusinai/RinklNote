@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.profile
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -17,10 +18,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,6 +69,7 @@ enum class CropMode { BACKGROUND, AVATAR }
  * @param onConfirm 确认后回调，参数为裁剪图在内部存储的绝对路径
  * @param onCancel 取消（或读取失败）时回调
  */
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun BackgroundCropScreen(
     imageUri: Uri,

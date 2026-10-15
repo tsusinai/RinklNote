@@ -16,13 +16,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
+import com.example.rinklnote.ui.component.RinklLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,11 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.example.rinklnote.ui.component.RinklTopBar
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.rinklnote.ui.component.pressScale
 import com.example.rinklnote.ui.viewmodel.AuthEvent
 import com.example.rinklnote.ui.viewmodel.AuthViewModel
 import com.example.rinklnote.ui.viewmodel.BotChannel
@@ -80,20 +80,15 @@ fun BotBindPage(
             .imePadding()
     ) {
         // Top bar with back arrow
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = handleDismiss) {
+        RinklTopBar(scrimAlpha = 0f, horizontalPadding = 8.dp) {
+            IconButton(onClick = handleDismiss, modifier = Modifier.align(Alignment.CenterStart)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
             }
             Text(
                 text = "机器人绑定",
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
 
@@ -175,7 +170,7 @@ fun BotBindPage(
                 )
             }
             Spacer(modifier = Modifier.height(20.dp))
-            // 大按钮按压反馈：按下缩放 0.97，用同一个 InteractionSource 驱动
+            // 共享按钮通过同一个 InteractionSource 提供按压反馈。
             val bindInteraction = remember { MutableInteractionSource() }
             Button(
                 onClick = { viewModel.onEvent(AuthEvent.SubmitBind) },
@@ -183,7 +178,6 @@ fun BotBindPage(
                 interactionSource = bindInteraction,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pressScale(bindInteraction)
             ) { Text("绑定") }
             if (state.isLoading) {
                 Spacer(modifier = Modifier.height(16.dp))

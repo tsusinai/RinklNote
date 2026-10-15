@@ -59,7 +59,7 @@ class QQBotWebSocketClient(
     private val logger = LoggerFactory.getLogger("QQBotWebSocket")
 
     // Covers both C2C_MESSAGE_CREATE and GROUP_AT_MESSAGE_CREATE.
-    private val intents = 1 shl 25
+    private val intents = (1 shl 25) or (1 shl 26)
     private val shard = listOf(0, 1)
 
     // Overridable for sandbox: wss://sandbox.api.sgroup.qq.com/websocket

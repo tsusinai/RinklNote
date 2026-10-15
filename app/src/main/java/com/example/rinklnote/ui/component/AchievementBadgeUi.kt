@@ -27,7 +27,7 @@ fun achievementBadgeRes(id: String): Int = when (id) {
     "budget-3months" -> R.drawable.badge_budget_3months
     "challenge-3" -> R.drawable.badge_challenge_3
     "challenge-10" -> R.drawable.badge_challenge_10
-    else -> R.drawable.ic_launcher_foreground
+    else -> R.drawable.ic_brand
 }
 
 /** 徽章 id → 中文名（成就墙与徽章展示管理共用）。 */

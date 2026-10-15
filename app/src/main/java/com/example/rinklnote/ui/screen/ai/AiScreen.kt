@@ -1,10 +1,12 @@
 package com.example.rinklnote.ui.screen.ai
 
+import com.example.rinklnote.ui.component.MotionListItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +32,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -55,10 +57,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.rinklnote.R
 import com.example.rinklnote.data.db.entity.ChatMessage
 import com.example.rinklnote.domain.MessageKind
-import com.example.rinklnote.ui.component.pressScale
+import com.example.rinklnote.domain.ExpenseReportContent
 import com.example.rinklnote.ui.viewmodel.AiEvent
 import com.example.rinklnote.ui.viewmodel.AiViewModel
-import com.example.rinklnote.ui.theme.DefaultCardBorder
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.util.bookkeepingZone
 import java.time.Instant
@@ -81,7 +82,7 @@ fun AiScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // 标题栏：标准 RinklTopBar 统一高度 46dp + 状态栏避让 + 居中标题
         RinklTopBar(
             scrimAlpha = 0f,
@@ -120,6 +121,7 @@ fun AiScreen(
             }
         }
 
+        val showWelcome = state.messages.all { it.kind == MessageKind.GREETING } && !state.isWaiting
         val zone = bookkeepingZone()
         // 预计算每条消息的日期与"是否需日期分隔"，避免每条目内重复 toLocalDate 并按 index 读前一条
         val messagesWithDay = remember(state.messages, zone) {
@@ -135,17 +137,44 @@ fun AiScreen(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp)
         ) {
-            items(messagesWithDay, key = { it.first.id }, contentType = { if (it.third) "chat_bubble_with_date" else "chat_bubble" }) { (msg, day, showDivider) ->
-                if (showDivider) {
-                    DateDivider(date = day)
+            if (showWelcome) {
+                item(key = "welcome") {
+                    Column(Modifier.fillMaxWidth().padding(top = 48.dp, bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+                            Icon(painterResource(R.drawable.ic_ui_bot), null, tint = LocalRinklColors.current.iconButtonColor ?: MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                        }
+                        Spacer(Modifier.height(20.dp))
+                        Text("小盘，帮你记一笔", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(8.dp))
+                        Text("说一笔消费，或聊聊本月支出", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(28.dp))
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.035f)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(painterResource(R.drawable.ic_ui_wallet), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("试着输入「午餐28元」", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Spacer(Modifier.height(4.dp))
+                                Text("分类和金额会自动识别", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
-                ChatBubble(message = msg)
+            }
+            items(if (showWelcome) emptyList() else messagesWithDay, key = { it.first.id }, contentType = { if (it.third) "chat_bubble_with_date" else "chat_bubble" }) { (msg, day, showDivider) ->
+                MotionListItem {
+                    if (showDivider) {
+                        DateDivider(date = day)
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    ChatBubble(message = msg)
+
+                }
             }
             if (state.isWaiting) {
                 item(key = "typing") {
-                    TypingBubble()
+                    MotionListItem { TypingBubble() }
                 }
             }
         }
@@ -163,6 +192,7 @@ fun AiScreen(
                 QuickAskChip(
                     text = label,
                     modifier = Modifier.weight(1f),
+                    enabled = !state.isWaiting && isLoggedIn,
                     onClick = { viewModel.send(query) }
                 )
             }
@@ -182,7 +212,7 @@ fun AiScreen(
         ) {
             IconButton(onClick = onVoiceInput) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_mic),
+                    painter = painterResource(R.drawable.ic_ui_mic),
                     contentDescription = "语音输入",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -193,11 +223,11 @@ fun AiScreen(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(52.dp)
                     .border(
                         width = 1.dp,
                         color = if (aiFocused) MaterialTheme.colorScheme.primary
-                                else LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder,
+                                else LocalRinklColors.current.borderColor.takeIf { it.alpha > 0f } ?: MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(24.dp)
                     )
                     .clip(RoundedCornerShape(24.dp))
@@ -220,7 +250,7 @@ fun AiScreen(
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
                                 if (state.input.isEmpty()) {
                                     Text(
-                                        text = "输入记账或问题，如「午餐28元」",
+                                        text = "记一笔，或问问小盘…",
                                         fontSize = 14.sp,
                                         maxLines = 1,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -237,10 +267,10 @@ fun AiScreen(
                         onClick = { viewModel.onEvent(AiEvent.Send) },
                         enabled = canSend,
                         interactionSource = sendInteraction,
-                        modifier = Modifier.pressScale(sendInteraction)
+                        modifier = Modifier
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            painter = painterResource(R.drawable.ic_ui_send),
                             contentDescription = "发送",
                             tint = if (canSend) MaterialTheme.colorScheme.primary
                                    else MaterialTheme.colorScheme.onSurfaceVariant
@@ -261,31 +291,42 @@ private val quickAsks = listOf(
 
 /** 胶囊询问 chip：边框走边框令牌（未自定义时回落内置描边灰，与输入框同款处理），文字走字体令牌；等宽布局下文字居中。 */
 @Composable
-private fun QuickAskChip(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun QuickAskChip(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val rinkl = LocalRinklColors.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.035f))
             .border(
                 width = 1.dp,
-                color = rinkl.borderColor.takeIf { it.alpha > 0f } ?: DefaultCardBorder,
+                color = rinkl.borderColor.takeIf { it.alpha > 0f } ?: MaterialTheme.colorScheme.outlineVariant,
                 shape = RoundedCornerShape(24.dp)
             )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .motionClickable(enabled = enabled, onClick = onClick)
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, fontSize = 12.sp, color = rinkl.fontColor, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val icon = when (text) { "支出总结" -> R.drawable.ic_ui_summary; "支出异常" -> R.drawable.ic_ui_alert; else -> R.drawable.ic_ui_analysis }
+            Icon(painterResource(icon), null, tint = rinkl.iconButtonColor ?: MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.45f), modifier = Modifier.size(16.dp))
+            Text(text = text, fontSize = 12.sp, color = rinkl.fontColor.copy(alpha = if (enabled) 1f else 0.45f), maxLines = 1)
+        }
     }
 }
 
 @Composable
 private fun ChatBubble(message: ChatMessage) {
+    val report = remember(message.content) { if (message.role == "assistant") ExpenseReportContent.decode(message.content) else null }
+    if (report != null) {
+        ExpenseReportCard(report)
+        return
+    }
     val isUser = message.role == "user"
     val kindLabel: String? = when (message.kind) {
         MessageKind.SUMMARY -> "月结"
         MessageKind.ANOMALY -> "异常"
+        MessageKind.ANALYSIS -> "分析"
         MessageKind.HABIT -> "习惯"
         MessageKind.BOOKING -> "记账"
         else -> null
@@ -303,9 +344,8 @@ private fun ChatBubble(message: ChatMessage) {
         Box(
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .rinkShadow(RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
-                .background(if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
+                    .clip(RoundedCornerShape(15.dp))
+                .background(if (isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column {
@@ -330,7 +370,7 @@ private fun ChatBubble(message: ChatMessage) {
                     text = message.content,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
-                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -353,8 +393,7 @@ private fun TypingBubble() {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Row(
             modifier = Modifier
-                .rinkShadow(RoundedCornerShape(15.dp))
-                .clip(RoundedCornerShape(15.dp))
+                    .clip(RoundedCornerShape(15.dp))
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically

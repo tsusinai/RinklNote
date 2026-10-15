@@ -39,20 +39,20 @@ fun BurnRiskBar(
 ) {
     if (budgetRiskLevel(risk.pct) == BudgetRiskLevel.LOW) return
     val barColor = RISK_WARN_ORANGE
-    val bg = RISK_WARN_ORANGE.copy(alpha = 0.14f)
+    val bg = RISK_WARN_ORANGE.copy(alpha = 0.08f)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(15.dp))
             .background(bg)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 painter = painterResource(R.drawable.ic_info),
                 contentDescription = null,
                 tint = barColor,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
@@ -66,9 +66,9 @@ fun BurnRiskBar(
         Text(
             text = when (risk.level) {
                 BudgetRiskLevel.MEDIUM ->
-                    "小盘陪你悠着点花，贴线也稳稳的～"
+                    "预计支出接近预算，可查看分类支出或调整额度。"
                 BudgetRiskLevel.HIGH ->
-                    "照这个节奏${periodLabel}预算要烧穿啦！别慌，从今天少一点点开始，小盘同行～"
+                    "按当前支出进度，预计会超过预算。可查看明细或调整额度。"
                 BudgetRiskLevel.LOW -> ""
             },
             fontSize = 12.sp,

@@ -1,5 +1,6 @@
 package com.example.rinklnote.ui.screen.profile
 
+import com.example.rinklnote.ui.component.MotionListItem
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -17,17 +18,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.rinklnote.ui.component.AlertDialog
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import com.example.rinklnote.ui.component.RinklOutlinedButton as OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -103,10 +104,13 @@ fun AiTokenDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(state.tokens, key = { it.id }) { item ->
-                            TokenRow(
-                                item = item,
-                                onRevoke = { viewModel.onEvent(AiTokenEvent.Revoke(item.id)) }
-                            )
+                            MotionListItem {
+                                TokenRow(
+                                    item = item,
+                                    onRevoke = { viewModel.onEvent(AiTokenEvent.Revoke(item.id)) }
+                                )
+
+                            }
                         }
                     }
                 }

@@ -10,7 +10,6 @@ import Card from '../../components/ui/Card.vue'
 import Btn from '../../components/ui/Btn.vue'
 import Skeleton from '../../components/ui/Skeleton.vue'
 import EmptyState from '../../components/ui/EmptyState.vue'
-import ParticleBackground from '../../components/ParticleBackground.vue'
 import type { MoneyStyle } from '../../types'
 
 const data = useDataStore()
@@ -112,9 +111,13 @@ onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 
 <template>
   <div class="page">
-    <!-- 粒子星空背景：fixed 层（z-index:0），.page 抬到 z-index:1 浮在星点之上 -->
-    <ParticleBackground />
-    <h2>快速记账</h2>
+    <div class="page-heading">
+      <div>
+        <span class="eyebrow">今日记录</span>
+        <h2>快速记账</h2>
+      </div>
+      <span class="heading-note">金额、分类、账户，一步完成</span>
+    </div>
     <Card>
       <!-- 首屏数据未到时渲染骨架占位 -->
       <div v-if="loading" class="sk" aria-hidden="true">
@@ -173,12 +176,15 @@ onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 </template>
 
 <style scoped>
-/* position:relative + z-index:1：保证页面内容浮在粒子星空（fixed z-index:0）之上 */
-.page { max-width: 760px; position: relative; z-index: 1; }
+.page { max-width: 760px; }
+.page-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.page-heading h2 { margin: 6px 0 0; }
+.eyebrow { color: var(--primary-ink); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.heading-note { color: var(--muted); font-size: 13px; margin-bottom: 5px; }
 .toggle { display: flex; gap: 8px; margin-bottom: 16px; }
 .toggle-btn { flex: 1; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 14px; cursor: pointer; }
-.toggle-btn.on.exp { background: var(--expense); color: #fff; border-color: transparent; font-weight: 600; }
-.toggle-btn.on.inc { background: var(--income); color: #fff; border-color: transparent; font-weight: 600; }
+.toggle-btn.on.exp { background: color-mix(in srgb, var(--expense) 12%, var(--card)); color: var(--expense); border-color: var(--expense); font-weight: 700; }
+.toggle-btn.on.inc { background: color-mix(in srgb, var(--income) 12%, var(--card)); color: var(--income); border-color: var(--income); font-weight: 700; }
 .amount-input { width: 100%; font-size: 38px; font-weight: 800; border: none; border-bottom: 2px solid var(--border); padding: 12px 0; background: none; color: var(--text); margin-bottom: 16px; }
 .section-label { font-size: 12px; color: var(--muted); margin: 14px 0 8px; }
 /* 响应式网格：auto-fill 自适应列数（窄屏 3~4 列、宽屏 8~9 列），替代写死列数的 .grid-4 */
@@ -197,4 +203,8 @@ onUnmounted(() => window.removeEventListener('keydown', onGlobalKey))
 /* 骨架占位 */
 .sk { display: flex; flex-direction: column; gap: 14px; }
 .sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+@media (max-width: 560px) {
+  .page-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .heading-note { margin-bottom: 0; }
+}
 </style>

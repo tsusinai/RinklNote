@@ -1,12 +1,11 @@
 package com.example.rinklnote.ui.component
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,13 +32,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -102,11 +105,28 @@ fun MonthChartPager(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
     ) {
+        // 文字标签与滑动页共享 pagerState，点击和左右滑动都更新同一选中状态。
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+            tabs.forEachIndexed { index, tab ->
+                val active = pagerState.currentPage == index
+                Column(
+                    Modifier.weight(1f)
+                        .semantics { selected = active }
+                        .motionClickable(role = Role.Tab, onClickLabel = "查看" + tab.label + "图") {
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(Modifier.fillMaxWidth().height(38.dp), contentAlignment = Alignment.Center) {
+                        Text(tab.label, fontSize = 13.sp,
+                            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Box(Modifier.width(64.dp).height(2.dp).background(
+                        if (active) MaterialTheme.colorScheme.primary else Color.Transparent))
+                }
+            }
+        }
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -120,39 +140,10 @@ fun MonthChartPager(
             }
         }
 
-        // 底部浅提示：当前页小圆点，可点跳转；左右滑动切换
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            tabs.indices.forEach { index ->
-                val active = pagerState.currentPage == index
-                Box(
-                    modifier = Modifier
-                        .size(26.dp)
-                        .clip(CircleShape)
-                        .clickable { scope.launch { pagerState.animateScrollToPage(index) } },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (active) 7.dp else 5.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (active) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-                            )
-                    )
-                }
-            }
-        }
     }
 }
 
-/** 页1：支出分类占比——左侧方形环图 + 右侧紧凑图例行；图例可点筛选。 */
+/** 页1：支出分类占比——左侧饼图 + 右侧金额、百分比对齐的图例。 */
 @Composable
 private fun PiePage(
     slices: List<PieSlice>,
@@ -161,7 +152,11 @@ private fun PiePage(
 ) {
     if (slices.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("本月暂无支出", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("本月暂无支出", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                Text("记录后即可查看支出分布", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         return
     }
@@ -173,16 +168,18 @@ private fun PiePage(
         }
     }
 
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val compactLegend = maxWidth < 340.dp || LocalDensity.current.fontScale > 1.1f
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 左：方形环图（占约 44% 宽）
+        // 左侧饼图；右侧图例保留更充足的数字空间。
         Box(
             modifier = Modifier
-                .weight(0.44f)
+                .weight(0.38f)
                 .fillMaxHeight(),
             contentAlignment = Alignment.Center
         ) {
@@ -224,7 +221,7 @@ private fun PiePage(
         // 高度随内容收缩、超出 pager 视口时可纵向滚动——固定高 + 居中排列会在分类多时把首尾行裁出视口。
         Column(
             modifier = Modifier
-                .weight(0.56f)
+                .weight(0.62f)
                 .verticalScroll(rememberScrollState())
         ) {
             slices.forEachIndexed { index, slice ->
@@ -233,9 +230,13 @@ private fun PiePage(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
+                        .semantics {
+                            contentDescription = "筛选" + slice.name + "账单"
+                            selected = isSelected
+                        }
                         .background(if (isSelected) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent)
-                        .clickable { onCategoryTap(slice.name) }
-                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                        .motionClickable(role = Role.Button) { onCategoryTap(slice.name) }
+                        .padding(horizontal = 4.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -245,6 +246,22 @@ private fun PiePage(
                             .background(pieColor(slices, index))
                     )
                     Spacer(modifier = Modifier.width(6.dp))
+                    if (compactLegend) {
+                        // 窄屏图例改为两行，长金额不再挤掉分类名称。
+                        Column(Modifier.weight(1f)) {
+                            Row(Modifier.fillMaxWidth()) {
+                                Text(slice.name, fontSize = 12.sp, lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text((slice.pct * 100).roundToInt().toString() + "%",
+                                    fontSize = 12.sp, lineHeight = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Text(Money.format(slice.amount), fontSize = 12.sp, lineHeight = 16.sp,
+                                style = TextStyle(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                        }
+                    } else {
                     Text(
                         slice.name,
                         fontSize = 12.sp,
@@ -254,14 +271,19 @@ private fun PiePage(
                         modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        "${Money.format(slice.amount)}·${(slice.pct * 100).roundToInt()}%",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(Money.format(slice.amount), fontSize = 12.sp,
+                        style = TextStyle(fontFeatureSettings = "tnum"),
+                        color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                    Spacer(Modifier.width(6.dp))
+                    Text((slice.pct * 100).roundToInt().toString() + "%", fontSize = 12.sp,
+                        style = TextStyle(fontFeatureSettings = "tnum"),
+                        textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.width((32f * LocalDensity.current.fontScale).dp), maxLines = 1)
+                    }
                 }
             }
         }
+    }
     }
 }
 
@@ -275,7 +297,7 @@ private fun TrendPage(
 ) {
     val daysInMonth = month.lengthOfMonth()
     val values = daySeries
-    val maxVal = maxSeries
+    val maxVal = maxSeries.coerceAtLeast(1f)
     val primary = MaterialTheme.colorScheme.primary
     // 折线/柱状主色走「图表颜色」槽（自定义主题 CHART，默认折线红 #CA3032，观感同旧 tertiary）；
     // 今天仍用主色 primary 高亮；饼图配色 PiePalette 与本槽无关。
@@ -289,10 +311,12 @@ private fun TrendPage(
     }
 
     val textMeasurer = rememberTextMeasurer()
-    // X 轴标签：每 7 天一个（1,8,15,22,29），避免 30 个标签挤压
-    val labelLayouts = remember(daysInMonth, onSurfaceVariant) {
+    // X 轴标签：每 7 天一个（1,8,15,22,29），仅对绘制的步长日期精准测量
+    val labelLayouts = remember(daysInMonth, onSurfaceVariant, textMeasurer) {
         val style = TextStyle(fontSize = 9.sp, color = onSurfaceVariant, textAlign = TextAlign.Center)
-        (1..daysInMonth).map { day -> textMeasurer.measure("$day", style) }
+        (1..daysInMonth).filter { (it - 1) % 7 == 0 }.associateWith { day ->
+            textMeasurer.measure("$day", style)
+        }
     }
     val todayLabelLayout = remember(todayInMonth, daySeries) {
         if (todayInMonth > 0) textMeasurer.measure(
@@ -301,9 +325,17 @@ private fun TrendPage(
         ) else null
     }
 
-    // 入场动画：单进度 0→1，重新进入本页时重放
+    // 复用 Path 与 Stroke，消除 Canvas 动画每帧频繁分配
+    val linePath = remember { Path() }
+    val density = LocalDensity.current
+    val lineStroke = remember(density) { Stroke(width = with(density) { 2.dp.toPx() }, cap = StrokeCap.Round) }
+
+    // 入场动画：单进度 0→1，重新进入本页或切换图表时重放
     val progress = remember { Animatable(0f) }
-    LaunchedEffect(chartType) { progress.animateTo(1f, Motion.ChartUpdate) }
+    LaunchedEffect(chartType, month) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, Motion.ChartUpdate)
+    }
 
     Canvas(modifier = Modifier.fillMaxWidth().fillMaxSize().padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)) {
         val n = values.size
@@ -318,17 +350,21 @@ private fun TrendPage(
 
         when (chartType) {
             MonthChartTab.LINE -> {
-                val path = Path()
-                values.indices.forEach { i ->
+                linePath.rewind()
+                val pointsX = FloatArray(n)
+                val pointsY = FloatArray(n)
+                for (i in 0 until n) {
                     val x = chartLeft + step * i
                     val y = xAxisTop - chartHeight * (disp(i) / maxVal)
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    pointsX[i] = x
+                    pointsY[i] = y
+                    if (i == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
                 }
-                drawPath(path = path, color = seriesColor, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+                drawPath(path = linePath, color = seriesColor, style = lineStroke)
 
-                values.indices.forEach { i ->
-                    val x = chartLeft + step * i
-                    val y = xAxisTop - chartHeight * (disp(i) / maxVal)
+                for (i in 0 until n) {
+                    val x = pointsX[i]
+                    val y = pointsY[i]
                     val isToday = (i + 1) == todayInMonth
                     if (isToday) {
                         // 今天：垂直淡色引导线 + 主色实心点 + 金额标签
@@ -356,7 +392,8 @@ private fun TrendPage(
 
             MonthChartTab.BAR -> {
                 val barWidth = (chartRight - chartLeft) / n * 0.5f
-                values.indices.forEach { i ->
+                val barRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
+                for (i in 0 until n) {
                     val centerX = chartLeft + step * i
                     val barHeight = chartHeight * (disp(i) / maxVal)
                     val x = centerX - barWidth / 2
@@ -366,7 +403,7 @@ private fun TrendPage(
                         color = if (isToday) primary else seriesColor,
                         topLeft = Offset(x, y),
                         size = Size(barWidth, barHeight.coerceAtLeast(2.dp.toPx())),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
+                        cornerRadius = barRadius
                     )
                     if (isToday) {
                         todayLabelLayout?.let { layout ->
@@ -386,11 +423,11 @@ private fun TrendPage(
         }
 
         // X 轴日期标签：每 7 天一个
-        values.indices.forEach { i ->
+        for (i in 0 until n) {
             val day = i + 1
             if ((day - 1) % 7 == 0) {
+                val layout = labelLayouts[day] ?: continue
                 val x = chartLeft + step * i
-                val layout = labelLayouts[i]
                 drawText(
                     textLayoutResult = layout,
                     topLeft = Offset(x - layout.size.width / 2f, xAxisTop + 2.dp.toPx())

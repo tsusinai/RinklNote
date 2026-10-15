@@ -16,6 +16,13 @@ import java.math.RoundingMode
  *   两者都为空或非法时抛 IllegalArgumentException（由路由层转 400）。
  */
 object Money {
+    /** 用户金额输入直接解析为整数分，不经浮点，拒绝超过两位小数。 */
+    fun parseMinor(text: String): Long? {
+        val value = text.trim()
+        if (value.length > 20 || !value.matches(Regex("\\d+(\\.\\d{1,2})?"))) return null
+        return runCatching { BigDecimal(value).movePointRight(2).longValueExact() }
+            .getOrNull()?.takeIf { it > 0 && it <= 9_007_199_254_740_991L }
+    }
     /** 旧边界兼容：把元金额四舍五入到 2 位小数（half-up）。新代码请用整数分。 */
     fun cents(value: Double): Double =
         BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).toDouble()

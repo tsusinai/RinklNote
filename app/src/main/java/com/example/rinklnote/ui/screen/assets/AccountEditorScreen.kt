@@ -31,13 +31,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -70,7 +71,9 @@ import com.example.rinklnote.ui.component.RinklTopBar
 import com.example.rinklnote.ui.component.SettingsGroupCard
 import com.example.rinklnote.ui.component.accountColor
 import com.example.rinklnote.ui.component.applyCardGlass
-import com.example.rinklnote.ui.component.pressScale
+import com.example.rinklnote.ui.component.motionClickable
+import com.example.rinklnote.ui.component.selectionColor
+import androidx.compose.animation.core.animateDpAsState
 import com.example.rinklnote.ui.component.rinkShadow
 import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
@@ -306,7 +309,7 @@ private fun CreateAccountContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onBalanceClick)
+                        .motionClickable(onClick = onBalanceClick)
                         .semantics { contentDescription = "编辑初始余额" }
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
@@ -337,7 +340,7 @@ private fun CreateAccountContent(
             Spacer(modifier = Modifier.height(4.dp))
         }
 
-        // 主 CTA 的按压缩放反馈：pressScale 放在链尾，缩放只作用于按钮本体绘制
+        // 共享按钮仅缩放绘制内容，保持布局和点击区域稳定。
         val createInteraction = remember { MutableInteractionSource() }
         Button(
             onClick = onCreate,
@@ -347,8 +350,7 @@ private fun CreateAccountContent(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp)
-                .height(50.dp)
-                .pressScale(createInteraction),
+                .height(50.dp),
             shape = RoundedCornerShape(15.dp)
         ) {
             Text("创建账户", fontSize = 16.sp, fontWeight = FontWeight.Medium)
@@ -450,7 +452,7 @@ private fun EditBalanceContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onBalanceClick)
+                        .motionClickable(onClick = onBalanceClick)
                         .semantics { contentDescription = "编辑账户余额" }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -491,26 +493,25 @@ private fun AccountPreviewCard(
         modifier = Modifier
             .fillMaxWidth()
             .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(16.dp),
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.045f))
+            .then(applyCardGlass(RoundedCornerShape(20.dp)))
+            .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AccountIcon(iconKey = iconKey, colorHex = iconColor, size = 52.dp)
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(
-                text = "预览",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = name,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_redesign_account_wallet), contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(5.dp))
+                Text("账户预览", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(modifier = Modifier.height(3.dp))
+            Text("用于记录余额和收支", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -535,7 +536,7 @@ private fun IconPicker(
                         modifier = Modifier
                             .weight(1f)
                             .defaultMinSize(minHeight = 68.dp)
-                            .clickable { onSelect(option.key) }
+                            .motionClickable { onSelect(option.key) }
                             .semantics {
                                 contentDescription = option.label
                                 this.selected = selected
@@ -547,13 +548,7 @@ private fun IconPicker(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
-                                .then(
-                                    if (selected) {
-                                        Modifier.border(2.dp, accountColor(selectedColor), CircleShape)
-                                    } else {
-                                        Modifier
-                                    }
-                                ),
+                                .border(2.dp, selectionColor(selected, accountColor(selectedColor), Color.Transparent), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             AccountIcon(
@@ -566,11 +561,7 @@ private fun IconPicker(
                         Text(
                             text = option.label,
                             fontSize = 12.sp,
-                            color = if (selected) {
-                                accountColor(selectedColor)
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            color = selectionColor(selected, accountColor(selectedColor), MaterialTheme.colorScheme.onSurfaceVariant)
                         )
                     }
                 }
@@ -593,10 +584,11 @@ private fun ColorPicker(
     ) {
         ACCOUNT_COLORS.forEach { color ->
             val selected = color == selectedColor
+            val diameter by animateDpAsState(if (selected) 32.dp else 28.dp, Motion.Indicator, label = "账户颜色选中尺寸")
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .clickable { onSelect(color) }
+                    .motionClickable { onSelect(color) }
                     .semantics {
                         contentDescription = "图标颜色 $color"
                         this.selected = selected
@@ -605,20 +597,10 @@ private fun ColorPicker(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(if (selected) 32.dp else 28.dp)
+                        .size(diameter)
                         .clip(CircleShape)
                         .background(accountColor(color))
-                        .then(
-                            if (selected) {
-                                Modifier.border(
-                                    width = 2.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    shape = CircleShape
-                                )
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .border(2.dp, selectionColor(selected, MaterialTheme.colorScheme.onSurface, Color.Transparent), CircleShape)
                 )
             }
         }

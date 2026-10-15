@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title">
+  <title id="title">计划</title>
+  <path d="M6 3h9a2 2 0 0 1 2 2v6 M11 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2 M8 7h5 M8 11h5 M14 20l6-6 2 2-6 6h-2z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

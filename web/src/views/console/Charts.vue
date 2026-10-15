@@ -228,7 +228,13 @@ watch(revMonth, loadReview)
 
 <template>
   <div class="page">
-    <h2>图表分析</h2>
+    <div class="page-heading">
+      <div>
+        <span class="eyebrow">趋势与洞察</span>
+        <h2>图表分析</h2>
+      </div>
+      <span class="heading-note">用数据回看每个阶段的选择</span>
+    </div>
 
     <div v-reveal class="card rev-panel">
       <div class="rev-head">
@@ -247,11 +253,11 @@ watch(revMonth, loadReview)
         <p class="rev-summary">{{ review.summary }}</p>
         <div v-for="(h, i) in review.highlights" :key="i" class="rev-hl">· {{ h }}</div>
         <div v-if="review.spikeDays?.length" class="rev-sec">
-          <div class="rev-heading">⚠️ 超标日</div>
+          <div class="rev-heading">超标日</div>
           <div v-for="s in review.spikeDays.slice(0, 5)" :key="s.date" class="rev-line">- {{ s.date }} {{ formatMoney(s.amountMinor) }}（超日均{{ s.ratioPct }}%）</div>
         </div>
-        <div v-if="review.biggestSingle" class="rev-line">🔍 最大单笔：{{ review.biggestSingle.categoryName }} {{ formatMoney(review.biggestSingle.amountMinor) }}（{{ review.biggestSingle.date }}）</div>
-        <div v-if="review.topCategories?.length" class="rev-line">🧾 消费集中：{{ review.topCategories.map((c) => c.name + ' ' + formatMoney(c.amountMinor)).join('、') }}</div>
+        <div v-if="review.biggestSingle" class="rev-line">最大单笔：{{ review.biggestSingle.categoryName }} {{ formatMoney(review.biggestSingle.amountMinor) }}（{{ review.biggestSingle.date }}）</div>
+        <div v-if="review.topCategories?.length" class="rev-line">消费集中：{{ review.topCategories.map((c) => c.name + ' ' + formatMoney(c.amountMinor)).join('、') }}</div>
       </div>
     </div>
 
@@ -305,7 +311,7 @@ watch(revMonth, loadReview)
       <span class="risk-badge">{{ risk.level === 'high' ? '高风险' : '中风险' }}</span>
       <span class="risk-text">
         按当前节奏，本月预算预计烧到 <b>{{ displayPct(risk.pct) }}%</b>（预测支出 {{ formatMoney(risk.predictedMinor) }} / 预算 {{ formatMoney(risk.budgetMinor) }}）——
-        {{ risk.level === 'high' ? '小盘先替你捂住钱包，控制一下呀！' : '小盘帮你盯着呢，稳住！' }}
+        {{ risk.level === 'high' ? '当前节奏需要收紧支出。' : '当前节奏接近预算上限，请留意后续支出。' }}
       </span>
     </div>
 
@@ -434,8 +440,13 @@ watch(revMonth, loadReview)
 .toggle-btn.on { background: var(--primary); color: var(--on-primary); font-weight: 600; border-color: transparent; }
 
 .chart-card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
+.page-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.page-heading h2 { margin: 6px 0 0; }
+.eyebrow { color: var(--primary-ink); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.heading-note { color: var(--muted); font-size: 13px; margin-bottom: 5px; }
 .card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
 .card-title .hint { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 8px; }
+@media (max-width: 560px) { .page-heading { align-items: flex-start; flex-direction: column; gap: 5px; } .heading-note { margin-bottom: 0; } }
 .chart { height: 300px; }
 
 /* 自定义分类图例：chips 220ms 过渡 + 可点击下钻 */

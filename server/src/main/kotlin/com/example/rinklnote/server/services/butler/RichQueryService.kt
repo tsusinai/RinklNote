@@ -70,10 +70,10 @@ class RichQueryService(
                 it.date >= startMillis && it.date < endMillis
         }
         if (bills.isEmpty()) {
-            return "${label}还没记过「$category」相关的账哦"
+            return "🧾 ${label}还没记过「$category」相关的账哦"
         }
         val totalMinor = bills.sumOf { it.amountMinor }
-        return "${label}「$category」花了 ¥${Money.format(totalMinor)}（${bills.size}笔）"
+        return "📊 ${label}「$category」花了 ¥${Money.format(totalMinor)}（${bills.size}笔）"
     }
 
     /**
@@ -99,7 +99,7 @@ class RichQueryService(
             it.billType == "EXPENSE" && it.date >= startMillis && it.date <= nowMillis
         }
         if (expenses.isEmpty()) {
-            return "近30天还没有支出记录，先记一笔吧～"
+            return "🧾 近30天还没有支出记录，先记一笔吧～"
         }
         val byDay = expenses.groupBy { it.date }
         // 按天聚合金额，金额并列时取最近的一天（比较键：先总金额、再日期）
@@ -108,7 +108,7 @@ class RichQueryService(
             .maxWithOrNull(compareBy({ it.second }, { it.first }))
             ?: return null
         val date = LocalDate.ofInstant(java.time.Instant.ofEpochMilli(best.first), TimeUtil.BOOKKEEPING_ZONE)
-        return "近30天花得最多的一天是 ${date.monthValue}月${date.dayOfMonth}日，" +
+        return "🔍 近30天花得最多的一天是 ${date.monthValue}月${date.dayOfMonth}日，" +
             "花了 ¥${Money.format(best.second)}（${best.third}笔）"
     }
 
@@ -122,7 +122,7 @@ class RichQueryService(
 
         val totalBudget = budgetService.list(userId).firstOrNull {
             !it.deleted && it.categoryId == null && it.subCategoryId == null && it.monthStart == monthStart
-        } ?: return "这个月还没设预算哦，去 App 或网页设一个吧～"
+        } ?: return "📊 这个月还没设预算哦，去 App 或网页设一个吧～"
 
         val nextMonthStart = today.with(TemporalAdjusters.firstDayOfNextMonth())
             .atStartOfDay(TimeUtil.BOOKKEEPING_ZONE).toInstant().toEpochMilli()
@@ -131,11 +131,11 @@ class RichQueryService(
         // 当月剩余天数（含今天）
         val daysLeft = today.lengthOfMonth() - today.dayOfMonth + 1
         if (remaining < 0) {
-            return "本月预算已超 ¥${Money.format(-remaining)}，接下来几天尽量零消费吧～"
+            return "⚠️ 本月预算已超 ¥${Money.format(-remaining)}，接下来几天留意支出节奏吧～"
         }
         // 长除取整数分；remaining >= 0 且 daysLeft >= 1，无负数取整歧义
         val dailyMinor = remaining / daysLeft
-        return "本月预算还剩 ¥${Money.format(remaining)}，这个月还剩 $daysLeft 天，" +
+        return "📊 本月预算还剩 ¥${Money.format(remaining)}，这个月还剩 $daysLeft 天，" +
             "平均每天还能花 ¥${Money.format(dailyMinor)} 哦"
     }
 

@@ -8,6 +8,8 @@ export function sanitizeRedirect(r: unknown): string | null {
 }
 
 export const authGuard = async (to: any) => {
+  // Bot 限时入口独立鉴权，不读取登录态，也不触发登录刷新或跳转。
+  if (to.path === '/bot/interaction') return true
   const store = useAuthStore()
   if (!store.ready) await store.hydrate()
   const isConsole = to.path === '/console' || to.path.startsWith('/console/')

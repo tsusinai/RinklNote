@@ -38,7 +38,7 @@ enum class DayPart {
     MORNING, DAY, EVENING, NIGHT;
 
     companion object {
-        fun current(now: LocalTime = LocalTime.now()): DayPart {
+        fun current(now: LocalTime = LocalTime.now(bookkeepingZone())): DayPart {
             val h = now.hour
             return when {
                 h in 5..11 -> MORNING
@@ -167,20 +167,23 @@ class BookkeepingViewModel(
             val nextMonthStart = getNextMonthStart(offset)
             val daysInMonth = Instant.ofEpochMilli(monthStart)
                 .atZone(bookkeepingZone()).toLocalDate().lengthOfMonth()
-            combine(
-                repository.observeBillsByMonth(monthStart, nextMonthStart),
-                repository.observeTotalExpense(monthStart, nextMonthStart),
-                repository.observeTotalIncome(monthStart, nextMonthStart)
-            ) { bills, expense, income -> Triple(bills, expense, income) }
+            repository.observeBillsByMonth(monthStart, nextMonthStart)
                 .distinctUntilChanged()
-                .collect { (bills, expense, income) ->
+                .collect { bills ->
+                    var expense = 0L
+                    var income = 0L
+                    for (b in bills) {
+                        if (b.billType == BillType.EXPENSE) expense += b.amountMinor
+                        else if (b.billType == BillType.INCOME) income += b.amountMinor
+                    }
+                    val detail = buildMonthDetail(bills, daysInMonth)
                     _monthState.update {
                         it.copy(
                             bills = bills,
                             totalExpense = expense,
                             totalIncome = income,
                             isLoading = false,
-                            monthDetail = buildMonthDetail(bills, daysInMonth)
+                            monthDetail = detail
                         )
                     }
                 }

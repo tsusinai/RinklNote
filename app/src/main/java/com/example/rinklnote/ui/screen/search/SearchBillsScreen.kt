@@ -1,11 +1,15 @@
 package com.example.rinklnote.ui.screen.search
+import androidx.compose.animation.animateContentSize
 
+import com.example.rinklnote.ui.component.MotionListItem
+import com.example.rinklnote.ui.component.selectionColor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +25,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,17 +44,20 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,6 +142,7 @@ fun SearchBillsScreen(
     var showDayPicker by remember { mutableStateOf(false) }
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
+    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景层：无自选照片时自铺纯白（并注册毛玻璃采样源）；有照片时不铺底，透出 nav 层 AppBackground。
@@ -156,73 +165,105 @@ fun SearchBillsScreen(
                 bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
             )
         ) {
-            item(key = "search-field") {
+            item(key = "mode-bar", contentType = "mode_bar") {
+                SearchModeBar(
+                    selectedCategory = state.filter.categoryName,
+                    filtersExpanded = filtersExpanded,
+                    onToggleFilters = { filtersExpanded = !filtersExpanded }
+                )
+            }
+
+            item(key = "search-field", contentType = "search_field") {
                 SearchField(
                     query = state.query,
                     onQueryChanged = { viewModel.onEvent(BillSearchEvent.QueryChanged(it)) }
                 )
             }
 
-            item(key = "category-filter") {
-                CategoryFilterRow(
-                    categories = state.categories,
-                    selected = state.filter.categoryName,
-                    onSelect = { name ->
-                        // 单选语义：点击已选中的分类 = 取消回「全部」（null），否则选中该分类
-                        viewModel.onEvent(
-                            BillSearchEvent.CategoryChanged(name.takeIf { it != state.filter.categoryName })
-                        )
-                    }
-                )
-            }
-
-            item(key = "filters") {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            item(key = "filters", contentType = "filters") {
+                AnimatedVisibility(
+                    visible = filtersExpanded,
+                    enter = expandVertically(animationSpec = Motion.Expand),
+                    exit = shrinkVertically(animationSpec = Motion.Expand)
                 ) {
-                    TypeSegmentRow(
-                        selected = state.filter.type,
-                        onSelect = { viewModel.onEvent(BillSearchEvent.TypeChanged(it)) }
-                    )
-                    DateModeSegmentRow(
-                        selected = state.filter.dateMode,
-                        onSelect = { viewModel.onEvent(BillSearchEvent.DateModeChanged(it)) }
-                    )
-                    DatePickEntryRow(
-                        filter = state.filter,
-                        today = today,
-                        onDayClick = { showDayPicker = true },
-                        onStartClick = { showStartPicker = true },
-                        onEndClick = { showEndPicker = true },
-                        onMonthStep = { viewModel.onEvent(BillSearchEvent.MonthChanged(it)) },
-                        onRangeClear = {
-                            viewModel.onEvent(BillSearchEvent.CustomRangeChanged(null, null))
+                    Column(
+                        modifier = Modifier
+                            .animateContentSize(Motion.ContentResize)
+                            .padding(horizontal = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val categoryOptions = listOf("全部") + state.categories
+                        FilterDropdownRow(
+                            label = "分类",
+                            selected = state.filter.categoryName ?: "全部",
+                            options = categoryOptions,
+                            onSelect = { index ->
+                                viewModel.onEvent(BillSearchEvent.CategoryChanged(categoryOptions[index].takeUnless { index == 0 }))
+                            }
+                        )
+                        val typeOptions = listOf("全部", "支出", "收入")
+                        FilterDropdownRow(
+                            label = "类型",
+                            selected = typeOptions[state.filter.type.ordinal],
+                            options = typeOptions,
+                            onSelect = { index ->
+                                viewModel.onEvent(BillSearchEvent.TypeChanged(SearchTypeFilter.values()[index]))
+                            }
+                        )
+                        val dateOptions = listOf("不限", "按天", "按月", "自定义")
+                        FilterDropdownRow(
+                            label = "日期",
+                            selected = dateOptions[state.filter.dateMode.ordinal],
+                            options = dateOptions,
+                            onSelect = { index ->
+                                viewModel.onEvent(BillSearchEvent.DateModeChanged(SearchDateMode.values()[index]))
+                            }
+                        )
+                        if (state.filter.dateMode != SearchDateMode.ALL) {
+                            DatePickEntryRow(
+                                filter = state.filter,
+                                today = today,
+                                onDayClick = { showDayPicker = true },
+                                onStartClick = { showStartPicker = true },
+                                onEndClick = { showEndPicker = true },
+                                onMonthStep = { viewModel.onEvent(BillSearchEvent.MonthChanged(it)) },
+                                onRangeClear = { viewModel.onEvent(BillSearchEvent.CustomRangeChanged(null, null)) }
+                            )
                         }
-                    )
+                    }
                 }
             }
 
-            item(key = "summary") {
-                SummaryBar(
-                    totalCount = state.totalCount,
-                    expenseTotal = state.expenseTotal,
-                    incomeTotal = state.incomeTotal
-                )
+            item(key = "summary", contentType = "summary") {
+                MotionListItem {
+                    SummaryBar(
+                        totalCount = state.totalCount,
+                        expenseTotal = state.expenseTotal,
+                        incomeTotal = state.incomeTotal
+                    )
+
+                }
             }
 
             if (state.results.isEmpty()) {
-                item(key = "empty") { EmptyResult() }
+                item(key = "empty", contentType = "empty") {
+                    MotionListItem {
+                        EmptyResult()
+                    }
+                }
             }
 
             dayGroups.forEach { (day, bills) ->
-                item(key = "day_${day.toEpochDay()}") {
-                    DayGroupCard(
-                        day = day,
-                        today = today,
-                        bills = bills,
-                        onEditBill = onEditBill
-                    )
+                item(key = "day_${day.toEpochDay()}", contentType = "day_group") {
+                    MotionListItem {
+                        DayGroupCard(
+                            day = day,
+                            today = today,
+                            bills = bills,
+                            onEditBill = onEditBill
+                        )
+
+                    }
                 }
             }
         }
@@ -285,7 +326,7 @@ private fun SearchTopBar(hasPhoto: Boolean, onBack: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -319,15 +360,17 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
             .padding(horizontal = 14.dp)
             .rinkShadow(SearchFieldShape)
             .clip(SearchFieldShape)
+            .background(MaterialTheme.colorScheme.surface, SearchFieldShape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f), SearchFieldShape)
             .then(applyCardGlass(SearchFieldShape))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_search),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
+            painter = painterResource(R.drawable.ic_redesign_search_spark),
+            contentDescription = "搜索账单",
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(21.dp)
         )
         Spacer(modifier = Modifier.width(10.dp))
         Box(modifier = Modifier.weight(1f)) {
@@ -349,7 +392,7 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
                 ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "搜分类 / 备注 / 金额…" }
             )
         }
         if (query.isNotEmpty()) {
@@ -359,13 +402,71 @@ private fun SearchField(query: String, onQueryChanged: (String) -> Unit) {
                     .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     // 「✕」是字符不是图标：语义上补「清空搜索词」，避免读屏读出符号名。
                     .semantics { contentDescription = "清空搜索词" }
-                    .clickable { onQueryChanged("") },
+                    .motionClickable { onQueryChanged("") },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "✕",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** 账本筛选栏：将高频入口压缩成「分类 / 账本 / 筛选」三段，默认收起细筛选。 */
+@Composable
+private fun SearchModeBar(selectedCategory: String?, filtersExpanded: Boolean, onToggleFilters: () -> Unit) {
+    val selected = selectedCategory ?: "全部"
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 2.dp).height(54.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(Modifier.weight(1f).motionClickable(onClick = onToggleFilters), verticalAlignment = Alignment.CenterVertically) {
+            Text(selected, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.width(5.dp)); Text("⌄", fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(Modifier.weight(1.2f), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Text("日常账本", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.width(5.dp)); Text("⌄", fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(Modifier.weight(1f).motionClickable(onClick = onToggleFilters), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_redesign_search_filter), contentDescription = null,
+                tint = if (filtersExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(5.dp)); Text("筛选", fontSize = 16.sp, color = if (filtersExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+        }
+    }
+}
+
+/** 单行下拉筛选：用菜单替代横向标签，窄屏下仍保持一条清晰的设置路径。 */
+@Composable
+private fun FilterDropdownRow(label: String, selected: String, options: List<String>, onSelect: (Int) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .motionClickable(onClickLabel = "选择$label", onClick = { expanded = !expanded })
+                .padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(52.dp))
+            Text(selected, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
+            Text("⌄", fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.heightIn(max = 360.dp)
+        ) {
+            options.forEachIndexed { index, option ->
+                DropdownMenuItem(
+                    text = { Text(option, fontSize = 15.sp) },
+                    onClick = { expanded = false; onSelect(index) },
+                    trailingIcon = if (option == selected) ({ Text("✓", color = MaterialTheme.colorScheme.primary) }) else null
                 )
             }
         }
@@ -421,7 +522,7 @@ private fun CategoryFilterRow(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                    .clickable { expanded = !expanded }
+                    .motionClickable { expanded = !expanded }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -490,7 +591,7 @@ private fun CategoryExpandCard(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .align(Alignment.End)
-                .clickable(onClick = onCollapse)
+                .motionClickable(onClick = onCollapse)
                 .padding(horizontal = 4.dp, vertical = 2.dp)
         )
     }
@@ -507,24 +608,16 @@ private fun CategoryBox(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                }
+                selectionColor(selected, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
             )
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(
             text = label,
             fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = selectionColor(selected, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurfaceVariant),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -590,24 +683,16 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(shape)
             .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                }
+                selectionColor(selected, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             )
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 6.dp)
     ) {
         Text(
             text = label,
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = selectionColor(selected, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurfaceVariant),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -688,7 +773,7 @@ private fun DatePickEntryRow(
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
-                            .clickable(onClick = onRangeClear)
+                            .motionClickable(onClick = onRangeClear)
                             .padding(horizontal = 4.dp, vertical = 6.dp)
                     )
                 }
@@ -770,20 +855,18 @@ private fun EmptyResult() {
             .padding(top = 72.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_search),
-            contentDescription = null,
-            modifier = Modifier.size(40.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text("无匹配账单", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "换个关键词或放宽筛选试试",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-        )
+        Box(Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
+            Icon(painter = painterResource(R.drawable.ic_redesign_search_empty), contentDescription = null,
+                modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("这里还没有匹配的账单", fontSize = 16.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+        Spacer(modifier = Modifier.height(6.dp))
+        Text("试试更换关键词，或放宽类型和日期筛选", fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("搜索结果会按日期整理", fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
     }
 }
 
@@ -835,15 +918,22 @@ private fun DayGroupCard(
 @Composable
 private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
     val isExpense = bill.billType == BillType.EXPENSE
-    val primary = bill.remark ?: bill.subCategoryName ?: bill.categoryName
-    val secondary = listOfNotNull(
-        bill.categoryName,
-        bill.subCategoryName?.takeIf { it != bill.categoryName }
-    ).joinToString(" · ")
+    val primary = remember(bill.remark, bill.subCategoryName, bill.categoryName) {
+        bill.remark ?: bill.subCategoryName ?: bill.categoryName
+    }
+    val secondary = remember(bill.categoryName, bill.subCategoryName) {
+        listOfNotNull(
+            bill.categoryName,
+            bill.subCategoryName?.takeIf { it != bill.categoryName }
+        ).joinToString(" · ")
+    }
+    val amountFormatted = remember(bill.amountMinor, isExpense) {
+        (if (isExpense) "-" else "+") + Money.format(bill.amountMinor)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onEditBill(bill) }
+            .motionClickable { onEditBill(bill) }
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -883,7 +973,7 @@ private fun SearchBillRow(bill: Bill, onEditBill: (Bill) -> Unit) {
         }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = (if (isExpense) "-" else "+") + Money.format(bill.amountMinor),
+            text = amountFormatted,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
             color = if (isExpense) MaterialTheme.colorScheme.tertiary else LocalRinklColors.current.incomeColor

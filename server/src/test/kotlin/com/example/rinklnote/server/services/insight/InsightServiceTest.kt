@@ -210,7 +210,7 @@ class InsightServiceTest {
     // ── 日报推送文案（buildDailyPushMessage 纯函数）──
 
     @Test
-    fun `dailyPushMessage full layout with verdict streak praise budget`() {
+    fun `dailyPushMessage full layout with verdict comparison budget`() {
         val d = LocalDate.parse("2026-09-11")
         val msg = insight.buildDailyPushMessage(
             reportDate = d,
@@ -220,7 +220,6 @@ class InsightServiceTest {
             billCount = 4,
             topCategories = listOf("餐饮" to Money.toMinor(45.63), "日用" to Money.toMinor(32.63)),
             prev7AvgMinor = Money.toMinor(200.0).toDouble(),
-            streak = 23,
             budgetMinor = Money.toMinor(3000.0),
             monthExpenseMinor = Money.toMinor(1234.0)
         )
@@ -228,8 +227,9 @@ class InsightServiceTest {
         assertTrue(msg.contains("昨天花得不算多"))
         assertTrue(msg.contains("支出 ¥93.48 · 4 笔（收入 ¥100.00）"))
         assertTrue(msg.contains("大头：餐饮 ¥45.63、日用 ¥32.63"))
-        assertTrue(msg.contains("🔥 已连续记账 23 天"))
-        assertTrue(msg.contains("👍 只花了平时的一半不到"))  // 93.48 < 200*0.5=100
+        assertFalse(msg.contains("连续记账"))
+        assertFalse(msg.contains("克制"))
+        assertTrue(msg.contains("📉 今日支出低于近 7 日均值"))
         assertTrue(msg.contains("📊 本月 ¥1234.00 / 预算 ¥3000.00（41%）"))
     }
 
@@ -244,7 +244,6 @@ class InsightServiceTest {
             billCount = 4,
             topCategories = listOf("餐饮" to Money.toMinor(45.63)),
             prev7AvgMinor = Money.toMinor(100.0).toDouble(),  // 93.48 未过半 → 无报喜
-            streak = 1,                                        // <2 → 无连续行
             budgetMinor = 0L,                                  // 无预算 → 无进度行
             monthExpenseMinor = 0L
         )

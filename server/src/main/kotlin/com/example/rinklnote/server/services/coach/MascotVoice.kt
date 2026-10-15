@@ -37,7 +37,7 @@ object MascotVoice {
         val suffix = if (dateText.isNullOrBlank()) "" else "（$dateText）"
         return listOf(
             "已撤销最近一单：$categoryName ¥${Money.format(amountMinor)}$suffix",
-            "好嘞，已撤销最近一单 $categoryName ¥${Money.format(amountMinor)}$suffix，少一笔是一笔～"
+            "好嘞，已撤销最近一单 $categoryName ¥${Money.format(amountMinor)}$suffix，账本更新啦～"
         ).random()
     }
 

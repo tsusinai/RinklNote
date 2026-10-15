@@ -1,18 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 由 resource/mobile/generate_icons.py 生成，请修改 SVG 同源路径后重新生成。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="1024"
-    android:viewportHeight="1024">
-<path
-        android:pathData="M512 480c-176 0-288 112-288 240 0 112 96 176 288 176s288-64 288-176c0-128-112-240-288-240z"
-        android:fillColor="#FF4C4C4C" /><path
-        android:pathData="M184 416a72 96 0 1 0 144 0a72 96 0 1 0-144 0z"
-        android:fillColor="#FF7EC1FC" /><path
-        android:pathData="M356 320a76 104 0 1 0 152 0a76 104 0 1 0-152 0z"
-        android:fillColor="#FF7EC1FC" /><path
-        android:pathData="M516 320a76 104 0 1 0 152 0a76 104 0 1 0-152 0z"
-        android:fillColor="#FF7EC1FC" /><path
-        android:pathData="M696 416a72 96 0 1 0 144 0a72 96 0 1 0-144 0z"
-        android:fillColor="#FF7EC1FC" />
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#FF555555"
+        android:strokeWidth="1.75" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M8 13c-1 2-4 3-4 5 0 3 4 4 8 2 4 2 8 1 8-2 0-2-3-3-4-5-2-3-6-3-8 0z M5 6a1.5 2.5 0 1 0 0 5 1.5 2.5 0 0 0 0-5 M10 2a1.5 2.5 0 1 0 0 5 1.5 2.5 0 0 0 0-5 M15 2a1.5 2.5 0 1 0 0 5 1.5 2.5 0 0 0 0-5 M20 6a1.5 2.5 0 1 0 0 5 1.5 2.5 0 0 0 0-5"/>
 </vector>

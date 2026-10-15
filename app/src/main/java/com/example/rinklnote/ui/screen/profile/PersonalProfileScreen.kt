@@ -7,7 +7,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,18 +27,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.rinklnote.ui.component.AlertDialog
 import com.example.rinklnote.ui.component.RinklTopBar
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -83,6 +83,9 @@ import dev.chrisbanes.haze.HazeState
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+
+/** 徽章功能开关（暂时关闭徽章功能，待后续开放时置为 true 即可恢复）。 */
+private const val SHOW_BADGES = false
 
 /**
  * 个人资料页（personal-profile 路由）—— 全量同步的账号中心：
@@ -198,12 +201,14 @@ fun PersonalProfileScreen(
                 }
             }
 
-            item(key = "badges") {
-                ShowcaseBadgesCard(
-                    unlocked = unlocked,
-                    selected = state.showcaseBadges,
-                    onToggle = { viewModel.onEvent(PersonalProfileEvent.ToggleBadge(it)) }
-                )
+            if (SHOW_BADGES) {
+                item(key = "badges") {
+                    ShowcaseBadgesCard(
+                        unlocked = unlocked,
+                        selected = state.showcaseBadges,
+                        onToggle = { viewModel.onEvent(PersonalProfileEvent.ToggleBadge(it)) }
+                    )
+                }
             }
 
             if (state.isLoggedIn) {
@@ -372,7 +377,7 @@ private fun AvatarCard(state: PersonalProfileState, onClick: () -> Unit) {
             .rinkShadow(shape)
             .clip(shape)
             .then(applyCardGlass(shape))
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -477,7 +482,7 @@ private fun ShowcaseBadgesCard(
     SettingsGroupCard(title = "徽章展示") {
         if (unlocked.isEmpty()) {
             Text(
-                text = "还没有解锁的徽章，去「Rk省钱计划」完成挑战吧",
+                text = "还没有解锁的徽章，继续保持记账来解锁吧",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
@@ -488,7 +493,7 @@ private fun ShowcaseBadgesCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onToggle(badge.id) }
+                        .motionClickable { onToggle(badge.id) }
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

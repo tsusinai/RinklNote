@@ -10,6 +10,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 class LLMParser(private val config: LLMParserConfig) {
@@ -110,7 +111,7 @@ class LLMParser(private val config: LLMParserConfig) {
      * General-purpose chat method for insight/summary use cases.
      * Takes full system prompt and user message, returns JSON string response.
      */
-    suspend fun chat(systemPrompt: String, userMessage: String): String? {
+    suspend fun chat(systemPrompt: String, userMessage: String, timeoutMs: Long = config.timeoutMs): String? {
         val request = ChatRequest(
             model = config.model,
             messages = listOf(
@@ -122,12 +123,15 @@ class LLMParser(private val config: LLMParserConfig) {
 
         return try {
             val response: ChatResponse = client.post("${config.baseUrl}/v1/chat/completions") {
+                timeout { requestTimeoutMillis = timeoutMs }
                 header("Authorization", "Bearer ${config.apiKey}")
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }.body()
 
             response.choices?.firstOrNull()?.message?.content
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
             null

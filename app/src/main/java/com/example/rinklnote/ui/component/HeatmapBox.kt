@@ -6,7 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +35,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +81,7 @@ private fun heatRangeTotals(dailyExpense: Map<Int, Float>, daysInMonth: Int): Li
  * @param initiallyExpanded 初始是否展开月历（首页默认收起；详情页作为选天工具默认展开）
  * @param selectedDay 当前选中的日期（1 起始）；非空时格子加粗描边
  * @param onDayTap 点选某天的回调；传 null 则格子不可点（首页只读）
+ * @param compact 月度详情使用的无卡片紧凑布局；其它调用点保持原样
  */
 @Composable
 fun HeatmapBox(
@@ -86,7 +90,8 @@ fun HeatmapBox(
     onDetailClick: (() -> Unit)? = null,
     initiallyExpanded: Boolean = false,
     selectedDay: Int? = null,
-    onDayTap: ((Int) -> Unit)? = null
+    onDayTap: ((Int) -> Unit)? = null,
+    compact: Boolean = false
 ) {
     // 热力深色端走「热力图颜色」槽（自定义主题 HEATMAP，默认 Blue40）；
     // 浅色端固定 EmptyBlue，强度 0..1 在两端间自动 lerp 出深浅，未自定义时观感不变。
@@ -105,7 +110,10 @@ fun HeatmapBox(
     val rangeMax = remember(rangeTotals) { rangeTotals.maxOrNull()?.coerceAtLeast(1f) ?: 1f }
 
     // 展开/收起：点击标题区切换。
-    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    var expanded by remember(heatmap.year, heatmap.monthValue) { mutableStateOf(initiallyExpanded) }
+    // 紧凑模式明确指定随字体缩放的高度，避免宽高比与最小高度冲突而裁切数字。
+    val cellSize = if (compact) Modifier.height((26f * LocalDensity.current.fontScale).dp)
+        else Modifier.aspectRatio(CELL_ASPECT_RATIO)
     val interactionSource = remember { MutableInteractionSource() }
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -115,10 +123,11 @@ fun HeatmapBox(
 
     Column(
         modifier = modifier
-            .padding(horizontal = 14.dp)
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(horizontal = 12.dp, vertical = 12.dp)
+            .then(if (compact) Modifier else Modifier
+                .padding(horizontal = 14.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .then(applyCardGlass(RoundedCornerShape(15.dp)))
+                .padding(horizontal = 12.dp, vertical = 12.dp))
     ) {
         // 标题行：左侧标题+chevron 可点（切换展开/收起），右侧「明细」独立打开汇总。
         Row(
@@ -128,7 +137,8 @@ fun HeatmapBox(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clickable(
+                    .heightIn(min = if (compact) 32.dp else 0.dp)
+                    .motionClickable(
                         interactionSource = interactionSource,
                         indication = null,
                         // 读屏动作名随状态切换（默认只有「双击激活」）。
@@ -137,9 +147,9 @@ fun HeatmapBox(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "本月支出热力图 ",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
+                    text = "本月支出热力图",
+                    fontSize = if (compact) 16.sp else 12.sp,
+                    fontWeight = if (compact) FontWeight.SemiBold else FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 if (!expanded) {
@@ -173,7 +183,7 @@ fun HeatmapBox(
                     text = "明细",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { detail() }
+                    modifier = Modifier.motionClickable { detail() }
                 )
             }
         }
@@ -229,7 +239,7 @@ fun HeatmapBox(
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .aspectRatio(CELL_ASPECT_RATIO)
+                                        .then(cellSize)
                                         .semantics(mergeDescendants = true) {
                                             contentDescription = daySemantic
                                             if (isSelected) stateDescription = "已选中"
@@ -242,7 +252,7 @@ fun HeatmapBox(
                                                     MaterialTheme.colorScheme.primary,
                                                     cellShape
                                                 )
-                                                day == todayDay -> Modifier.border(
+                                                !compact && day == todayDay -> Modifier.border(
                                                     1.dp,
                                                     MaterialTheme.colorScheme.primary,
                                                     cellShape
@@ -255,8 +265,8 @@ fun HeatmapBox(
                                         .then(
                                             if (dayTap != null) {
                                                 // 可点格子：Role.Button + 明确动作名「查看当天账单」。
-                                                Modifier.clickable(
-                                                    onClickLabel = "查看当天账单",
+                                                Modifier.motionClickable(
+                                                    onClickLabel = if (isSelected) "显示整月账单" else "查看当天账单",
                                                     role = Role.Button
                                                 ) { dayTap(day) }
                                             } else {
@@ -268,16 +278,24 @@ fun HeatmapBox(
                                     Text(
                                         text = day.toString(),
                                         fontSize = 12.sp,
+                                        lineHeight = 16.sp,
                                         color = textColor,
                                         fontWeight = if (day == todayDay) FontWeight.Bold else FontWeight.Normal,
                                         // 日期数字已并入格子 contentDescription，单独读一遍是冗余。
-                                        modifier = Modifier.clearAndSetSemantics { }
+                                        modifier = Modifier
+                                            .offset(y = if (compact && day == todayDay) (-1).dp else 0.dp)
+                                            .clearAndSetSemantics { }
                                     )
+                                    if (compact && day == todayDay) {
+                                        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
+                                            .size(3.dp).clip(RoundedCornerShape(2.dp))
+                                            .background(MaterialTheme.colorScheme.primary))
+                                    }
                                 }
                             } else {
                                 Box(modifier = Modifier
                                     .weight(1f)
-                                    .aspectRatio(CELL_ASPECT_RATIO))
+                                    .then(cellSize))
                             }
                         }
                     }

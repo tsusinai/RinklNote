@@ -9,11 +9,9 @@ import Btn from '../components/ui/Btn.vue'
 import Icon from '../components/ui/Icon.vue'
 import { formatSigned } from '../utils/money'
 import { demoDays } from '../mock/demo-data'
-import xiaopanAvatar from '../assets/xiaopan-avatar.png'
 
-/* 设计方向「清晨账本」：摊开的账本双页 —— 左页是品牌蓝叙事面板（账页横线纹理 +
- * 大字标语 + 真实演示分录），右页是表单。颜色只走 theme.css 令牌：
- * --primary 品牌面 / --on-primary 蓝底文字 / --expense 仅用于错误文案（收支色不挪作装饰）。 */
+/* 设计方向「编辑部式财务工作台」：深墨色品牌页 + 米白表单页。
+ * 背景只保留低频、低对比度的光带与网格动效，避免二次元插画和过度装饰。 */
 
 const router = useRouter()
 const route = useRoute()
@@ -109,7 +107,7 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <!-- 晨雾光斑：固定层（z-index:-1）铺满视口，账本双页浮在光斑之上 -->
+    <!-- 背景动效：低频光带 + 网格纹理，不影响表单阅读 -->
     <div class="aurora" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
 
     <!-- 主题切换：固定右上角，不占表单版面 -->
@@ -120,23 +118,26 @@ async function submit() {
 
     <!-- 摊开的账本：左品牌页 + 右表单页 -->
     <div class="shell">
-      <!-- ── 左页：品牌叙事（清晨天空蓝）── -->
+      <!-- ── 左页：品牌叙事 ── -->
       <section class="brand-panel">
         <header class="brand-row">
-          <img class="brand-avatar" :src="xiaopanAvatar" alt="记一笔 · 小盘" />
+          <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+            <path d="M8 10h24v7H18v6h14v7H8V10Z" />
+            <path d="M8 10v20" class="mark-cut" />
+          </svg>
           <div class="brand-text">
             <strong>RinklNote</strong>
-            <span>记一笔</span>
+            <span>个人财务工作台</span>
           </div>
         </header>
 
         <div class="brand-body">
-          <p class="display">每一笔，<br />都值得被看见。</p>
-          <p class="lede">快速记账 · 资产净额 · AI 月结复盘，一个控制台全搞定。</p>
+          <p class="display">把每一笔，<br />记得更清楚。</p>
+          <p class="lede">快速记账、资产净额与月度复盘，所有重要数字都在同一张桌面上。</p>
 
           <!-- 账页分录预览：真实演示数据，纯装饰 -->
           <div class="ledger" aria-hidden="true">
-            <div class="ledger-title">账本长这样</div>
+            <div class="ledger-title">最近记录</div>
             <div v-for="e in entries" :key="e.when" class="ledger-row">
               <span class="e-when">{{ e.when }}</span>
               <span class="e-name">{{ e.name }}</span>
@@ -195,62 +196,83 @@ async function submit() {
 </template>
 
 <style scoped>
-/* 页面底色交给 body（var(--bg)）：本页不铺不透明底色，固定层 .aurora（z-index:-1）透出 */
 .login-page {
-  min-height: 100vh;
+  position: relative; isolation: isolate; min-height: 100vh;
   display: flex; align-items: center; justify-content: center;
-  padding: 32px 16px;
+  padding: 48px 20px;
+  overflow: hidden;
+}
+.login-page::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .55;
+  background-image: linear-gradient(color-mix(in srgb, var(--primary) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--primary) 10%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px; mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
+}
+.login-page::after {
+  content: ''; position: absolute; z-index: 0; pointer-events: none;
+  width: 72vw; height: 18vw; left: -18vw; top: 12%;
+  border-radius: 50%; filter: blur(42px); opacity: .22;
+  background: linear-gradient(105deg, transparent 8%, color-mix(in srgb, var(--primary) 45%, transparent) 46%, transparent 82%);
+  transform: rotate(-12deg); animation: login-sweep 18s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+.login-page .aurora { position: absolute; inset: -15%; z-index: -1; opacity: .88; }
+.login-page .aurora i { filter: blur(76px); }
+.login-page .aurora .a1 { animation-duration: 34s; }
+.login-page .aurora .a2 { animation-duration: 42s; }
+.login-page .aurora .a3 { animation-duration: 48s; }
+@keyframes login-sweep {
+  0%, 100% { transform: translate3d(-8%, 0, 0) rotate(-12deg); opacity: .12; }
+  50% { transform: translate3d(92%, 16%, 0) rotate(-7deg); opacity: .28; }
 }
 
 /* 主题切换：右上角常驻 */
 .theme-btn {
   position: fixed; top: 14px; right: 14px; z-index: 10;
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 12px; border-radius: 999px; border: 1px solid var(--border);
-  background: var(--card); color: var(--muted); cursor: pointer; font-size: 13px; font-family: inherit;
-  transition: color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease);
+  padding: 9px 12px; border-radius: 9px; border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 82%, transparent); color: var(--muted); cursor: pointer; font-size: 13px; font-family: inherit;
+  backdrop-filter: blur(12px); transition: color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease), transform var(--dur-press) var(--ease);
 }
 .theme-btn:hover { color: var(--primary); border-color: var(--primary); }
+.theme-btn:active { transform: scale(.97); }
 
 /* ── 摊开的账本双页：55/45 不对称分割，软投影一套体系 ── */
 .shell {
-  width: min(920px, 100%);
+  position: relative; z-index: 1; width: min(980px, 100%);
   display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
-  border-radius: 22px; overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 24px 64px rgba(0,0,0,.16);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 16px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 28px 80px rgba(16,34,43,.16);
 }
 
 /* 左页：品牌蓝满版（--primary 恒定不随暗色反转，清晨天空感两态一致） */
 .brand-panel {
   position: relative;
   display: flex; flex-direction: column; justify-content: space-between;
-  padding: 28px 30px 24px;
-  background-color: var(--primary);
-  /* 账页横线纹理：on-primary 低透明度细线，呼应「印刷账本」秩序；
-   * 叠一层卡片色高光（右上角破格）让蓝色面板有晨光层次 */
+  padding: 34px 36px 28px;
+  background-color: #172b35;
   background-image:
-    repeating-linear-gradient(to bottom, transparent 0 35px, color-mix(in srgb, var(--on-primary) 13%, transparent) 35px 36px),
-    radial-gradient(120% 90% at 85% -10%, color-mix(in srgb, var(--card) 24%, transparent), transparent 55%);
-  color: var(--on-primary);
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 18%, transparent), transparent 48%),
+    repeating-linear-gradient(to bottom, transparent 0 39px, rgba(163, 207, 226, .1) 39px 40px);
+  color: #f4f8f9;
 }
 .brand-row { display: flex; align-items: center; gap: 12px; }
-.brand-avatar { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; }
+.brand-mark { width: 42px; height: 42px; flex: none; fill: var(--primary); }
+.brand-mark .mark-cut { stroke: #172b35; stroke-width: 2; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
 .brand-text strong { font-size: 18px; letter-spacing: -0.02em; }
-.brand-text span { font-size: 12px; opacity: .75; }
+.brand-text span { margin-top: 4px; font-size: 11px; color: #a9c0c9; letter-spacing: .08em; }
 
 .brand-body { margin: auto 0; padding: 24px 0; }
 /* 大字标语：与正文 ≥3 倍字号反差，紧字距 + 收紧行高 */
 .display {
   margin: 0 0 12px;
-  font-size: clamp(26px, 3.4vw, 40px);
-  font-weight: 800; line-height: 1.15; letter-spacing: -0.03em;
+  font-size: clamp(30px, 3.8vw, 48px);
+  font-weight: 800; line-height: 1.08; letter-spacing: -0.045em;
 }
-.lede { margin: 0; font-size: 14px; line-height: 1.6; opacity: .82; max-width: 30ch; }
+.lede { margin: 0; font-size: 14px; line-height: 1.75; color: #c4d5da; max-width: 30ch; }
 
 /* 账页分录预览：等宽数字（tabular-nums），行间横线由面板纹理承担 */
-.ledger { margin-top: 26px; display: flex; flex-direction: column; gap: 9px; }
-.ledger-title { font-size: 12px; font-weight: 600; opacity: .7; margin-bottom: 2px; }
+.ledger { margin-top: 32px; display: flex; flex-direction: column; gap: 9px; }
+.ledger-title { font-size: 11px; font-weight: 700; color: #94b1ba; letter-spacing: .12em; margin-bottom: 4px; }
 .ledger-row {
   display: flex; align-items: baseline; gap: 10px;
   font-size: 13px; font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
@@ -259,22 +281,22 @@ async function submit() {
 .e-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .e-amt { flex-shrink: 0; font-weight: 700; }
 
-.panel-foot { font-size: 12px; opacity: .62; }
+.panel-foot { font-size: 11px; color: #8ea8b1; }
 
 /* 右页：表单（卡片面，随深浅主题走 --card/--text） */
 .form-panel {
   background: var(--card);
-  padding: 32px 30px 26px;
+  padding: 40px 38px 32px;
   display: flex; flex-direction: column;
 }
-.form-title { margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
-.form-sub { margin: 6px 0 20px; font-size: 13px; color: var(--muted); }
+.form-title { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.04em; color: var(--text); }
+.form-sub { margin: 8px 0 24px; font-size: 13px; color: var(--muted); line-height: 1.6; }
 
 /* 滑块式 tab：滑块（--primary）随 mode 平移，激活字色 on-primary */
 .toggle {
   position: relative; display: flex; gap: 0;
-  padding: 4px; border-radius: 12px; background: var(--surface-2);
-  margin-bottom: 18px;
+  padding: 4px; border-radius: 9px; background: var(--surface-2);
+  margin-bottom: 16px;
 }
 .toggle .thumb {
   position: absolute; top: 4px; bottom: 4px; left: 4px;
@@ -292,10 +314,10 @@ async function submit() {
 
 /* 身份同位切换（手机号 | 邮箱）：比登录/注册 tab 更轻的次级样式，选中项主蓝描底 */
 .id-toggle {
-  display: flex; gap: 6px; margin-bottom: 16px;
+  display: flex; gap: 6px; margin-bottom: 22px;
 }
 .id-toggle button {
-  flex: 1; padding: 7px 0; border-radius: 10px;
+  flex: 1; padding: 9px 0; border-radius: 8px;
   border: 1px solid var(--border); background: transparent;
   color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit;
   transition: color var(--dur-expand) var(--ease), border-color var(--dur-expand) var(--ease),
@@ -310,7 +332,7 @@ async function submit() {
 form { display: flex; flex-direction: column; }
 .field-label { font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
 input {
-  padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+  padding: 13px 14px; border-radius: 8px; border: 1px solid var(--border);
   font-size: 16px; font-family: inherit; background: var(--card); color: var(--text);
   transition: border-color var(--dur-expand) var(--ease), box-shadow var(--dur-expand) var(--ease);
   margin-bottom: 14px;
@@ -334,7 +356,7 @@ input::placeholder { color: var(--muted); opacity: .7; }
 /* 错误反馈：--expense 只用于错误语义（收支色不挪作装饰） */
 .form-err { margin: 0 0 12px; color: var(--expense); font-size: 13px; }
 
-.submit { margin-top: 4px; padding: 13px 16px; font-size: 15px; }
+.submit { margin-top: 6px; padding: 13px 16px; font-size: 15px; border-radius: 8px; }
 
 /* 忘记密码占位提示（QQ 登录区移除后的底部收尾文案，弱化呈现） */
 .form-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); opacity: .8; }
@@ -355,16 +377,19 @@ input::placeholder { color: var(--muted); opacity: .7; }
   .form-hint { animation-delay: .2s; }
   @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 }
+@media (prefers-reduced-motion: reduce) {
+  .login-page::after { animation: none; opacity: .14; }
+}
 
 /* ── 移动端（<900px）：账本竖排，品牌页压成顶部横幅 ── */
 @media (max-width: 899px) {
-  .login-page { padding: 20px 14px; align-items: flex-start; }
+  .login-page { padding: 20px 14px 28px; align-items: flex-start; }
   .shell { grid-template-columns: 1fr; }
-  .brand-panel { padding: 22px 22px 20px; gap: 18px; }
+  .brand-panel { padding: 24px 22px 22px; gap: 18px; }
   .ledger, .panel-foot { display: none; }
   .brand-body { padding: 4px 0 0; }
-  .display { font-size: clamp(24px, 7vw, 32px); }
+  .display { font-size: clamp(26px, 8vw, 36px); }
   .lede { max-width: none; }
-  .form-panel { padding: 24px 22px 22px; }
+  .form-panel { padding: 28px 22px 24px; }
 }
 </style>

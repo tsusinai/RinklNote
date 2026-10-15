@@ -1,7 +1,7 @@
 package com.example.rinklnote.ui.screen.plan
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -97,9 +97,9 @@ fun CategoryBudgetScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 顶栏是浮层：首项垫到它下面（不留整块空白）。
-            item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
+            item(key = "top-inset", contentType = "spacer") { Spacer(modifier = Modifier.height(topBarHeight)) }
 
-            item(key = "category-list") {
+            item(key = "category-list", contentType = "category_list") {
                 if (categories.isEmpty()) {
                     // 空态兜底：seed 后一般不会出现，防御首次启动分类未就绪。
                     SettingsGroupCard {
@@ -116,12 +116,15 @@ fun CategoryBudgetScreen(
                     SettingsGroupCard(title = "支出分类") {
                         categories.forEachIndexed { index, category ->
                             val amount = existingBudgets[category.id]?.takeIf { it > 0 }
+                            val amountText = remember(amount) {
+                                amount?.let { Money.format(it) } ?: "未设置"
+                            }
                             SettingsRow(
                                 icon = categoryIconRes(category.name),
                                 // 分类图标为彩色矢量，禁用 tint 保持原色。
                                 iconTint = Color.Unspecified,
                                 label = category.name,
-                                value = amount?.let { Money.format(it) } ?: "未设置",
+                                value = amountText,
                                 onClick = { onCategoryClick(category.id, category.name) }
                             )
                             if (index != categories.lastIndex) {
@@ -132,12 +135,12 @@ fun CategoryBudgetScreen(
                 }
             }
 
-            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(16.dp)) }
+            item(key = "bottom-spacer", contentType = "spacer") { Spacer(modifier = Modifier.height(16.dp)) }
         }
 
         // 悬浮顶栏：返回 + 居中标题（对齐月度详情页）。
         CategoryBudgetTopBar(
-            scrimAlpha = topBarScrimAlpha,
+            scrimAlpha = { topBarScrimAlpha },
             hasPhoto = backgroundUri != null,
             listScrolled = listScrolled,
             onBack = onBack
@@ -148,7 +151,7 @@ fun CategoryBudgetScreen(
 /** 分类预算设置页顶栏：返回（AutoMirrored ArrowBack 24dp）+ 居中标题「分类预算」20sp Medium。 */
 @Composable
 private fun CategoryBudgetTopBar(
-    scrimAlpha: Float,
+    scrimAlpha: () -> Float,
     hasPhoto: Boolean,
     listScrolled: Boolean,
     onBack: () -> Unit
@@ -167,7 +170,7 @@ private fun CategoryBudgetTopBar(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-                .clickable(onClick = onBack),
+                .motionClickable(onClick = onBack),
             contentAlignment = Alignment.Center
         ) {
             Icon(

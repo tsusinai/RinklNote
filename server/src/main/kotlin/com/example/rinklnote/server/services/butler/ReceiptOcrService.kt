@@ -68,7 +68,7 @@ class ReceiptOcrService(
             .trimEnd('/')
         val model = System.getenv(ENV_MODEL)?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_MODEL
         return try {
-            bookWithVision(inc.userId, imageUrl, apiKey, baseUrl, model)
+            bookWithVision(inc.userId, imageUrl, apiKey, baseUrl, model, inc.onBillCreated)
         } catch (e: Exception) {
             // 只记异常类名等元数据，不带请求/响应内容与图片 URL（隐私红线）
             log.warn("识图入账失败：阶段=请求/解析，异常=${e.javaClass.simpleName}")
@@ -91,7 +91,8 @@ class ReceiptOcrService(
         imageUrl: String,
         apiKey: String,
         baseUrl: String,
-        model: String
+        model: String,
+        onBillCreated: ((com.example.rinklnote.server.services.BillDTO) -> Unit)? = null
     ): String {
         val requestJson = buildJsonObject {
             put("model", model)
@@ -164,6 +165,7 @@ class ReceiptOcrService(
             return failReply("记这笔账时出了岔子")
         }
 
+        onBillCreated?.invoke(bill)
         // 回执只含元数据（分类/金额/商户/日期），符合隐私红线
         log.info(
             "识图入账成功：userId=$userId 分类=${bill.categoryName} 金额分=$amountMinor " +

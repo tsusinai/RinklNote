@@ -42,6 +42,7 @@ fun Application.configureDatabase() {
         SchemaUtils.createMissingTablesAndColumns(UsersTable, CategoriesTable, SubCategoriesTable, AccountsTable, BillsTable, VoiceKeywordsTable, CorrectionLogTable, BotConfigTable, BillTemplatesTable, BudgetsTable, ChallengesTable, WebhookEventTable, PushLogTable, AiApiTokensTable, UserMemoryTable, AaRecordsTable)
 
         // Performance indexes (not created by createMissingTablesAndColumns)
+        SchemaUtils.createMissingTablesAndColumns(BotActionTable)
         runMigrations(isPostgres = !isH2)
     }
 

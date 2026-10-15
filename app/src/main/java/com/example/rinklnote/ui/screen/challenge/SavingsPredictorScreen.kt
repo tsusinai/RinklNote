@@ -2,7 +2,7 @@ package com.example.rinklnote.ui.screen.challenge
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -241,7 +241,7 @@ private fun LessBuyCard(
                         modifier = Modifier
                             .clip(RoundedCornerShape(15.dp))
                             .background(if (selected) Color.Black else pairs.tomato.ink.copy(alpha = 0.15f))
-                            .clickable {
+                            .motionClickable {
                                 viewModel.onEvent(
                                     ChallengeEvent.SelectLessBuyCategory(
                                         if (selected) null else category.categoryName

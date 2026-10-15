@@ -1,18 +1,19 @@
 package com.example.rinklnote.ui.screen.assets
 
+import com.example.rinklnote.ui.component.MotionListItem
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,19 +21,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import com.example.rinklnote.ui.component.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -46,12 +49,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import com.example.rinklnote.ui.component.rinkShadow
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,7 +69,7 @@ import com.example.rinklnote.data.db.entity.isBucket
 import com.example.rinklnote.ui.component.AccountIcon
 import com.example.rinklnote.ui.component.DefaultHazeBackground
 import com.example.rinklnote.ui.component.RinklTopBar
-import com.example.rinklnote.ui.component.RinklCardFrostedStyle
+import com.example.rinklnote.ui.component.MotionContent
 import com.example.rinklnote.ui.component.applyCardGlass
 import com.example.rinklnote.ui.component.rememberRinklTopBarHeight
 import com.example.rinklnote.ui.theme.LocalRinklColors
@@ -72,7 +78,6 @@ import com.example.rinklnote.ui.viewmodel.AssetsEvent
 import com.example.rinklnote.ui.viewmodel.AssetsViewModel
 import com.example.rinklnote.util.Money
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
 import kotlinx.coroutines.launch
 
 /**
@@ -81,9 +86,9 @@ import kotlinx.coroutines.launch
  * 风格对齐首页（Bookkeeping）毛玻璃气质，按 UI 设计规范执行：
  * - `Box` 根 + 渐变背景 + 装饰光斑（让毛玻璃有"模糊内容"，无照片也好用）；自选照片时由 nav 层整窗铺满。
  * - 悬浮顶栏（floating top bar）：左「对账」+ 居中「资产管理」+ 右「新建」；触摸目标 ≥ 44dp（IconButton）。
- * - 卡片 `rinkShadow` + 1dp 边框（透明玻璃卡，照片透出）+ 统一 15dp 圆角。
+ * - 总资产与账户面板使用浅色无阴影表面，外边距统一 16dp。
  * - ⋮ 菜单用 `ModalBottomSheet`（明确分层浮层，不挡任何下方卡）。
- * - FAB 替代「+ 新建账户」卡：与首页加账单 FAB 同构（`rinkShadow` + `RinklCardFrostedStyle` 毛玻璃 + 51dp 居中）。
+ * - 新建账户仅保留顶部入口，不再叠加悬浮按钮或额外底部占位。
  * - 余额编辑用上滑 `Motion.SheetEnter/Exit`（与快加键盘一致）；其余弹窗用 `AlertDialog`。
  * - 间距全部落 4px 梯度（4/8/12/16/24/32dp），字号落梯度（12/14/16/20/30sp），圆角落梯度（8/12/16dp）。
  *
@@ -133,25 +138,37 @@ fun AssetsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = topBarHeight + 8.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 顶栏是浮层：列表首项垫到它下面（不留整块空白）。
-            item(key = "top-inset") { Spacer(modifier = Modifier.height(topBarHeight)) }
-
             item(key = "total") {
-                TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden)
+                MotionListItem { TotalAssetsCard(accounts = state.accounts, hidden = balanceHidden) }
+            }
+            item(key = "accounts-label") {
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("我的账户", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("${state.accounts.size} 个账户", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (state.accounts.isEmpty()) {
+                item(key = "empty") {
+                    MotionListItem {
+                        Text("点击右上角添加账户", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp))
+                    }
+                }
             }
             items(state.accounts, key = { it.id }, contentType = { "account_item" }) { account ->
-                AccountCard(
-                    account = account,
-                    hidden = balanceHidden,
-                    onClick = { onEditBalance(account.id) },
-                    onMenu = { menuForAccount = account }
-                )
+                MotionListItem {
+                    AccountCard(
+                        account = account,
+                        hidden = balanceHidden,
+                        onClick = { onEditBalance(account.id) },
+                        onMenu = { menuForAccount = account }
+                    )
+
+                }
             }
-            // 底部余量：留给 FAB + 安全区。
-            item(key = "bottom-spacer") { Spacer(modifier = Modifier.height(120.dp)) }
         }
 
         // 顶栏固定在页面顶部，压在背景/列表内容之上（对齐首页 TopBar）。
@@ -163,25 +180,6 @@ fun AssetsScreen(
             onReconcileAll = { reconcilingAll = true },
             onAddAccount = onAddAccount
         )
-
-        // FAB：新建账户（与首页加账单 FAB 同款：rinkShadow + RinklCardFrostedStyle 毛玻璃 + 51dp）。
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp)
-                .rinkShadow(CircleShape)
-                .size(51.dp)
-                .clip(CircleShape)
-                .hazeEffect(hazeState, RinklCardFrostedStyle)
-                .clickable(onClick = onAddAccount),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_add_bill),
-                contentDescription = "新建账户",
-                tint = Color.Unspecified
-            )
-        }
 
         // ⋮ 菜单用 ModalBottomSheet：明确浮层分层（scrim 渐显 + 底部 sheet 上滑），不挡任何卡。
         menuForAccount?.let { account ->
@@ -275,23 +273,26 @@ private fun AssetsTopBar(
         !listScrolled -> LocalRinklColors.current.topBarTitleColor
         else -> LocalRinklColors.current.topBarTitleColorScrolled
     }
+    val surfaceColor = MaterialTheme.colorScheme.surface
     RinklTopBar(
-        scrimAlpha = scrimAlpha,
+        scrimAlpha = { if (hasBackground) scrimAlpha() else 0f },
         horizontalPadding = 8.dp,
-        modifier = modifier
+        modifier = modifier.drawBehind {
+            if (!hasBackground) drawRect(surfaceColor.copy(alpha = scrimAlpha()))
+        }
     ) {
         // 左侧：全部对账（账户为空时禁用：半透明 + 不可点 + contentDescription 说明）。
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
+                .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                .motionClickable(enabled = canReconcileAll, role = Role.Button, onClick = onReconcileAll),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "对账",
                 fontSize = 16.sp,
-                color = textColor.copy(alpha = if (canReconcileAll) 1f else 0.4f),
-                modifier = Modifier.clickable(enabled = canReconcileAll) { onReconcileAll() }
+                color = textColor.copy(alpha = if (canReconcileAll) 1f else 0.4f)
             )
         }
         // 居中：标题。
@@ -308,18 +309,19 @@ private fun AssetsTopBar(
             modifier = Modifier.align(Alignment.CenterEnd)
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_add_bill),
+                painter = painterResource(R.drawable.ic_ui_plus),
                 contentDescription = "新建账户",
-                tint = textColor
+                tint = textColor,
+                modifier = Modifier.size(24.dp)
             )
         }
     }
 }
 
 /**
- * 总资产卡（Total Assets）：毛玻璃主卡，左「总资产/金额」右「显隐切换」图标。
+ * 总资产面板：标题与显隐按钮同排，金额独立占据全宽，避免大金额挤压布局。
  *
- * - 金额 30sp Bold（字号梯度最大档），标签 14sp，层次分明。
+ * - 金额 32sp SemiBold，标签 14sp，层次分明。
  * - 金额由 [BalancePrivacy.hidden] 控制显隐：隐藏时显示 `****`，图标为「显示」态。
  * - 点击图标切换全局显隐态（不持久化，仅会话内）；IconButton 触摸目标 48dp。
  */
@@ -329,45 +331,49 @@ private fun TotalAssetsCard(
     hidden: Boolean
 ) {
     val total = remember(accounts) { accounts.sumOf { it.balanceMinor } }
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp)))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .clip(RoundedCornerShape(20.dp))
+            .background(LocalRinklColors.current.themeColor.copy(alpha = 0.04f))
+            .then(applyCardGlass(RoundedCornerShape(20.dp)))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Column {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "总资产",
+                modifier = Modifier.weight(1f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // 余额显隐只影响展示
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            IconButton(onClick = { BalancePrivacy.toggle() }) {
+                Icon(painterResource(if (hidden) R.drawable.ic_ui_eye else R.drawable.ic_ui_eye_off),
+                    contentDescription = if (hidden) "显示余额" else "隐藏余额",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+        MotionContent(hidden, Modifier.fillMaxWidth()) { masked ->
             Text(
-                text = if (hidden) "****" else Money.formatPlain(total),
+                text = if (masked) "****" else Money.format(total),
                 fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                lineHeight = 40.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
             )
         }
-        IconButton(onClick = { BalancePrivacy.toggle() }) {
-            Icon(
-                painter = painterResource(if (hidden) R.drawable.ic_eye_show else R.drawable.ic_eye_hide),
-                contentDescription = if (hidden) "显示余额" else "隐藏余额",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Spacer(Modifier.height(12.dp))
+        Text("账户余额合计 · 点击账户可修改余额", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 /**
  * 单账户卡（Account Card）：毛玻璃卡，左图标 + 账户名 + 右金额 + 「⋮」菜单触发器。
  *
- * - 图标 24dp 置于透明 Box（无额外底色，靠毛玻璃采样）。
+ * - 图标固定 36dp，名称与金额使用同字号、同行高和各自的弹性宽度。
  * - 「⋮」用 IconButton（48dp 触摸目标）；点击 ⋮ 触发 [onMenu]，菜单改用 [AccountActionsSheet]（ModalBottomSheet）显示，避免 DropdownMenu 遮盖下方卡。
  * - 卡片本身 clickable 进编辑余额。
  * - 用 [rememberUpdatedState] 持最新回调引用，避免父级重组时产生 stale lambda 或整卡不必要重组。
@@ -387,46 +393,58 @@ private fun AccountCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .rinkShadow(RoundedCornerShape(15.dp))
-            .clip(RoundedCornerShape(15.dp))
-            .then(applyCardGlass(RoundedCornerShape(15.dp))),
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.16f))
+            .then(applyCardGlass(RoundedCornerShape(18.dp))),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 卡片主体（点击修改余额）与右侧操作菜单解耦为兄弟节点，消除嵌套 clickable 手势竞争
         Row(
             modifier = Modifier
                 .weight(1f)
-                .clickable { currentOnClick() }
+                .motionClickable(role = Role.Button) { currentOnClick() }
+                .defaultMinSize(minHeight = 80.dp)
                 .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AccountIcon(
                 iconKey = account.iconKey,
                 colorHex = account.iconColor,
-                size = 32.dp
+                size = 36.dp
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = account.name,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Normal,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 22.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                text = if (hidden) "***" else Money.formatPlain(account.balanceMinor),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Spacer(Modifier.width(12.dp))
+            MotionContent(hidden, Modifier.weight(1f)) { masked ->
+                Text(
+                    text = if (masked) "****" else Money.format(account.balanceMinor),
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.End,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
         IconButton(
             onClick = { currentOnMenu() },
             modifier = Modifier
                 .padding(end = 6.dp)
-                .semantics { contentDescription = "账户操作菜单" }
+                .semantics { contentDescription = "${account.name}的操作菜单" }
         ) {
-            Text("⋮", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(painterResource(R.drawable.ic_ui_more), contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -447,6 +465,7 @@ private fun AccountActionsSheet(
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val hidden by BalancePrivacy.hidden.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val dismiss = {
@@ -483,7 +502,7 @@ private fun AccountActionsSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = Money.formatPlain(account.balanceMinor),
+                        text = if (hidden) "****" else Money.format(account.balanceMinor),
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -531,7 +550,7 @@ private fun ActionSheetItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .motionClickable(onClick = onClick)
             .defaultMinSize(minHeight = 56.dp)
             .padding(horizontal = 24.dp, vertical = 12.dp)
     ) {

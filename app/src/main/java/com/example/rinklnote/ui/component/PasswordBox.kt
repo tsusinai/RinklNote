@@ -10,7 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -234,7 +234,7 @@ private fun EyeToggle(revealed: Boolean, tint: Color, onToggle: () -> Unit) {
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clickable(
+            .motionClickable(
                 onClickLabel = if (revealed) "隐藏密码" else "显示密码",
                 onClick = onToggle
             ),

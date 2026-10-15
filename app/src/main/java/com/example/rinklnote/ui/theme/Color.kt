@@ -7,8 +7,8 @@ val Blue80 = Color(0xFF7EC1FC)
 val Blue40 = Color(0xFF5AA8E8)
 
 // Background / surface
-val BackgroundLight = Color(0xFFF5F6F8)
-val SurfaceWhite = Color(0xFFFFFFFF)
+val BackgroundLight = Color(0xFFFFFFFF)
+val SurfaceWhite = Color(0xFFF8F8F9)
 
 // Expense — semantic: outflows are red
 val ExpenseRed = Color(0xFFCA3032)

@@ -18,7 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas as IconCanvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,12 +37,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
+import com.example.rinklnote.ui.component.RinklButton as Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import com.example.rinklnote.ui.component.RinklIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.example.rinklnote.ui.component.RinklTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -239,7 +239,7 @@ private fun ConfirmCard(
     onEnable: () -> Unit,
     onDecline: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         MapPageTopBar(hasBackground = hasBackground, onBack = onDecline)
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             StepCard(
@@ -261,7 +261,7 @@ private fun DeniedCard(
     onRetry: () -> Unit,
     onBack: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize()) {
         MapPageTopBar(hasBackground = hasBackground, onBack = onBack)
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             StepCard(
@@ -792,7 +792,7 @@ private fun MapContent(
                     .clip(RoundedCornerShape(15.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.90f))
                     .then(applyCardGlass(RoundedCornerShape(15.dp)))
-                    .clickable(onClick = onBack, onClickLabel = "返回", role = Role.Button),
+                    .motionClickable(onClick = onBack, onClickLabel = "返回", role = Role.Button),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -883,7 +883,7 @@ private fun MapContent(
                 .then(applyCardGlass(CircleShape))
                 // 无障碍语义：Canvas 准星没有文本子元素，显式补元素名与点击动作说明
                 .semantics { contentDescription = "回到我的位置" }
-                .clickable(onClickLabel = "回到我的位置", role = Role.Button) {
+                .motionClickable(onClickLabel = "回到我的位置", role = Role.Button) {
                     runLocateFlow()
                 },
             contentAlignment = Alignment.Center
@@ -1002,7 +1002,7 @@ private fun GeoRankingTogglePill(expanded: Boolean, onClick: () -> Unit) {
             .background(MaterialTheme.colorScheme.surface)
             .then(applyCardGlass(RoundedCornerShape(18.dp)))
             // 无障碍语义：补点击动作说明（收起/展开方向），TalkBack 播报更明确
-            .clickable(
+            .motionClickable(
                 onClick = onClick,
                 onClickLabel = if (expanded) "收起地点排行" else "展开地点排行",
                 role = Role.Button

@@ -18,7 +18,7 @@ import java.time.ZoneId
  *  2. 语音无平台转写 → [VoiceTranscribeService] Whisper 兜底转写，转写文本继续往下走（阶段 1）
  *  3. 群聊 AA 分账 → [GroupSplitService]（阶段 2）
  *  4. 多行/批量记账与待确认清单 → [BatchBookingService]（阶段 2）
- *  5. 「今天没花钱」打卡 → 本路由内置（陪伴层语义，全聚合、无 LLM）
+ *  5. 「今天没花钱」确认 → 本路由内置（全聚合、无 LLM）
  *  6. 富查账（上周分类/花最多的一天/日均可用）→ [RichQueryService]（阶段 1）
  *  7. 其余 → null 落回 PhoneIntentRouter（记账 / 既有查询 / LLM 兜底）
  *
@@ -49,7 +49,7 @@ class ButlerIntentRouter(
         // 2. 语音兜底：平台没给 asr_refer_text 时拉音频走 Whisper
         if (text.isNullOrBlank() && inc.voiceUrl != null) {
             text = voiceFallback.transcribeUrl(inc.voiceUrl)?.trim()
-            if (text.isNullOrBlank()) return "这条语音没听清，再说一遍或者直接打字给我吧～"
+            if (text.isNullOrBlank()) return "⚠️ 这条语音没听清，再说一遍或者直接打字给我吧～"
         }
         if (text.isNullOrBlank()) return null
 
@@ -59,7 +59,7 @@ class ButlerIntentRouter(
         // 4. 批量/多行记账与待确认清单（阶段 2）
         batchBooking.handle(inc, text)?.let { return it }
 
-        // 5. 「今天没花钱」打卡：陪伴层语义，纯聚合统计
+        // 5. 「今天没花钱」确认：只回应当天支出状态
         if (NO_SPEND_TODAY.containsMatchIn(text) && text.length <= 12) {
             return noSpendToday(inc.userId)
         }
@@ -71,26 +71,17 @@ class ButlerIntentRouter(
         return null
     }
 
-    /** 「今天没花钱」打卡：报当天零支出 + 本月无消费天数（全聚合，本地计算）。 */
+    /** 「今天没花钱」确认：只回复当天状态，不延伸省钱挑战内容。 */
     private fun noSpendToday(userId: Long): String {
         val shanghai = ZoneId.of("Asia/Shanghai")
         val today = LocalDate.now(shanghai)
         val todayStart = today.atStartOfDay(shanghai).toInstant().toEpochMilli()
-        val monthStart = today.withDayOfMonth(1).atStartOfDay(shanghai).toInstant().toEpochMilli()
         val bills = billService.allBills(userId).filter { !it.deleted && it.billType == "EXPENSE" }
         val todaySpent = bills.filter { it.date >= todayStart }.sumOf { it.amountMinor }
         if (todaySpent > 0) {
-            return "今天其实已经花了 ¥${Money.format(todaySpent)} 哦，小盘都记着呢，别想蒙混过关～"
+            return "📊 今天已有支出记录，合计 ¥${Money.format(todaySpent)}，有不对的可以告诉小盘改一下～"
         }
-        val noSpendDays = bills.asSequence()
-            .map { it.date }
-            .distinct()
-            .filter { it >= monthStart }
-            .map { LocalDate.ofInstant(java.time.Instant.ofEpochMilli(it), shanghai).toEpochDay() }
-            .toSet()
-        val daysInMonthSoFar = today.dayOfMonth
-        val cleanDays = daysInMonthSoFar - noSpendDays.size
-        return "🎉 好样的！今天 ¥0 消费打卡成功～ 这个月已经攒下 $cleanDays 个零消费日，小盘给你记着大功！"
+        return "✅ 今天 ¥0 消费，小盘记下啦～"
     }
 
     private companion object {

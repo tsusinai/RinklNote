@@ -100,8 +100,12 @@ function doLogout() {
 
       <div v-reveal="120" class="card">
         <div class="card-title">修改密码</div>
-        <input class="sel" type="password" placeholder="原密码" v-model="oldPwd" />
-        <input class="sel" type="password" placeholder="新密码(至少6位)" v-model="newPwd" />
+        <label class="sr-field">原密码
+          <input class="sel" type="password" autocomplete="current-password" placeholder="原密码" v-model="oldPwd" />
+        </label>
+        <label class="sr-field">新密码
+          <input class="sel" type="password" autocomplete="new-password" placeholder="新密码(至少6位)" v-model="newPwd" />
+        </label>
         <div v-if="pwdMsg" :class="['msg', /原密码错误/.test(pwdMsg) ? 'err' : 'ok']">{{ pwdMsg }}</div>
         <Btn :disabled="busy" @click="changePwd">修改密码</Btn>
       </div>
@@ -157,6 +161,7 @@ function doLogout() {
 .row-btn { width: 100%; background: none; border: none; font-family: inherit; font-size: 14px; cursor: pointer; padding: 8px 0; text-align: left; }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
 .sel { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 16px; margin-bottom: 10px; }
+.sr-field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
 .msg { margin: 6px 0; font-size: 14px; }
 .msg.ok { color: var(--income); }
 .msg.err { color: var(--expense); }

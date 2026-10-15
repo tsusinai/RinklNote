@@ -15,7 +15,7 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 /**
  * 全 App 统一分割线——**与「每日账单」卡片里那根线完全同款**：1 物理像素发丝线（`strokeWidth = 1f`），
  * 颜色取主题令牌 [com.example.rinklnote.ui.theme.RinklColors.dividerColor]
- * （默认 = 每日账单灰 #A5A5A5；用户在「自定义主题」里改了边框色则跟随）。
+ * （默认 = 发丝灰 #D6D6D9，2026-10-10 由 #A5A5A5 浅化；用户在「自定义主题」里改了边框色则跟随）。
  *
  * 为什么不用 `HorizontalDivider`：它的厚度是 1dp（≈2.6px @xxhdpi），高分屏上明显偏粗；
  * 且默认色来自 `surfaceVariant`（#EFF1F3），与账单页的 #A5A5A5 灰线不是一回事——

@@ -5,7 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,7 +34,6 @@ import com.example.rinklnote.ui.theme.LocalRinklColors
 import com.example.rinklnote.ui.theme.Motion
 import com.example.rinklnote.ui.component.RollingAmountText
 import com.example.rinklnote.ui.component.applyCardGlass
-import com.example.rinklnote.ui.component.rinkShadow
 
 @SuppressLint("DefaultLocale")
 @Composable
@@ -55,7 +54,6 @@ fun SummaryBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 14.dp)
-            .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(size = 15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -69,7 +67,7 @@ fun SummaryBar(
                 .fillMaxWidth()
                 .then(
                     if (onOpenDetail != null) {
-                        Modifier.clickable(
+                        Modifier.motionClickable(
                             interactionSource = interactionSource,
                             indication = null,
                             onClick = onOpenDetail
@@ -131,7 +129,7 @@ fun SummaryBar(
                     text = "收起总结",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable(
+                    modifier = Modifier.motionClickable(
                         interactionSource = interactionSource,
                         indication = null
                     ) { expanded = false }
@@ -146,7 +144,7 @@ fun SummaryBar(
                 text =  if (aiSummaryLoading)"AI 正在整理本月总结…" else "AI总结完成，点击查看",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(
+                modifier = Modifier.motionClickable(
                     enabled = hasSummary,
                     interactionSource = interactionSource,
                     indication = null

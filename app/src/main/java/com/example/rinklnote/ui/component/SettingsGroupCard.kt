@@ -1,6 +1,7 @@
 package com.example.rinklnote.ui.component
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateContentSize
+import com.example.rinklnote.ui.component.motionClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rinklnote.R
 import com.example.rinklnote.ui.theme.LocalRinklColors
+import com.example.rinklnote.ui.theme.Motion
 
 /**
  * 设置类页面的「分组卡」骨架：透明玻璃底 + 统一边框 + 可选浅色小标题 + 若干设置行。
@@ -51,6 +53,7 @@ fun SettingsGroupCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .animateContentSize(Motion.ContentResize)
             .rinkShadow(RoundedCornerShape(15.dp))
             .clip(RoundedCornerShape(15.dp))
             .then(applyCardGlass(RoundedCornerShape(15.dp)))
@@ -102,7 +105,7 @@ fun SettingsRow(
             .semantics(mergeDescendants = true) {
                 if (onClick != null) role = Role.Button
             }
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.motionClickable(onClick = onClick) else Modifier)
             .defaultMinSize(minHeight = 48.dp)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -123,7 +126,9 @@ fun SettingsRow(
             modifier = Modifier.weight(1f)
         )
         if (value != null) {
-            Text(value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            MotionContent(value) { displayed ->
+                Text(displayed, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(modifier = Modifier.width(8.dp))
         }
         if (trailing != null) {
