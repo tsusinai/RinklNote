@@ -275,21 +275,31 @@ private fun EditorNumberGrid(
     onBackspace: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val haptics = rememberPressHaptics()
     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9"), listOf("清空", "0", ".")).forEach { keys ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     keys.forEach { key ->
                         KeyButton(key, textSize = if (key == "清空") 14 else 24, minHeight = 48.dp,
-                            modifier = Modifier.weight(1f), onClick = { if (key == "清空") onClear() else onDigit(key) })
+                            modifier = Modifier.weight(1f), onClick = {
+                                haptics.tap()
+                                if (key == "清空") onClear() else onDigit(key)
+                            })
                     }
                 }
             }
         }
         Column(Modifier.weight(1f).height(204.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            KeyButton("⌫", minHeight = 48.dp, modifier = Modifier.fillMaxWidth(), onClick = onBackspace)
+            KeyButton("⌫", minHeight = 48.dp, modifier = Modifier.fillMaxWidth(), onClick = {
+                haptics.tap()
+                onBackspace()
+            })
             ConfirmButton(enabled, label, filled = true, minHeight = 48.dp,
-                modifier = Modifier.fillMaxWidth().weight(1f), onClick = onConfirm)
+                modifier = Modifier.fillMaxWidth().weight(1f), onClick = {
+                    haptics.tap()
+                    onConfirm()
+                })
         }
     }
 }
